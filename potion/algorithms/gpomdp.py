@@ -44,7 +44,7 @@ def gpomdp(env, policy, horizon,
                        'gamma': gamma, 'Annealing': annealing, 'seed': seed,
                        'actionFilter': action_filter}
     logger.write_info({**algo_info, **policy.info()})
-    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'StepSize']
+    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'StepSize', 'BatchSize']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     log_row = dict.fromkeys(log_keys)
@@ -77,6 +77,7 @@ def gpomdp(env, policy, horizon,
         else:
             step_size = alpha
         log_row['StepSize'] = step_size
+        log_row['BatchSize'] = batch_size
         
         # Update policy parameters
         params = policy.get_flat()
@@ -131,7 +132,8 @@ if __name__ == '__main__':
            seed=seed,
            alpha=step_size,
            annealing=annealing,
-           logger=logger)
+           logger=logger,
+           iterations=100)
         
         
         
