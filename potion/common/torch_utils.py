@@ -9,7 +9,6 @@ Pytorch utilities
 """
 
 import torch
-from numpy import indices
 import torch.nn as nn
 
 def num_params(params):
@@ -58,16 +57,6 @@ class FlatModule(nn.Module):
         """Set module parameters from flat array"""
         set_from_flat(self.parameters(), values)
         
-def unpack(batch):
-    "Unpacks list of tuples of tensors into one tuple of stacked arrays"
-    return (torch.stack(x) for x in zip(*batch))
-
-def discount(rewards, gamma):
-    """rewards: array or tensor"""
-    i = 0 if rewards.dim() < 2 else 1
-    discounts = torch.tensor(gamma**indices(rewards.shape)[i], dtype=torch.float)
-    return rewards * discounts
-
 def flat_gradients(module, loss, coeff=None):
     module.zero_grad()
     if coeff is None:
@@ -86,5 +75,4 @@ def jacobian(module, loss):
 
 """Testing"""
 if __name__ == '__main__':
-    rews = torch.tensor([[1,1,1,1,1], [2,2,2,2,2]], dtype=torch.float)
-    print(discount(rews, .99))
+    pass

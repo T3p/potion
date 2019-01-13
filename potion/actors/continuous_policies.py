@@ -32,6 +32,9 @@ class SimpleGaussianPolicy(ContinuousPolicy):
         self.n_actions = n_actions
         self.feature_fun = feature_fun
         self.squash_fun = squash_fun
+        self.learn_std = learn_std
+        self.mu_init = mu_init
+        self.logstd_init = logstd_init
         
         # Mean
         self.mu = LinearMapping(n_states, n_actions)
@@ -90,6 +93,16 @@ class SimpleGaussianPolicy(ContinuousPolicy):
     def set_scale_params(self, val):
         with torch.no_grad():
             self.logstd.data = torch.tensor(val)
+            
+    def info(self):
+        return {'PolicyClass': 'SimpleGaussianPolicy',
+                'LearnStd': self.learn_std,
+                'nStates': self.n_states,
+                'nActions': self.n_actions,
+                'muInit': self.mu_init,
+                'logstdInit': self.logstd_init,
+                'featureFun': self.feature_fun,
+                'squashFun': self.squash_fun}
 
 """
 Testing

@@ -7,7 +7,6 @@ Created on Sat Jan 12 01:17:17 2019
 """
 
 import torch
-import potion.common.torch_utils as tu
 
 def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes=float('inf'),
                                  action_filter=None):
@@ -47,17 +46,6 @@ def generate_batch(env, policy, horizon, episodes, action_filter=None, parallel=
     gen = sequential_episode_generator(env, policy, horizon, episodes, action_filter)
     batch = [ep for ep in gen]
     return batch
-
-def returns(batch, gamma):
-    return [torch.sum(tu.discount(rewards,gamma)) 
-                                    for (_, _, rewards, _) in batch]
-
-def performance(batch, gamma):
-    return torch.mean(torch.tensor(returns(batch, gamma)))
-
-def avg_horizon(batch):
-    return torch.mean(torch.tensor([torch.sum(mask)
-                       for (_, _, _, mask) in batch], dtype=torch.float))
 
 """Testing"""
 if __name__ == '__main__':

@@ -8,17 +8,18 @@ Created on Sat Jan 12 15:05:00 2019
 
 import torch
 import potion.common.torch_utils as tu
+from potion.common.misc_utils import unpack, discount
 
-def gpomdp_sample(states, actions, values, policy):
+def gpomdp_sample(states, actions, values, mask, policy):
     logps = policy.log_pdf(states, actions)
     cum_logps = torch.cumsum(logps, 0).view(-1)
-    return tu.flat_gradients(policy, cum_logps, values)
+    return tu.flat_gradients(policy, cum_logps, values*mask)
 
 def gpomdp_estimator(batch, gamma, policy, baseline_kind='basic'):
     N = len(batch)
     
-    states, actions, rewards, mask = tu.unpack(batch)
-    disc_rewards = tu.discount(rewards, gamma)
+    states, actions, rewards, mask = unpack(batch)
+    disc_rewards = discount(rewards, gamma)
     
     if baseline_kind == 'basic':
         baseline = torch.mean(disc_rewards, 0)
@@ -26,9 +27,10 @@ def gpomdp_estimator(batch, gamma, policy, baseline_kind='basic'):
         baseline = 0
     values = disc_rewards - baseline
     
-    return torch.mean(torch.stack([gpomdp_sample(states[i,:,:], 
-                      actions[i,:,:], values[i,:], policy) for i in range(N)], 0), 0)
-        
+    return torch.mean(torch.stack([gpomdp_sample(states[i,:,:], actions[i,:,:], 
+                                                 values[i,:], mask[i,:], 
+                                                 policy) 
+                                   for i in range(N)], 0), 0)
     
 
 """Testing"""
