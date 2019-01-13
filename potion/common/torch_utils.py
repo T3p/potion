@@ -10,6 +10,7 @@ Pytorch utilities
 
 import torch
 import torch.nn as nn
+import warnings
 
 def num_params(params):
     with torch.no_grad():
@@ -56,6 +57,20 @@ class FlatModule(nn.Module):
     def set_from_flat(self, values):
         """Set module parameters from flat array"""
         set_from_flat(self.parameters(), values)
+        
+    def save_flat(self, path):
+        try:
+            torch.save(self.get_flat(), path)
+        except:
+            warnings.warn('Could not save parameters!')
+    
+    def load_from_flat(self, path):
+        try:
+            values = torch.load(path)
+        except:
+            warnings.warn('Could not load parameters!')
+            return
+        self.set_from_flat(values)
         
 def flat_gradients(module, loss, coeff=None):
     module.zero_grad()

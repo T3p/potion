@@ -22,6 +22,8 @@ def gpomdp(env, policy, horizon,
            baseline = 'basic',
            action_filter = None,
            logger = Logger(name='gpomdp'),
+           save_params = 1000,
+           log_params = True,
            parallel_sim = False,
            parallel_comp = False,
            verbose = True):
@@ -42,14 +44,17 @@ def gpomdp(env, policy, horizon,
                        'gamma': gamma, 'Annealing': annealing, 'seed': seed,
                        'actionFilter': action_filter}
     logger.write_info({**algo_info, **policy.info()})
-    log_row = dict.fromkeys(['Perf', 'UPerf', 'AvgHorizon', 'StepSize'])
+    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'StepSize']
+    if log_params:
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
+    log_row = dict.fromkeys(log_keys)
+
     logger.open(log_row.keys())
     
     # Learning
     it = 0
     while(it < iterations):
         # Begin iteration
-        it += 1
         if verbose:
             print('\nIteration ', it)
         if verbose:
@@ -79,7 +84,19 @@ def gpomdp(env, policy, horizon,
         policy.set_from_flat(new_params)
         
         # Log
+        if log_params:
+            for i in range(policy.num_params()):
+                log_row['param%d' % i] = params[i]
         logger.write_row(log_row, it)
+        if save_params and it % save_params == 0:
+            logger.save_params(params, it)
+        
+        # Next iteration
+        it += 1
+    
+    # Final policy
+    if save_params:
+        logger.save_params(params, it)
     
     # Cleanup
     logger.close()
@@ -101,10 +118,10 @@ if __name__ == '__main__':
     annealing = None
     """
     env = gym.make('ContCartPole-v0')
-    policy = Gauss(4,1, mu_init=torch.zeros(4), learn_std=True)
+    policy = Gauss(4,1, mu_init=torch.zeros(4), learn_std=False)
     H = 500
-    step_size = 1e-1
-    annealing = lambda t: 1./math.sqrt(t)
+    step_size = 1.
+    annealing = lambda t: 1./math.sqrt(t+1)
     #"""
     
     logger = Logger(directory='../../logs', name='test_gpomdp')

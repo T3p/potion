@@ -7,14 +7,11 @@ Created on Sun Jan 13 14:17:33 2019
 """
 
 import tensorboardX as tbx
+import torch
 import time
 import csv
-import os
 import warnings
-
-def maybe_make_dir(directory):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
+from potion.common.misc_utils import maybe_make_dir
 
 class Logger():
     def __init__(self, directory='./logs_t', name='auto', modes=['human', 'csv', 'tensorboard']):
@@ -65,8 +62,6 @@ class Logger():
             
             if 'human' in self.modes:
                 self.ready = True
-                
-
         
     def write_row(self, row, iteration):
         if not self.ready:
@@ -87,10 +82,23 @@ class Logger():
         if 'tensorboard' in self.modes:
             try:
                 for key, val in row.items():   
-                    self.tb_writer.add_scalar(key, val, iteration - 1)
+                    self.tb_writer.add_scalar(key, val, iteration)
             except:
                 warnings.warn('Could not write data to TensorboardX')
-            
+
+    def save_params(self, params, iteration):
+        param_dir = self.directory + '/' + self.name + '_params'
+        try:
+            maybe_make_dir(param_dir)
+        except:
+            warnings.warn('Could not create log directory!')
+            return
+        
+        try:
+            torch.save(params, param_dir + '/generation_' + str(iteration) + '.pt')
+        except:
+            warnings.warn('Could not save parameters!')
+        
     def close(self):
         if not self.ready:
             warnings.warn('You must open the logger first!')

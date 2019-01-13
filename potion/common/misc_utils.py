@@ -9,6 +9,7 @@ Created on Sat Jan 12 23:12:09 2019
 import random
 import numpy as np
 import torch
+import os
 
 def clip(env):
     def action_filter(a):
@@ -42,3 +43,7 @@ def performance(batch, gamma):
 def avg_horizon(batch):
     return torch.mean(torch.tensor([torch.sum(mask)
                        for (_, _, _, mask) in batch], dtype=torch.float)).item()
+        
+def maybe_make_dir(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)

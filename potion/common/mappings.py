@@ -40,3 +40,9 @@ if __name__ == '__main__':
         print(p)
     print(m.num_params())
     print(m.get_flat())
+    m.save_flat('../../logs/y.pt')
+    m.load_from_flat('../../logs/x.pt')
+    print(m.get_flat())
+    m.load_from_flat('../../logs/y.pt')
+    print(m.get_flat())
+    
