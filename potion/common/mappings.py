@@ -33,8 +33,9 @@ class LinearMapping(tu.FlatModule):
 Testing
 """
 if __name__ == '__main__':
+    import torch
     m = LinearMapping(2,2, bias=False)
-    m.set_from_flat([1,2,3,4])
+    m.set_from_flat(torch.tensor([1,2,3,4]))    
     for p in m.parameters():
         print(p)
     print(m.num_params())

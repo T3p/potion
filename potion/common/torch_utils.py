@@ -9,8 +9,12 @@ Pytorch utilities
 """
 
 import torch
+from numpy import indices
 import torch.nn as nn
-import numpy as np
+
+def num_params(params):
+    with torch.no_grad():
+        return sum(p.numel() for p in params)
 
 def flatten(params):
     """
@@ -18,30 +22,33 @@ def flatten(params):
         
     params: the module's parameters (or gradients)
     """
-    return np.concatenate([np.ravel(p.data.numpy()) for p in params])
+    with torch.no_grad():
+        return torch.cat([p.data.view(-1) for p in params])
 
 def set_from_flat(params, values):
     """
-    Sets a module's parameters from a flat array
+    Sets a module's parameters from a flat array or tensor
     
     params: the module's parameters
-    values: a flat array
+    values: a flat array or tensor
     """
-    k = 0
-    for p in params:
-        shape = tuple(list(p.shape))
-        offset = sum(shape)
-        val = values[k : k + offset]
-        val = np.reshape(val, shape)
-        with torch.no_grad():
-            p.copy_(torch.tensor(val))
-        k = k + offset
-        
+    with torch.no_grad():
+        values = torch.tensor(values)
+        k = 0
+        for p in params:
+            shape = tuple(list(p.shape))
+            offset = sum(shape)
+            val = values[k : k + offset]
+            val = val.view(shape)
+            with torch.no_grad():
+                p.copy_(torch.tensor(val))
+            k = k + offset
+            
 class FlatModule(nn.Module):
     """Module with flattened parameter management"""
     def num_params(self):
         """Number of parameters of the module"""
-        return sum(p.numel() for p in self.parameters())
+        return num_params(self.parameters())
         
     def get_flat(self):
         """Module parameters as flat array"""
@@ -51,3 +58,33 @@ class FlatModule(nn.Module):
         """Set module parameters from flat array"""
         set_from_flat(self.parameters(), values)
         
+def unpack(batch):
+    "Unpacks list of tuples of tensors into one tuple of stacked arrays"
+    return (torch.stack(x) for x in zip(*batch))
+
+def discount(rewards, gamma):
+    """rewards: array or tensor"""
+    i = 0 if rewards.dim() < 2 else 1
+    discounts = torch.tensor(gamma**indices(rewards.shape)[i], dtype=torch.float)
+    return rewards * discounts
+
+def flat_gradients(module, loss, coeff=None):
+    module.zero_grad()
+    if coeff is None:
+        coeff = torch.ones(loss.numel())
+    loss.backward(coeff, retain_graph=True)
+    return torch.cat([p.grad.view(-1) for p in module.parameters()])
+
+def jacobian(module, loss):
+    jac = torch.zeros((loss.numel(), module.num_params()))
+    for i in range(loss.numel()):
+        mask = torch.zeros(loss.numel(), dtype=torch.float)
+        mask[i] = 1.
+        jac[i, :] = flat_gradients(module, loss, mask)
+    return jac
+    
+
+"""Testing"""
+if __name__ == '__main__':
+    rews = torch.tensor([[1,1,1,1,1], [2,2,2,2,2]], dtype=torch.float)
+    print(discount(rews, .99))
