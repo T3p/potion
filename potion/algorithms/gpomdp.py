@@ -8,9 +8,11 @@ Created on Sat Jan 12 18:11:15 2019
 
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon
-from potion.estimation.gradients import gpomdp_estimator
+from potion.estimation.gradients import gpomdp_estimator, simple_gpomdp_estimator
+from potion.meta.steppers import ConstantStepper
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
+import torch
 
 def gpomdp(env, policy, horizon,
            batchsize = 100, 
@@ -44,7 +46,7 @@ def gpomdp(env, policy, horizon,
                        'gamma': gamma, 'Decay': decay, 'seed': seed,
                        'actionFilter': action_filter}
     logger.write_info({**algo_info, **policy.info()})
-    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'StepSize', 'BatchSize']
+    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'StepSize', 'BatchSize', 'Exploration']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     log_row = dict.fromkeys(log_keys)
@@ -76,6 +78,7 @@ def gpomdp(env, policy, horizon,
             stepsize = alpha * decay(it)
         else:
             stepsize = alpha
+        log_row['Exploration'] = policy.exploration()
         log_row['StepSize'] = stepsize
         log_row['BatchSize'] = batchsize
         
@@ -107,18 +110,18 @@ def gpomdp_adaptive(env, policy, horizon,
                     batchsize = 100, 
                     iterations = 1000,
                     gamma = 0.99,
-                    stepsize_rule = 'RMSprop',
+                    stepper = 'RMSprop',
                     seed = None,
-                    baseline = 'basic',
+                    baseline = 'peters',
+                    simple = False,
                     action_filter = None,
                     logger = Logger(name='gpomdp_adaptive'),
                     save_params = 1000,
                     log_params = True,
-                    parallel_sim = False,
-                    parallel_comp = False,
+                    render = False,
                     verbose = True):
     """
-        G(PO)MDP algorithm
+        G(PO)MDP algorithm + adaptive step size (e.g., RMSprop)
     """
     # Defaults
     if action_filter is None:
@@ -131,13 +134,12 @@ def gpomdp_adaptive(env, policy, horizon,
     # Preparing logger
     algo_info = {'Algorithm': 'gpomdp', 'Env': str(env), 
                        'BatchSize': batchsize, 
-                       'gamma': gamma, 'StepSizeCriterion': stepsize_rule, 'seed': seed,
+                       'gamma': gamma, 'StepSizeCriterion': stepper, 'seed': seed,
                        'actionFilter': action_filter}
     logger.write_info({**algo_info, **policy.info()})
-    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'BatchSize']
+    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'StepSize', 'BatchSize', 'Exploration']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
-        log_keys += ['stepsize%d' % i for i in range(policy.num_params())]
     log_row = dict.fromkeys(log_keys)
 
     logger.open(log_row.keys())
@@ -152,21 +154,26 @@ def gpomdp_adaptive(env, policy, horizon,
             print('Params: ', policy.get_flat())
     
         # Simulation
-        batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel_sim)
+        batch = generate_batch(env, policy, horizon, batchsize, action_filter)
         log_row['Perf'] = performance(batch, gamma)
         log_row['UPerf'] = performance(batch, 1.)
         log_row['AvgHorizon'] = avg_horizon(batch)
     
         # Estimation
-        grad = gpomdp_estimator(batch, gamma, policy, baseline)
+        if simple:
+            grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
+        else:
+            grad = gpomdp_estimator(batch, gamma, policy, baseline)
         if verbose > 1:
             print('Gradients: ', grad)
         
         # Meta-parameters
         
-        stepsize = stepsize_rule.next(grad)
+        stepsize = stepper.next(grad)
         
+        log_row['StepSize'] = torch.norm(torch.tensor(stepsize)).item()
         log_row['BatchSize'] = batchsize
+        log_row['Exploration'] = policy.exploration()
         
         # Update policy parameters
         params = policy.get_flat()
@@ -177,7 +184,6 @@ def gpomdp_adaptive(env, policy, horizon,
         if log_params:
             for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i]
-                log_row['stepsize%d' % i] = stepsize[i]
         logger.write_row(log_row, it)
         if save_params and it % save_params == 0:
             logger.save_params(params, it)
@@ -191,37 +197,3 @@ def gpomdp_adaptive(env, policy, horizon,
     
     # Cleanup
     logger.close()
-
-"""Testing"""
-if __name__ == '__main__':
-    import torch
-    import gym
-    import potion.envs.lqg1d
-    import potion.envs.cartpole
-    from potion.actors.continuous_policies import SimpleGaussianPolicy as Gauss
-    from potion.meta.step_sizes import RMSprop
-    """"
-    env = gym.make('LQG1D-v0')
-    policy = Gauss(1, 1, mu_init=[0.], learn_std=True)
-    H = 10
-    stepsize = 1e-3
-    decay = None
-    """
-    env = gym.make('ContCartPole-v0')
-    policy = Gauss(4,1, mu_init=torch.zeros(4), learn_std=True)
-    H = 500
-    stepsize_rule = RMSprop(alpha=0.5)
-    #"""
-    
-    logger = Logger(directory='../../logs', name='test_gpomdp_adaptive')
-    seed = 0
-    env.seed(seed)
-    gpomdp_adaptive(env, policy, H, verbose=True, 
-           seed=seed,
-           stepsize_rule=stepsize_rule,
-           logger=logger,
-           iterations=100)
-        
-        
-        
-

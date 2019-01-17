@@ -80,12 +80,21 @@ def flat_gradients(module, loss, coeff=None):
     return torch.cat([p.grad.view(-1) for p in module.parameters()])
 
 def jacobian(module, loss):
+    """INEFFICIENT!"""
     jac = torch.zeros((loss.numel(), module.num_params()))
     for i in range(loss.numel()):
         mask = torch.zeros(loss.numel(), dtype=torch.float)
         mask[i] = 1.
         jac[i, :] = flat_gradients(module, loss, mask)
     return jac
+
+def tensormat(a, b):
+    """
+    a: NxHxm
+    b: NxH
+    a*b: NxHxm 
+    """
+    return torch.einsum('ijk,ij->ijk', (a,b))
     
 
 """Testing"""

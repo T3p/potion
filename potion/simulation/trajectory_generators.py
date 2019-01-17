@@ -9,7 +9,7 @@ Created on Sat Jan 12 01:17:17 2019
 import torch
 
 def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes=float('inf'),
-                                 action_filter=None):
+                                 action_filter=None, render=False):
     n = 0
     while n < max_episodes:
         # Episode
@@ -29,6 +29,8 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
                 a = action_filter(a)
             a = torch.tensor(a, dtype=torch.float).view(-1)
             next_s, r, done, _ = env.step(a)
+            if render:
+                env.render()
             
             states[t] = s
             actions[t] = a
@@ -41,9 +43,9 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
         yield states, actions, rewards, mask
         n += 1
 
-def generate_batch(env, policy, horizon, episodes, action_filter=None, parallel=False):
+def generate_batch(env, policy, horizon, episodes, action_filter=None, parallel=False, render=False):
     """Batch: list of (features, actions, rewards, mask) tuples"""
-    gen = sequential_episode_generator(env, policy, horizon, episodes, action_filter)
+    gen = sequential_episode_generator(env, policy, horizon, episodes, action_filter, render)
     batch = [ep for ep in gen]
     return batch
 

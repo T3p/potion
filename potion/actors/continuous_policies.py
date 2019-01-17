@@ -22,11 +22,11 @@ class SimpleGaussianPolicy(ContinuousPolicy):
     """
     Factored
     \mu = \mu_{\theta}(x)
-    \sigma = e^w
+    \sigma = e^w (scalar)
     """
     def __init__(self, n_states, n_actions, feature_fun=None, squash_fun=None,
                  mu_init=None, logstd_init=None, 
-                 learn_std=False):
+                 learn_std=True):
         super(SimpleGaussianPolicy, self).__init__()
         self.n_states = n_states
         self.n_actions = n_actions
@@ -43,7 +43,7 @@ class SimpleGaussianPolicy(ContinuousPolicy):
         
         # Log of standard deviation
         if logstd_init is None:
-            logstd_init = torch.zeros(n_actions)
+            logstd_init = torch.zeros(1)
         else:
             logstd_init = torch.tensor(logstd_init)
         if learn_std:
@@ -80,6 +80,12 @@ class SimpleGaussianPolicy(ContinuousPolicy):
                 a = self.squash_fun(a)
             return a
     
+    def num_loc_params(self):
+        return self.n_states
+    
+    def num_scale_params(self):
+        return self.n_actions
+    
     def get_loc_params(self):
         return self.mu.get_flat()
     
@@ -93,6 +99,25 @@ class SimpleGaussianPolicy(ContinuousPolicy):
     def set_scale_params(self, val):
         with torch.no_grad():
             self.logstd.data = torch.tensor(val)
+    
+    def exploration(self):
+        return torch.exp(self.logstd).item()
+            
+    def theta_score(self, s, a):
+        sigma = torch.exp(self.logstd)
+        if self.feature_fun is not None:
+            x = self.feature_fun(s)
+        else:
+            x = s
+        return x * (a - self.mu(x)) / sigma ** 2
+    
+    def omega_score(self, s, a):
+        sigma = torch.exp(self.logstd)
+        if self.feature_fun is not None:
+            x = self.feature_fun(s)
+        else:
+            x = s
+        return (((a - self.mu(x)) / sigma) ** 2 - 1)
             
     def info(self):
         return {'PolicyClass': 'SimpleGaussianPolicy',
@@ -114,7 +139,7 @@ if __name__ == '__main__':
     a = 100 + torch.zeros(da)
     mu_init = 50 + torch.zeros(ds)
     for flag in [False, True]:
-        p = SimpleGaussianPolicy(ds, da, mu_init, learn_std=flag, logstd_init=0.)
+        p = SimpleGaussianPolicy(ds, da, None, None, mu_init, learn_std=flag, logstd_init=0.)
         print(p.act(s))
         print(p.num_params())
         print(p.get_flat())

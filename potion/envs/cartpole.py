@@ -13,15 +13,6 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-
-#classic_control
-from gym.envs.registration import register
-register(
-    id='ContCartPole-v0',
-    entry_point='potion.envs.cartpole:ContCartPole'
-)
-
-
 class ContCartPole(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
