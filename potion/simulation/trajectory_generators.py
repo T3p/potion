@@ -25,9 +25,9 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
         while not done and t < horizon:
             s = torch.tensor(s, dtype=torch.float).view(-1)
             a = policy.act(s)
+            a = torch.tensor(a, dtype=torch.float).view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-            a = torch.tensor(a, dtype=torch.float).view(-1)
             next_s, r, done, _ = env.step(a)
             if render:
                 env.render()

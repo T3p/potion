@@ -40,9 +40,10 @@ def h_estimator(states, actions, disc_rewards, mask, policy, baseline_kind):
     samples = torch.sum(terms, 1) # Nxm
     return torch.mean(samples, 0) # m
     
-def mixed_estimator(batch, gamma, policy, baseline_kind='peters'):
-    grad = simple_gpomdp_estimator(batch, gamma, policy, baseline_kind)
-    theta_grad = grad[1:]
+def mixed_estimator(batch, gamma, policy, baseline_kind='peters', theta_grad=None):
+    if theta_grad is None:
+        grad = simple_gpomdp_estimator(batch, gamma, policy, baseline_kind)
+        theta_grad = grad[1:]
     with torch.no_grad():
         sigma = math.exp(policy.get_scale_params().item())
         
@@ -52,7 +53,7 @@ def mixed_estimator(batch, gamma, policy, baseline_kind='peters'):
             
         h = h_estimator(states, actions, disc_rewards, mask, policy, baseline_kind)
         mixed_sigma = h - 2 * theta_grad / sigma
-        return mixed_sigma * sigma, theta_grad
+        return mixed_sigma, theta_grad
 
 def omega_metagradient_estimator(batch, gamma, policy, alpha, baseline_kind='peters'):                
     mixed, theta_grad = mixed_estimator(batch, gamma, policy, baseline_kind)

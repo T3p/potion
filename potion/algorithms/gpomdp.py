@@ -115,6 +115,7 @@ def gpomdp_adaptive(env, policy, horizon,
                     baseline = 'peters',
                     simple = False,
                     action_filter = None,
+                    test_det = True,
                     logger = Logger(name='gpomdp_adaptive'),
                     save_params = 1000,
                     log_params = True,
@@ -137,9 +138,11 @@ def gpomdp_adaptive(env, policy, horizon,
                        'gamma': gamma, 'StepSizeCriterion': stepper, 'seed': seed,
                        'actionFilter': action_filter}
     logger.write_info({**algo_info, **policy.info()})
-    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'StepSize', 'BatchSize', 'Exploration']
+    log_keys = ['Perf', 'UPerf', 'AvgHorizon', 'StepSize', 'BatchSize', 'Exploration', 'DetPerf', 'ThetaGradNorm']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
+    if policy.learn_std:
+        log_keys += ['MetaStepSize', 'OmegaGrad']
     log_row = dict.fromkeys(log_keys)
 
     logger.open(log_row.keys())
@@ -152,6 +155,17 @@ def gpomdp_adaptive(env, policy, horizon,
             print('\nIteration ', it)
         if verbose:
             print('Params: ', policy.get_flat())
+            
+        
+        # Test
+        if test_det:
+            omega = policy.get_scale_params()
+            policy.set_scale_params(-100.)
+            batch = generate_batch(env, policy, horizon, 1, action_filter)
+            policy.set_scale_params(omega)
+            log_row['DetPerf'] = performance(batch, gamma)
+        if render:
+            batch = generate_batch(env, policy, horizon, 1, action_filter, render=True)
     
         # Simulation
         batch = generate_batch(env, policy, horizon, batchsize, action_filter)
@@ -166,14 +180,20 @@ def gpomdp_adaptive(env, policy, horizon,
             grad = gpomdp_estimator(batch, gamma, policy, baseline)
         if verbose > 1:
             print('Gradients: ', grad)
+        log_row['ThetaGradNorm'] = torch.norm(grad[1:]).item() if policy.learn_std else torch.norm(grad).item()
         
         # Meta-parameters
         
         stepsize = stepper.next(grad)
         
-        log_row['StepSize'] = torch.norm(torch.tensor(stepsize)).item()
         log_row['BatchSize'] = batchsize
         log_row['Exploration'] = policy.exploration()
+        if policy.learn_std:
+            log_row['StepSize'] = torch.norm(torch.tensor(stepsize)).item()
+            log_row['MetaStepSize'] = torch.tensor(stepsize)[0].item()
+            log_row['OmegaGrad'] = grad[0].item()
+        else:
+            log_row['StepSize'] = torch.norm(torch.tensor(stepsize)).item()
         
         # Update policy parameters
         params = policy.get_flat()

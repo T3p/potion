@@ -15,10 +15,12 @@ from potion.algorithms.metaexplore import metaexplore, metaexplore2
 from potion.common.misc_utils import clip
 import argparse
 import re
+from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+parser.add_argument('--name', help='Experiment name', type=str, default='')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--explore', help='Kind of exploration', type=str, default='balanced')
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
@@ -44,7 +46,14 @@ parser.set_defaults(render=False, trial=False)
 args = parser.parse_args()
 
 # Prepare
-env = gym.make(args.env)
+if args.env.startswith('rllab'):
+    env_rllab_class = rllab_env_from_name(args.env)
+    env_rllab = env_rllab_class()
+    env = Rllab2GymWrapper(env_rllab)
+    af = lambda a: clip(env)(a).item()
+else:
+    env = gym.make(args.env)
+    af = clip(env)
 env.seed(args.seed)
 
 m = sum(env.observation_space.shape)
@@ -59,12 +68,13 @@ else:
     stepper = ConstantStepper(args.alpha)
 metastepper = ConstantStepper(args.eta)
 
-envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1]
+envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
+logname = envname + '_' + args.name + '_' + str(args.seed)
 
 if args.trial:
-    logger = Logger(directory='../temp', name = envname + '_' +  args.explore + '_' + str(args.seed))
+    logger = Logger(directory='../temp', name = logname)
 else:
-    logger = Logger(directory='../logs', name = envname + '_' + args.explore + '_' + str(args.seed))
+    logger = Logger(directory='../logs', name = logname)
     
 # Run
 metaexplore2(env,
@@ -77,7 +87,7 @@ metaexplore2(env,
             metastepper = metastepper,
             explore = args.explore,
             seed = args.seed,
-            action_filter = clip(env),
+            action_filter = af,
             logger = logger,
             save_params = args.saveon,
             render = args.render)
