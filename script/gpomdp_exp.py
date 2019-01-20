@@ -31,6 +31,7 @@ parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
 parser.add_argument('--saveon', help='How often to save parameters', type=int, default=100)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
+parser.add_argument('--njobs', help='Number of workers', type=int, default=4)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -43,7 +44,11 @@ parser.add_argument("--learnstd", help="Learn policy std",
                     action="store_true")
 parser.add_argument("--no-learnstd", help="Do not learn policy std",
                     action="store_false")
-parser.set_defaults(render=False, trial=False, learnstd=False) 
+parser.add_argument("--parallel", help="Use parallel simulation",
+                    action="store_true")
+parser.add_argument("--no-parallel", help="Do not use parallel simulation",
+                    action="store_false")
+parser.set_defaults(render=False, trial=False, learnstd=False, parallel=False) 
 
 args = parser.parse_args()
 
@@ -86,4 +91,6 @@ gpomdp_adaptive(env,
             action_filter = clip(env),
             logger = logger,
             save_params = args.saveon,
+            parallel = args.parallel,
+            n_jobs = args.njobs,
             render = args.render)

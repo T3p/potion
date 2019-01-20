@@ -119,6 +119,8 @@ def gpomdp_adaptive(env, policy, horizon,
                     logger = Logger(name='gpomdp_adaptive'),
                     save_params = 1000,
                     log_params = True,
+                    parallel = False,
+                    n_jobs = 4,
                     render = False,
                     verbose = True):
     """
@@ -168,7 +170,7 @@ def gpomdp_adaptive(env, policy, horizon,
             batch = generate_batch(env, policy, horizon, 1, action_filter, render=True)
     
         # Simulation
-        batch = generate_batch(env, policy, horizon, batchsize, action_filter)
+        batch = generate_batch(env, policy, horizon, batchsize, action_filter, seed=seed, parallel=parallel, n_jobs=n_jobs)
         log_row['Perf'] = performance(batch, gamma)
         log_row['UPerf'] = performance(batch, 1.)
         log_row['AvgHorizon'] = avg_horizon(batch)

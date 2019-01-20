@@ -27,6 +27,8 @@ def sunday(env, policy,
             seed = None,
             baseline = 'peters',
             action_filter = None,
+            parallel = False,
+            n_jobs = 4,
             logger = Logger(name='test_sunday'),
             save_params = 1000,
             log_params = True,
@@ -95,7 +97,7 @@ def sunday(env, policy,
         log_row['IterationKind'] = 3
         omega = policy.get_scale_params()
         sigma = torch.exp(omega)
-        batch = generate_batch(env, policy, horizon, batchsize, action_filter)
+        batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel=parallel, n_jobs=n_jobs, seed=seed)
         grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
         theta_grad = grad[1:]
         omega_grad = grad[0]

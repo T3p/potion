@@ -10,7 +10,7 @@ import gym
 import potion.envs
 from potion.actors.continuous_policies import SimpleGaussianPolicy as Gauss
 from potion.common.logger import Logger
-from potion.algorithms.metaexplore import saturday
+from potion.algorithms.metaexplore import sunday
 from potion.common.misc_utils import clip
 import argparse
 import re
@@ -30,6 +30,7 @@ parser.add_argument('--iterations', help='Iterations', type=int, default=200)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
 parser.add_argument('--saveon', help='How often to save parameters', type=int, default=100)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
+parser.add_argument('--njobs', help='Number of workers', type=int, default=4)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -38,7 +39,11 @@ parser.add_argument("--trial", help="Save logs in temp folder",
                     action="store_true")
 parser.add_argument("--no-trial", help="Save logs in logs folder",
                     action="store_false")
-parser.set_defaults(render=False, trial=False) 
+parser.add_argument("--parallel", help="Use parallel simulation",
+                    action="store_true")
+parser.add_argument("--no-parallel", help="Do not use parallel simulation",
+                    action="store_false")
+parser.set_defaults(render=False, trial=False, parallel=False) 
 
 args = parser.parse_args()
 
@@ -68,7 +73,7 @@ else:
     logger = Logger(directory='../logs', name = logname)
     
 # Run
-saturday(env,
+sunday(env,
             policy,
             horizon = args.horizon,
             batchsize = args.batchsize,
@@ -80,4 +85,6 @@ saturday(env,
             action_filter = af,
             logger = logger,
             save_params = args.saveon,
-            render = args.render)
+            render = args.render,
+            parallel = args.parallel,
+            n_jobs = args.njobs)

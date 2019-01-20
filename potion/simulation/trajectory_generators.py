@@ -7,6 +7,9 @@ Created on Sat Jan 12 01:17:17 2019
 """
 
 import torch
+import numpy as np
+from joblib import Parallel, delayed
+from potion.common.misc_utils import seed_all_agent
 
 def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes=float('inf'),
                                  action_filter=None, render=False):
@@ -23,6 +26,7 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
         done = False
         t = 0
         while not done and t < horizon:
+            s = np.array(s, dtype=np.float)
             s = torch.tensor(s, dtype=torch.float).view(-1)
             a = policy.act(s)
             a = torch.tensor(a, dtype=torch.float).view(-1)
@@ -43,10 +47,43 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
         yield states, actions, rewards, mask
         n += 1
 
-def generate_batch(env, policy, horizon, episodes, action_filter=None, parallel=False, render=False):
+def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=None, seed=None):
+        env.seed(seed)
+        seed_all_agent(seed)
+        states = torch.zeros((horizon, sum(env.observation_space.shape)),
+                             dtype=torch.float)
+        actions = torch.zeros((horizon, sum(env.action_space.shape)),
+                              dtype=torch.float)
+        rewards = torch.zeros(horizon, dtype=torch.float)
+        mask = torch.zeros(horizon, dtype=torch.float)
+        s = env.reset()
+        done = False
+        t = 0
+        while not done and t < horizon:
+            s = np.array(s, dtype=np.float)
+            s = torch.tensor(s, dtype=torch.float).view(-1)
+            a = policy.act(s)
+            a = torch.tensor(a, dtype=torch.float).view(-1)
+            if action_filter is not None:
+                a = action_filter(a)
+            next_s, r, done, _ = env.step(a)
+            
+            states[t] = s
+            actions[t] = a
+            rewards[t] = r
+            mask[t] = 1 - done
+            
+            s = next_s
+            t += 1
+        return states, actions, rewards, mask
+
+def generate_batch(env, policy, horizon, episodes, action_filter=None, parallel=False, render=False, n_jobs=4, seed=None):
     """Batch: list of (features, actions, rewards, mask) tuples"""
-    gen = sequential_episode_generator(env, policy, horizon, episodes, action_filter, render)
-    batch = [ep for ep in gen]
+    if not parallel:
+        gen = sequential_episode_generator(env, policy, horizon, episodes, action_filter, render)
+        batch = [ep for ep in gen]
+    else:
+        batch = Parallel(n_jobs=n_jobs)(delayed(parallel_episode_generator)(env, policy, horizon, action_filter, seed=seed*1000+i) for i in range(episodes))
     return batch
 
 """Testing"""
