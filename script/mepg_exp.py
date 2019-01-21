@@ -10,7 +10,7 @@ import gym
 import potion.envs
 from potion.actors.continuous_policies import SimpleGaussianPolicy as Gauss
 from potion.common.logger import Logger
-from potion.algorithms.metaexplore import sunday
+from potion.algorithms.metaexplore import mepg
 from potion.common.misc_utils import clip
 import argparse
 import re
@@ -19,7 +19,7 @@ from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--name', help='Experiment name', type=str, default='sundaytest')
+parser.add_argument('--name', help='Experiment name', type=str, default='mepgtest')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
 parser.add_argument('--alpha', help='Step size', type=float, default=1e-1)
@@ -73,7 +73,7 @@ else:
     logger = Logger(directory='../logs', name = logname)
     
 # Run
-sunday(env,
+mepg(env,
             policy,
             horizon = args.horizon,
             batchsize = args.batchsize,

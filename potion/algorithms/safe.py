@@ -67,7 +67,8 @@ def sepg(env, policy,
                 'Alpha', 'BatchSize', 'Exploration', 'Eta', 
                 'ThetaGradNorm', 'OmegaGrad', 'OmegaMetagrad',
                 'Penalty', 'MetaPenalty',
-                'IterationKind'] #0: theta, 1: omega
+                'IterationKind',
+                'ThetaGradNorm', 'Eps', 'Up', 'Down', 'C', 'Cmax'] #0: theta, 1: omega
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if test_det:
@@ -117,20 +118,28 @@ def sepg(env, policy,
                 theta_grad_var = grad_var[1:]
                 quant = 2*sts.t.interval(1 - delta, batchsize-1,loc=0.,scale=1.)[1]
                 eps = quant * torch.sqrt(theta_grad_var / batchsize)
+                log_row['Eps'] = torch.norm(eps).item()
                 norm2 = torch.norm(torch.clamp(torch.abs(theta_grad) - eps, min=0.))
                 norm1 = torch.sum(torch.abs(theta_grad) + eps)
+                log_row['Up'] = norm1.item()
+                log_row['Down'] = norm2.item()
             else:
+                log_row['Eps'] = 0
                 grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
                 theta_grad = grad[1:]
                 norm2 = torch.norm(theta_grad)
                 norm1 = torch.sum(torch.abs(theta_grad))
+                log_row['Up'] = norm1.item()
+                log_row['Down'] = norm2.item()
             penalty = rmax * phimax**2 / (1-gamma)**2 * (avol / (sigma * math.sqrt(2*math.pi)) + gamma / (2*(1-gamma)))
-            alpha_star = sigma ** 2 * norm2 ** 2 / (2 * penalty * norm1 ** 2)
+            alpha_star = sigma ** 2 * norm2 ** 2 / (2 * penalty * norm1 ** 2 + 1e-12)
             Cmax = (alpha_star * norm2**2 / 2).item()
             perf = performance(batch, gamma)
             Co = thresholder.next(perf)
             Co = min(Co, Cmax)
-            alpha = alpha_star * (1 + math.sqrt(1 - Co / Cmax))
+            log_row['C'] = Co
+            log_row['Cmax'] = Cmax
+            alpha = alpha_star * (1 + math.sqrt(1 - Co / Cmax + 1e-12))
             theta = policy.get_loc_params()
             new_theta = theta + alpha * theta_grad
             policy.set_loc_params(new_theta)
@@ -145,6 +154,7 @@ def sepg(env, policy,
                 omega_metagrad, omega_metagrad_var = metagrad(batch, gamma, policy, alpha, clip_at, baseline, result='moments')
                 quant = 2 * sts.t.interval(1 - delta, batchsize-1,loc=0.,scale=1.)[1]
                 eps = torch.tensor(quant * torch.sqrt(omega_grad_var / batchsize), dtype=torch.float)
+                log_row['Eps'] = torch.norm(eps).item()
                 metaeps = torch.tensor(quant * torch.sqrt(omega_metagrad_var / batchsize), dtype=torch.float)
                 if torch.sign(omega_grad).item() >= 0 and torch.sign(omega_metagrad).item() >= 0:
                     up = torch.clamp(torch.abs(omega_grad - eps), min=0.) * torch.clamp(torch.abs(omega_metagrad - metaeps), min=0.)
@@ -155,10 +165,13 @@ def sepg(env, policy,
                 else:
                     up = torch.abs(omega_grad + eps) * torch.abs(omega_metagrad + metaeps)
                 down = omega_metagrad + metaeps * torch.sign(omega_metagrad)
+                log_row['Up'] = up.item()
+                log_row['Down'] = down.item()
                 metapenalty = rmax /  (1 - gamma)**2 * (0.53 * avol / (2 * sigma) + gamma / (1 - gamma))
-                eta_star = (up / (2 * metapenalty * down**2)).item()
+                eta_star = (up / (2 * metapenalty * down**2 + 1e-12)).item()
                 Cmax = up**2 / (4 * metapenalty * down**2).item()
             else:
+                log_row['Eps'] = 0
                 grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
                 theta_grad = grad[1:]
                 omega_grad = grad[0]
@@ -170,18 +183,23 @@ def sepg(env, policy,
                 C = torch.clamp(C, min=-clip_at, max=clip_at)
                 omega_metagrad = A + B + C
                 metapenalty = rmax /  (1 - gamma)**2 * (0.53 * avol / (2 * sigma) + gamma / (1 - gamma))
-                eta_star = (omega_grad / (2 * metapenalty * omega_metagrad)).item()
+                eta_star = (omega_grad / (2 * metapenalty * omega_metagrad) + 1e-12).item()
                 Cmax = (omega_grad ** 2 / (4 * metapenalty)).item()
+                log_row['Up'] = torch.tensor(omega_grad).item()
+                log_row['Down'] = torch.tensor(omega_metagrad).item()
             
             perf = performance(batch, gamma)
             Co = thresholder.next(perf)
             Co = min(Co, Cmax)
-            eta = eta_star + abs(eta_star) * math.sqrt(1 - Co / Cmax)
+            log_row['C'] = Co
+            log_row['Cmax'] = Cmax
+            eta = eta_star + abs(eta_star) * math.sqrt(1 - Co / Cmax + 1e-12)
             new_omega = omega + eta * omega_metagrad
             policy.set_scale_params(new_omega)
 
         # Log
         log_row['IterationKind'] = it % 2
+        log_row['ThetaGradNorm'] = torch.norm(theta_grad).item()
         log_row['Alpha'] = alpha
         log_row['Eta'] = eta
         log_row['Penalty'] = penalty

@@ -9,9 +9,9 @@ Created on Sat Jan 12 18:11:15 2019
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon
 from potion.estimation.gradients import gpomdp_estimator, simple_gpomdp_estimator
-from potion.meta.steppers import ConstantStepper
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
+from potion.meta.steppers import ConstantStepper
 import torch
 
 def gpomdp(env, policy, horizon,
@@ -110,13 +110,13 @@ def gpomdp_adaptive(env, policy, horizon,
                     batchsize = 100, 
                     iterations = 1000,
                     gamma = 0.99,
-                    stepper = 'RMSprop',
+                    stepper = ConstantStepper(1e-1),
                     seed = None,
                     baseline = 'peters',
-                    simple = False,
+                    simple = True,
                     action_filter = None,
                     test_det = True,
-                    logger = Logger(name='gpomdp_adaptive'),
+                    logger = Logger(name='gpomdpadaptive'),
                     save_params = 1000,
                     log_params = True,
                     parallel = False,
@@ -195,6 +195,7 @@ def gpomdp_adaptive(env, policy, horizon,
             log_row['MetaStepSize'] = torch.tensor(stepsize)[0].item()
             log_row['OmegaGrad'] = grad[0].item()
         else:
+            grad = grad[1:]
             log_row['StepSize'] = torch.norm(torch.tensor(stepsize)).item()
         
         # Update policy parameters

@@ -8,13 +8,12 @@ Created on Wed Jan 16 16:18:45 2019
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon
 from potion.estimation.gradients import simple_gpomdp_estimator
-from potion.meta.steppers import ConstantStepper
-from potion.estimation.metagradients import omega_metagradient_estimator, mixed_estimator
+from potion.estimation.metagradients import mixed_estimator
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 import torch
 
-def sunday(env, policy, 
+def mepg(env, policy, 
             horizon,
             batchsize = 100, 
             iterations = 1000,
@@ -29,7 +28,7 @@ def sunday(env, policy,
             action_filter = None,
             parallel = False,
             n_jobs = 4,
-            logger = Logger(name='test_sunday'),
+            logger = Logger(name='mepgtest'),
             save_params = 1000,
             log_params = True,
             verbose = True):
@@ -94,9 +93,12 @@ def sunday(env, policy,
             generate_batch(env, policy, horizon, 1, action_filter, render=True)
 
 
-        log_row['IterationKind'] = 3
         omega = policy.get_scale_params()
         sigma = torch.exp(omega)
+        log_row['IterationKind'] = 3
+        log_row['Exploration'] = policy.exploration()
+        log_row['Alpha'] = (alpha * sigma**2).item()
+        log_row['Eta'] = eta
         batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel=parallel, n_jobs=n_jobs, seed=seed)
         grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
         theta_grad = grad[1:]
@@ -125,9 +127,6 @@ def sunday(env, policy,
         # Log
         log_row['ThetaGradNorm'] = torch.norm(theta_grad).item()
         log_row['BatchSize'] = batchsize
-        log_row['Exploration'] = policy.exploration()
-        log_row['Alpha'] = (alpha * sigma**2).item()
-        log_row['Eta'] = eta
         log_row['Perf'] = performance(batch, gamma)
         log_row['UPerf'] = performance(batch, 1.)
         log_row['AvgHorizon'] = avg_horizon(batch)
@@ -146,6 +145,7 @@ def sunday(env, policy,
     if save_params:
         logger.save_params(params, it)
 
+"""
 def saturday(env, policy, 
                     horizon,
                     batchsize = 100, 
@@ -163,10 +163,10 @@ def saturday(env, policy,
                     save_params = 1000,
                     log_params = True,
                     verbose = True):
-    """
+    '''
         Only for SIMPLE Gaussian policy w/ scalar variance
         Policy must have learn_std = False, as std is META-learned
-    """
+    '''
         
     # Defaults
     assert policy.learn_std
@@ -301,10 +301,10 @@ def friday(env, policy,
                     save_params = 1000,
                     log_params = True,
                     verbose = True):
-    """
+    '''
         Only for SIMPLE Gaussian policy w/ scalar variance
         Policy must have learn_std = False, as std is META-learned
-    """
+    '''
         
     # Defaults
     assert policy.learn_std
@@ -434,10 +434,10 @@ def subaltern(env, policy,
                     save_params = 1000,
                     log_params = True,
                     verbose = True):
-    """
+    '''
         Only for SIMPLE Gaussian policy w/ scalar variance
         Policy must have learn_std = False, as std is META-learned
-    """
+    '''
         
     # Defaults
     assert policy.learn_std
@@ -572,10 +572,10 @@ def metaexplore(env, policy,
                     parallel_sim = False,
                     parallel_comp = False,
                     verbose = True):
-    """
+    '''
         Only for SIMPLE Gaussian policy w/ scalar variance
         Policy must have learn_std = False, as std is META-learned
-    """
+    '''
         
     # Defaults
     if action_filter is None:
@@ -706,10 +706,10 @@ def metaexplore2(env, policy,
                     parallel_sim = False,
                     parallel_comp = False,
                     verbose = True):
-    """
+    '''
         Only for SIMPLE Gaussian policy w/ scalar variance
         Policy must have learn_std = False, as std is META-learned
-    """
+    '''
         
     # Defaults
     if action_filter is None:
@@ -822,3 +822,5 @@ def metaexplore2(env, policy,
     # Final policy
     if save_params:
         logger.save_params(params, it)
+
+"""

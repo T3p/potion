@@ -19,10 +19,10 @@ import re
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--name', help='Experiment name', type=str, default='')
+parser.add_argument('--name', help='Experiment name', type=str, default='gpomdptest')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
-parser.add_argument('--alpha', help='Step size', type=float, default=1e-2)
+parser.add_argument('--alpha', help='Step size', type=float, default=1e-1)
 parser.add_argument('--eta', help='Step size', type=float, default=1e-3)
 parser.add_argument('--horizon', help='Task horizon', type=int, default=300)
 parser.add_argument('--batchsize', help='Batch size', type=int, default=500)
@@ -93,4 +93,5 @@ gpomdp_adaptive(env,
             save_params = args.saveon,
             parallel = args.parallel,
             n_jobs = args.njobs,
-            render = args.render)
+            render = args.render,
+            simple=True)
