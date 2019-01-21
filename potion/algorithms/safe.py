@@ -175,6 +175,7 @@ def adastep(env, policy,
             rmax = 1.,
             phimax = 1.,
             safety_requirement = MonotonicImprovement(),
+            greedy = True,
             test_det = True,
             render = False,
             seed = None,
@@ -209,7 +210,8 @@ def adastep(env, policy,
                  'gamma': gamma, 
                  'actionFilter': action_filter,
                  'rmax': rmax,
-                 'phimax': phimax}
+                 'phimax': phimax,
+                 'greedy': greedy}
     logger.write_info({**algo_info, **policy.info()})
     log_keys = ['Perf', 'UPerf', 'AvgHorizon', 
                 'Alpha', 'BatchSize', 'Exploration', 
@@ -253,7 +255,10 @@ def adastep(env, policy,
         penalty = rmax * phimax**2 / (1-gamma)**2 * (avol / (sigma * math.sqrt(2*math.pi)) + gamma / (2*(1-gamma)))
         alpha_star = sigma ** 2 * norm2 ** 2 / (2 * penalty * norm1 ** 2)
         Cmax = alpha_star * norm2**2 / 2
-        C = safety_requirement.next()
+        if greedy:
+            C = Cmax
+        else:
+            C = safety_requirement.next()
         alpha = alpha_star * (1 + math.sqrt(1 - C / Cmax))
         theta = policy.get_loc_params()
         new_theta = theta + alpha * theta_grad
