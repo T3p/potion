@@ -139,7 +139,7 @@ def sepg(env, policy,
             Co = min(Co, Cmax)
             log_row['C'] = Co
             log_row['Cmax'] = Cmax
-            alpha = alpha_star * (1 + math.sqrt(1 - Co / Cmax + 1e-12))
+            alpha = alpha_star * (1 + math.sqrt(1 - Co / (Cmax + 1e-12) + 1e-12))
             theta = policy.get_loc_params()
             new_theta = theta + alpha * theta_grad
             policy.set_loc_params(new_theta)
@@ -193,7 +193,7 @@ def sepg(env, policy,
             Co = min(Co, Cmax)
             log_row['C'] = Co
             log_row['Cmax'] = Cmax
-            eta = eta_star + abs(eta_star) * math.sqrt(1 - Co / Cmax + 1e-12)
+            eta = eta_star + abs(eta_star) * math.sqrt(1 - Co / (Cmax + 1e-12) + 1e-12)
             new_omega = omega + eta * omega_metagrad
             policy.set_scale_params(new_omega)
 
@@ -321,7 +321,7 @@ def adastep(env, policy,
             C = Cmax
         else:
             C = safety_requirement.next()
-        alpha = alpha_star * (1 + math.sqrt(1 - C / Cmax))
+        alpha = alpha_star * (1 + math.sqrt(1 - C / (Cmax + 1e-12)))
         theta = policy.get_loc_params()
         new_theta = theta + alpha * theta_grad
         policy.set_loc_params(new_theta)
@@ -438,7 +438,7 @@ def adabatch(env, policy,
         alpha_star = sigma ** 2/ (2 * penalty)
         Cmax = alpha_star * norminf*2 / 2
         C = safety_requirement.next()
-        alpha = alpha_star * (1 + math.sqrt(1 - C / Cmax))
+        alpha = alpha_star * (1 + math.sqrt(1 - C / (Cmax + 1e-12) + 1e-12))
         theta = policy.get_loc_params()
         new_theta = theta
         new_theta[k] += alpha * theta_grad[k]
