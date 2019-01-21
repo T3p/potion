@@ -126,9 +126,10 @@ def sepg(env, policy,
                 norm1 = torch.sum(torch.abs(theta_grad))
             penalty = rmax * phimax**2 / (1-gamma)**2 * (avol / (sigma * math.sqrt(2*math.pi)) + gamma / (2*(1-gamma)))
             alpha_star = sigma ** 2 * norm2 ** 2 / (2 * penalty * norm1 ** 2)
-            Cmax = alpha_star * norm2**2 / 2
+            Cmax = (alpha_star * norm2**2 / 2).item()
             perf = performance(batch, gamma)
             Co = thresholder.next(perf)
+            Co = min(Co, Cmax)
             alpha = alpha_star * (1 + math.sqrt(1 - Co / Cmax))
             theta = policy.get_loc_params()
             new_theta = theta + alpha * theta_grad
@@ -156,7 +157,7 @@ def sepg(env, policy,
                 down = omega_metagrad + metaeps * torch.sign(omega_metagrad)
                 metapenalty = rmax /  (1 - gamma)**2 * (0.53 * avol / (2 * sigma) + gamma / (1 - gamma))
                 eta_star = (up / (2 * metapenalty * down**2)).item()
-                Cmax = up**2 / (4 * metapenalty * down**2)
+                Cmax = up**2 / (4 * metapenalty * down**2).item()
             else:
                 grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
                 theta_grad = grad[1:]
@@ -174,6 +175,7 @@ def sepg(env, policy,
             
             perf = performance(batch, gamma)
             Co = thresholder.next(perf)
+            Co = min(Co, Cmax)
             eta = eta_star + abs(eta_star) * math.sqrt(1 - Co / Cmax)
             new_omega = omega + eta * omega_metagrad
             policy.set_scale_params(new_omega)
