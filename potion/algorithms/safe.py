@@ -8,12 +8,13 @@ Created on Wed Jan 16 16:18:45 2019
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon
 from potion.estimation.gradients import simple_gpomdp_estimator
-from potion.estimation.metagradients import mixed_estimator
+from potion.estimation.metagradients import mixed_estimator, metagrad
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 import torch
 import math
-from potion.meta.safety_requirements import MonotonicImprovement
+from potion.meta.safety_requirements import MonotonicImprovement, Budget
+import scipy.stats as sts
 
 
 def sepg(env, policy, 
@@ -23,7 +24,8 @@ def sepg(env, policy,
             gamma = 0.99,
             rmax = 1.,
             phimax = 1.,
-            safety_requirement = MonotonicImprovement(),
+            safety_requirement = 'mi',
+            delta = 1.,
             clip_at = 100,
             test_det = True,
             render = False,
@@ -74,6 +76,13 @@ def sepg(env, policy,
 
     logger.open(log_row.keys())
     
+    # Safety requirements
+    if safety_requirement == 'mi':
+        thresholder = MonotonicImprovement()
+    elif safety_requirement == 'budget':
+        batch = generate_batch(env, policy, horizon, batchsize, action_filter)
+        thresholder = Budget(performance(batch, gamma))
+    
     # Learning
     avol = torch.tensor(env.action_space.high - env.action_space.low).item()
     omega_grad = float('nan')
@@ -102,15 +111,25 @@ def sepg(env, policy,
             omega = policy.get_scale_params()
             sigma = torch.exp(omega).item()
             batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel=parallel, n_jobs=n_jobs, seed=seed)
-            grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
-            theta_grad = grad[1:]
-            norm2 = torch.norm(theta_grad)
-            norm1 = torch.sum(torch.abs(theta_grad))
+            if delta < 1:
+                grad, grad_var = simple_gpomdp_estimator(batch, gamma, policy, baseline, result='moments')
+                theta_grad = grad[1:]
+                theta_grad_var = grad_var[1:]
+                quant = 2*sts.t.interval(1 - delta, batchsize-1,loc=0.,scale=1.)[1]
+                eps = quant * torch.sqrt(theta_grad_var / batchsize)
+                norm2 = torch.norm(torch.clamp(torch.abs(theta_grad) - eps, min=0.))
+                norm1 = torch.sum(torch.abs(theta_grad) + eps)
+            else:
+                grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
+                theta_grad = grad[1:]
+                norm2 = torch.norm(theta_grad)
+                norm1 = torch.sum(torch.abs(theta_grad))
             penalty = rmax * phimax**2 / (1-gamma)**2 * (avol / (sigma * math.sqrt(2*math.pi)) + gamma / (2*(1-gamma)))
             alpha_star = sigma ** 2 * norm2 ** 2 / (2 * penalty * norm1 ** 2)
             Cmax = alpha_star * norm2**2 / 2
-            C = safety_requirement.next()
-            alpha = alpha_star * (1 + math.sqrt(1 - C / Cmax))
+            perf = performance(batch, gamma)
+            Co = thresholder.next(perf)
+            alpha = alpha_star * (1 + math.sqrt(1 - Co / Cmax))
             theta = policy.get_loc_params()
             new_theta = theta + alpha * theta_grad
             policy.set_loc_params(new_theta)
@@ -118,21 +137,44 @@ def sepg(env, policy,
             omega = policy.get_scale_params()
             sigma = torch.exp(omega).item()
             batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel=parallel, n_jobs=n_jobs, seed=seed)
-            grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
-            theta_grad = grad[1:]
-            omega_grad = grad[0]
-            mixed, _ = mixed_estimator(batch, gamma, policy, baseline, theta_grad)
-            norm_grad = 2 * theta_grad.dot(mixed)
-            A = omega_grad
-            B = 2 * alpha * torch.norm(theta_grad)**2
-            C = sigma * alpha * norm_grad
-            C = torch.clamp(C, min=-clip_at, max=clip_at)
-            omega_metagrad = A + B + C
-            metapenalty = rmax /  (1 - gamma)**2 * (0.53 * avol / (2 * sigma) + gamma / (1 - gamma))
-            eta_star = (omega_grad / (2 * metapenalty * omega_metagrad)).item()
-            Cmax = (omega_grad ** 2 / (4 * metapenalty)).item()
-            C = safety_requirement.next()
-            eta = eta_star + abs(eta_star) * math.sqrt(1 - C / Cmax)
+            if delta <1:
+                grad, grad_var = simple_gpomdp_estimator(batch, gamma, policy, baseline, result='moments')
+                omega_grad = grad[0]
+                omega_grad_var = grad_var[0]
+                omega_metagrad, omega_metagrad_var = metagrad(batch, gamma, policy, alpha, clip_at, baseline, result='moments')
+                quant = 2 * sts.t.interval(1 - delta, batchsize-1,loc=0.,scale=1.)[1]
+                eps = torch.tensor(quant * torch.sqrt(omega_grad_var / batchsize), dtype=torch.float)
+                metaeps = torch.tensor(quant * torch.sqrt(omega_metagrad_var / batchsize), dtype=torch.float)
+                if torch.sign(omega_grad).item() >= 0 and torch.sign(omega_metagrad).item() >= 0:
+                    up = torch.clamp(torch.abs(omega_grad - eps), min=0.) * torch.clamp(torch.abs(omega_metagrad - metaeps), min=0.)
+                elif torch.sign(omega_grad).item() >= 0 and torch.sign(omega_metagrad).item() < 0:
+                    up = (omega_grad + eps) * (omega_metagrad - metaeps)
+                elif torch.sign(omega_grad).item() < 0 and torch.sign(omega_metagrad).item() >=0:
+                    up = (omega_grad - eps) * (omega_metagrad + eps)
+                else:
+                    up = torch.abs(omega_grad + eps) * torch.abs(omega_metagrad + metaeps)
+                down = omega_metagrad + metaeps * torch.sign(omega_metagrad)
+                metapenalty = rmax /  (1 - gamma)**2 * (0.53 * avol / (2 * sigma) + gamma / (1 - gamma))
+                eta_star = (up / (2 * metapenalty * down**2)).item()
+                Cmax = up**2 / (4 * metapenalty * down**2)
+            else:
+                grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
+                theta_grad = grad[1:]
+                omega_grad = grad[0]
+                mixed, _ = mixed_estimator(batch, gamma, policy, baseline, theta_grad)
+                norm_grad = 2 * theta_grad.dot(mixed)
+                A = omega_grad
+                B = 2 * alpha * torch.norm(theta_grad)**2
+                C = sigma * alpha * norm_grad
+                C = torch.clamp(C, min=-clip_at, max=clip_at)
+                omega_metagrad = A + B + C
+                metapenalty = rmax /  (1 - gamma)**2 * (0.53 * avol / (2 * sigma) + gamma / (1 - gamma))
+                eta_star = (omega_grad / (2 * metapenalty * omega_metagrad)).item()
+                Cmax = (omega_grad ** 2 / (4 * metapenalty)).item()
+            
+            perf = performance(batch, gamma)
+            Co = thresholder.next(perf)
+            eta = eta_star + abs(eta_star) * math.sqrt(1 - Co / Cmax)
             new_omega = omega + eta * omega_metagrad
             policy.set_scale_params(new_omega)
 
@@ -142,13 +184,13 @@ def sepg(env, policy,
         log_row['Eta'] = eta
         log_row['Penalty'] = penalty
         log_row['MetaPenalty'] = metapenalty
-        log_row['OmegaGrad'] = omega_grad
-        log_row['OmegaMetagrad'] = omega_metagrad
+        log_row['OmegaGrad'] = torch.tensor(omega_grad).item()
+        log_row['OmegaMetagrad'] = torch.tensor(omega_metagrad).item()
         log_row['ThetaGradNorm'] = torch.norm(theta_grad).item()
         log_row['BatchSize'] = batchsize
         log_row['Exploration'] = policy.exploration()
         log_row['Alpha'] = alpha.item()
-        log_row['Perf'] = performance(batch, gamma)
+        log_row['Perf'] = perf
         log_row['UPerf'] = performance(batch, 1.)
         log_row['AvgHorizon'] = avg_horizon(batch)
         params = policy.get_flat()

@@ -38,7 +38,7 @@ def gpomdp_estimator(batch, gamma, policy, baseline_kind='basic'):
                                                  policy) 
                                    for i in range(N)], 0), 0)
 
-def simple_gpomdp_estimator(batch, gamma, policy, baseline_kind='peters'):
+def simple_gpomdp_estimator(batch, gamma, policy, baseline_kind='peters', result='mean'):
     with torch.no_grad():        
         states, actions, rewards, mask = unpack(batch) # NxHxm, NxHxd, NxH, NxH
         
@@ -58,8 +58,17 @@ def simple_gpomdp_estimator(batch, gamma, policy, baseline_kind='peters'):
         values = disc_rewards.unsqueeze(2) - baseline.unsqueeze(0)
         
         G = tensormat(G, mask)
-        return torch.mean(torch.sum(G * values, 1), 0)
-
+        _samples = torch.sum(G * values, 1)
+        if result == 'samples':
+            return _samples #Nxm
+        elif result == 'moments':
+            _mean = torch.mean(_samples, 0)
+            _variance = torch.var(_samples, 0, unbiased=True)
+            return _mean, _variance
+        else:
+            _mean = torch.mean(_samples, 0)
+            return _mean
+            
 """Testing"""
 if __name__ == '__main__':
     from potion.actors.continuous_policies import SimpleGaussianPolicy as Gauss

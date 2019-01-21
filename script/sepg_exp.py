@@ -15,7 +15,6 @@ from potion.common.misc_utils import clip
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
-
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -31,6 +30,8 @@ parser.add_argument('--sigmainit', help='Initial policy std', type=float, defaul
 parser.add_argument('--njobs', help='Number of workers', type=int, default=4)
 parser.add_argument('--rmax', help='Discount factor', type=float, default=28.8)
 parser.add_argument('--phimax', help='Discount factor', type=float, default=4.)
+parser.add_argument('--delta', help='Safety is guaranteed w.p. 1-delta', type=float, default=1.)
+parser.add_argument('--safety', help='Experiment name', type=str, default='mi')
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -71,7 +72,7 @@ if args.trial:
     logger = Logger(directory='../temp', name = logname)
 else:
     logger = Logger(directory='../logs', name = logname)
-    
+
 # Run
 sepg(env,
             policy,
@@ -81,6 +82,8 @@ sepg(env,
             gamma = args.gamma,
             rmax = args.rmax,
             phimax = args.phimax,
+            delta = args.delta,
+            safety_requirement = args.safety,
             seed = args.seed,
             action_filter = af,
             logger = logger,
