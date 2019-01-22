@@ -192,7 +192,7 @@ def gpomdp_adaptive(env, policy, horizon,
         log_row['Exploration'] = policy.exploration()
         if policy.learn_std:
             log_row['StepSize'] = torch.norm(torch.tensor(stepsize)).item()
-            log_row['MetaStepSize'] = torch.tensor(stepsize)[0].item()
+            log_row['MetaStepSize'] = torch.tensor(stepsize).item()
             log_row['OmegaGrad'] = grad[0].item()
         else:
             grad = grad[1:]
