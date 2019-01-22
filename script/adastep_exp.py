@@ -31,6 +31,7 @@ parser.add_argument('--sigmainit', help='Initial policy std', type=float, defaul
 parser.add_argument('--njobs', help='Number of workers', type=int, default=4)
 parser.add_argument('--rmax', help='Discount factor', type=float, default=28.8)
 parser.add_argument('--phimax', help='Discount factor', type=float, default=4.)
+parser.add_argument('--delta', help='Safety is guaranteed w.p. 1-delta', type=float, default=1.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -86,6 +87,7 @@ adastep(env,
             rmax = args.rmax,
             phimax = args.phimax,
             greedy = args.greedy,
+            delta = args.delta,
             seed = args.seed,
             action_filter = af,
             logger = logger,

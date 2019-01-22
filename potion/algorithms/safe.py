@@ -236,8 +236,8 @@ def adastep(env, policy,
             gamma = 0.99,
             rmax = 1.,
             phimax = 1.,
-            safety_requirement = MonotonicImprovement(),
             greedy = True,
+            delta = 1.,
             test_det = True,
             render = False,
             seed = None,
@@ -309,19 +309,29 @@ def adastep(env, policy,
 
         omega = policy.get_scale_params()
         sigma = torch.exp(omega).item()
-        batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel=parallel, n_jobs=n_jobs, seed=seed)
-        grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
-        theta_grad = grad[1:]
-        norm2 = torch.norm(theta_grad)
-        norm1 = torch.sum(torch.abs(theta_grad))
-        penalty = rmax * phimax**2 / (1-gamma)**2 * (avol / (sigma * math.sqrt(2*math.pi)) + gamma / (2*(1-gamma)))
-        alpha_star = sigma ** 2 * norm2 ** 2 / (2 * penalty * norm1 ** 2)
+        batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel=parallel, n_jobs=n_jobs, seed=seed)        
+        if delta < 1:
+            grad, grad_var = simple_gpomdp_estimator(batch, gamma, policy, baseline, result='moments')
+            theta_grad = grad[1:]
+            theta_grad_var = grad_var[1:]
+            quant = 2*sts.t.interval(1 - delta, batchsize-1,loc=0.,scale=1.)[1]
+            eps = quant * torch.sqrt(theta_grad_var / batchsize + 1e-12)
+            norm2 = torch.norm(torch.clamp(torch.abs(theta_grad) - eps, min=0.))
+            norm1 = torch.sum(torch.abs(theta_grad) + eps)
+        else:
+            grad = simple_gpomdp_estimator(batch, gamma, policy, baseline)
+            theta_grad = grad[1:]
+            norm2 = torch.norm(theta_grad)
+            norm1 = torch.sum(torch.abs(theta_grad))
+            penalty = rmax * phimax**2 / (1-gamma)**2 * (avol / (sigma * math.sqrt(2*math.pi)) + gamma / (2*(1-gamma)))
+        alpha_star = sigma ** 2 * norm2 ** 2 / (2 * penalty * norm1 ** 2 + 1e-12)
         Cmax = alpha_star * norm2**2 / 2
+            
         if greedy:
             C = Cmax
         else:
-            C = safety_requirement.next()
-        alpha = alpha_star * (1 + math.sqrt(1 - C / (Cmax + 1e-12)))
+            C = 0
+        alpha = alpha_star * (1 + math.sqrt(1 - C / (Cmax + 1e-12) + 1e-12))
         theta = policy.get_loc_params()
         new_theta = theta + alpha * theta_grad
         policy.set_loc_params(new_theta)
