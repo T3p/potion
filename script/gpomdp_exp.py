@@ -15,7 +15,7 @@ from potion.algorithms.gpomdp import gpomdp_adaptive
 from potion.common.misc_utils import clip
 import argparse
 import re
-from dm_control import suite
+#from dm_control import suite
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
 
 
@@ -61,12 +61,14 @@ if args.env.startswith('rllab'):
     env_rllab = env_rllab_class()
     env = Rllab2GymWrapper(env_rllab)
     af = lambda a: clip(env)(a).item()
-elif args.env.startswith('dm'):
-    domain_name, task_name = str.split(args.env[2:], '-')
-    env = suite.load(domain_name=domain_name, task_name=task_name)
 else:
     env = gym.make(args.env)
     af = clip(env)
+"""
+elif args.env.startswith('dm'):
+    domain_name, task_name = str.split(args.env[2:], '-')
+    env = suite.load(domain_name=domain_name, task_name=task_name)
+"""
 env.seed(args.seed)
 
 m = sum(env.observation_space.shape)
