@@ -15,6 +15,9 @@ from potion.algorithms.gpomdp import gpomdp_adaptive
 from potion.common.misc_utils import clip
 import argparse
 import re
+from dm_control import suite
+from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
+
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -24,11 +27,11 @@ parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
 parser.add_argument('--alpha', help='Step size', type=float, default=1e-1)
 parser.add_argument('--eta', help='Step size', type=float, default=1e-3)
-parser.add_argument('--horizon', help='Task horizon', type=int, default=500)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=1000)
 parser.add_argument('--batchsize', help='Batch size', type=int, default=500)
 parser.add_argument('--iterations', help='Iterations', type=int, default=200)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
-parser.add_argument('--saveon', help='How often to save parameters', type=int, default=100)
+parser.add_argument('--saveon', help='How often to save parameters', type=int, default=10)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
 parser.add_argument('--njobs', help='Number of workers', type=int, default=4)
@@ -53,12 +56,23 @@ parser.set_defaults(render=False, trial=False, learnstd=False, parallel=False)
 args = parser.parse_args()
 
 # Prepare
-env = gym.make(args.env)
+if args.env.startswith('rllab'):
+    env_rllab_class = rllab_env_from_name(args.env)
+    env_rllab = env_rllab_class()
+    env = Rllab2GymWrapper(env_rllab)
+    af = lambda a: clip(env)(a).item()
+elif args.env.startswith('dm'):
+    domain_name, task_name = str.split(args.env[2:], '-')
+    env = suite.load(domain_name=domain_name, task_name=task_name)
+else:
+    env = gym.make(args.env)
+    af = clip(env)
 env.seed(args.seed)
 
 m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
 mu_init = torch.zeros(m)
+#mu_init = torch.tensor([-0.7222,  1.6602,  3.9794,  7.8677])
 logstd_init = torch.log(torch.zeros(1) + args.sigmainit)
 policy = Gauss(m, d, mu_init=mu_init, logstd_init=logstd_init, learn_std=args.learnstd)
 
@@ -88,7 +102,7 @@ gpomdp_adaptive(env,
             gamma = args.gamma,
             stepper = stepper,
             seed = args.seed,
-            action_filter = clip(env),
+            action_filter = af,
             logger = logger,
             save_params = args.saveon,
             parallel = args.parallel,

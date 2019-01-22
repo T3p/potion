@@ -15,6 +15,7 @@ from potion.common.misc_utils import clip
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
+from dm_control import suite
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -24,11 +25,11 @@ parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
 parser.add_argument('--alpha', help='Step size', type=float, default=1e-1)
 parser.add_argument('--eta', help='Meta step size', type=float, default=1e-3)
-parser.add_argument('--horizon', help='Task horizon', type=int, default=500)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=1000)
 parser.add_argument('--batchsize', help='Batch size', type=int, default=500)
 parser.add_argument('--iterations', help='Iterations', type=int, default=200)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
-parser.add_argument('--saveon', help='How often to save parameters', type=int, default=100)
+parser.add_argument('--saveon', help='How often to save parameters', type=int, default=10)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--njobs', help='Number of workers', type=int, default=4)
 parser.add_argument("--render", help="Render an episode",
@@ -53,6 +54,9 @@ if args.env.startswith('rllab'):
     env_rllab = env_rllab_class()
     env = Rllab2GymWrapper(env_rllab)
     af = lambda a: clip(env)(a).item()
+elif args.env.startswith('dm'):
+    domain_name, task_name = str.split(args.env[2:], '-')
+    env = suite.load(domain_name=domain_name, task_name=task_name)
 else:
     env = gym.make(args.env)
     af = clip(env)
