@@ -15,8 +15,18 @@ register(
 )
 
 register(
+    id='ShortCartPole-v0',
+    entry_point='potion.envs.short_cartpole:ShortCartPole'
+)
+
+register(
     id='LQG1D-v0',
     entry_point='potion.envs.lqg1d:LQG1D'
+)
+
+register(
+    id='Cliff-v0',
+    entry_point='potion.envs.cliff:Cliff'
 )
 
 register(

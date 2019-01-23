@@ -13,7 +13,7 @@ from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 import torch
 import math
-from potion.meta.safety_requirements import MonotonicImprovement, Budget
+from potion.meta.safety_requirements import MonotonicImprovement, Budget, FixedThreshold
 import scipy.stats as sts
 
 
@@ -26,6 +26,7 @@ def sepg(env, policy,
             phimax = 1.,
             safety_requirement = 'mi',
             delta = 1.,
+            confidence_schedule = None,
             clip_at = 100,
             test_det = True,
             render = False,
@@ -68,7 +69,7 @@ def sepg(env, policy,
                 'ThetaGradNorm', 'OmegaGrad', 'OmegaMetagrad',
                 'Penalty', 'MetaPenalty',
                 'IterationKind',
-                'ThetaGradNorm', 'Eps', 'Up', 'Down', 'C', 'Cmax'] #0: theta, 1: omega
+                'ThetaGradNorm', 'Eps', 'Up', 'Down', 'C', 'Cmax', 'Delta'] #0: theta, 1: omega
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if test_det:
@@ -83,6 +84,8 @@ def sepg(env, policy,
     elif safety_requirement == 'budget':
         batch = generate_batch(env, policy, horizon, batchsize, action_filter)
         thresholder = Budget(performance(batch, gamma))
+    else:
+        thresholder = FixedThreshold(float(safety_requirement))
     
     # Learning
     avol = torch.tensor(env.action_space.high - env.action_space.low).item()
@@ -112,6 +115,9 @@ def sepg(env, policy,
             omega = policy.get_scale_params()
             sigma = torch.exp(omega).item()
             batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel=parallel, n_jobs=n_jobs, seed=seed)
+            if confidence_schedule is not None:
+                delta = confidence_schedule.next(it)
+            log_row['Delta'] = delta
             if delta < 1:
                 grad, grad_var = simple_gpomdp_estimator(batch, gamma, policy, baseline, result='moments')
                 theta_grad = grad[1:]
@@ -147,6 +153,9 @@ def sepg(env, policy,
             omega = policy.get_scale_params()
             sigma = torch.exp(omega).item()
             batch = generate_batch(env, policy, horizon, batchsize, action_filter, parallel=parallel, n_jobs=n_jobs, seed=seed)
+            if confidence_schedule is not None:
+                delta = confidence_schedule.next(it)
+            log_row['Delta'] = delta
             if delta <1:
                 grad, grad_var = simple_gpomdp_estimator(batch, gamma, policy, baseline, result='moments')
                 omega_grad = grad[0]
@@ -323,7 +332,7 @@ def adastep(env, policy,
             theta_grad = grad[1:]
             norm2 = torch.norm(theta_grad)
             norm1 = torch.sum(torch.abs(theta_grad))
-            penalty = rmax * phimax**2 / (1-gamma)**2 * (avol / (sigma * math.sqrt(2*math.pi)) + gamma / (2*(1-gamma)))
+        penalty = rmax * phimax**2 / (1-gamma)**2 * (avol / (sigma * math.sqrt(2*math.pi)) + gamma / (2*(1-gamma)))
         alpha_star = sigma ** 2 * norm2 ** 2 / (2 * penalty * norm1 ** 2 + 1e-12)
         Cmax = alpha_star * norm2**2 / 2
             

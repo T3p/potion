@@ -20,3 +20,10 @@ class Budget:
     def next(self, curr_perf, *args):
         budget = curr_perf - self.initial_perf
         return - budget
+    
+class FixedThreshold:
+    def __init__(self, threshold, *args):
+        self.threshold = threshold
+    def next(self, curr_perf, *args):
+        budget = curr_perf - self.threshold
+        return -budget
