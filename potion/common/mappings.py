@@ -3,8 +3,6 @@
 """
 Created on Tue Dec 18 11:44:00 2018
 
-@author: Matteo Papini
-
 Mappings from states (or state features) to an output of interest (e.g. mean action)
 """
 

@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Jan 12 01:17:17 2019
-
-@author: Matteo Papini
 """
 
 import torch

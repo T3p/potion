@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Jan 15 00:40:38 2019
-
-@author: matteo
 """
 import torch
 import math

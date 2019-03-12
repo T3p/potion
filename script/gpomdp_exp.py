@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Jan 16 14:47:33 2019
-
-@author: Matteo Papini
 """
 import torch
 import gym
@@ -15,9 +13,6 @@ from potion.algorithms.gpomdp import gpomdp_adaptive
 from potion.common.misc_utils import clip
 import argparse
 import re
-#from dm_control import suite
-from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
-
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -56,14 +51,8 @@ parser.set_defaults(render=False, trial=False, learnstd=False, parallel=False)
 args = parser.parse_args()
 
 # Prepare
-if args.env.startswith('rllab'):
-    env_rllab_class = rllab_env_from_name(args.env)
-    env_rllab = env_rllab_class()
-    env = Rllab2GymWrapper(env_rllab)
-    af = lambda a: clip(env)(a).item()
-else:
-    env = gym.make(args.env)
-    af = clip(env)
+env = gym.make(args.env)
+af = clip(env)
 """
 elif args.env.startswith('dm'):
     domain_name, task_name = str.split(args.env[2:], '-')

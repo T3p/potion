@@ -3,8 +3,6 @@
 """
 Created on Fri Dec 28 20:44:22 2018
 
-@author: Matteo Papini
-
 Pytorch utilities
 """
 

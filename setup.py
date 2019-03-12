@@ -11,7 +11,7 @@ setup(name='polyopt',
                 if package.startswith('polyopt')],
       install_requires=[],
       description="Policy optimization tools",
-      author="Matteo Papini",
+      author="Anonymized",
       url='',
       author_email="",
       version="0.1.1")

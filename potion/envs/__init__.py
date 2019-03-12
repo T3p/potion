@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Wed Jan 16 15:00:16 2019
-
-@author: matteo
 """
 
 from gym.envs.registration import register
@@ -15,21 +13,6 @@ register(
 )
 
 register(
-    id='ShortCartPole-v0',
-    entry_point='potion.envs.short_cartpole:ShortCartPole'
-)
-
-register(
     id='LQG1D-v0',
     entry_point='potion.envs.lqg1d:LQG1D'
-)
-
-register(
-    id='Cliff-v0',
-    entry_point='potion.envs.cliff:Cliff'
-)
-
-register(
-    id='ContAcrobot-v0',
-    entry_point='potion.envs.acrobot:ContAcrobot'
 )

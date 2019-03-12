@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sun Jan 13 14:17:33 2019
-
-@author: Matteo Papini
 """
 
 import tensorboardX as tbx

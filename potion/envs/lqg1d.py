@@ -8,17 +8,6 @@ import numpy as np
 
 """
 Linear quadratic gaussian regulator task.
-
-References
-----------
-  - Simone Parisi, Matteo Pirotta, Nicola Smacchia,
-    Luca Bascetta, Marcello Restelli,
-    Policy gradient approaches for multi-objective sequential decision making
-    2014 International Joint Conference on Neural Networks (IJCNN)
-  - Jan  Peters  and  Stefan  Schaal,
-    Reinforcement  learning of motor  skills  with  policy  gradients,
-    Neural  Networks, vol. 21, no. 4, pp. 682-697, 2008.
-
 """
 
 class LQG1D(gym.Env):

@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Jan 12 23:12:09 2019
-
-@author: Matteo Papini
 """
 
 import random

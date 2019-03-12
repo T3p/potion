@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Jan 10 22:26:56 2019
-
-@author: Matteo Papini
 """
 
 import math

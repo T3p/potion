@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sun Jan 20 20:32:36 2019
-
-@author: matteo
 """
 
 class MonotonicImprovement:
