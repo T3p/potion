@@ -74,18 +74,18 @@ class FlatModule(nn.Module):
         
 def flat_gradients(module, loss, coeff=None):
     module.zero_grad()
-    if coeff is None:
-        coeff = torch.ones(loss.numel())
     loss.backward(coeff, retain_graph=True)
     return torch.cat([p.grad.view(-1) for p in module.parameters()])
 
-def jacobian(module, loss):
-    """INEFFICIENT!"""
-    jac = torch.zeros((loss.numel(), module.num_params()))
-    for i in range(loss.numel()):
-        mask = torch.zeros(loss.numel(), dtype=torch.float)
-        mask[i] = 1.
-        jac[i, :] = flat_gradients(module, loss, mask)
+def jacobian(module, loss, coeff=None):
+    """Inefficient! Use jacobian-vector product whenever possible
+    (still useful for nonlinear functions of gradients, such as 
+    in Peter's baseline for REINFORCE)"""
+    mask = torch.eye(loss.numel())
+
+    jac = torch.stack([flat_gradients(module, loss, mask[i,:]) 
+                      for i in range(loss.numel())],
+                      dim = 0)
     return jac
 
 def tensormat(a, b):
@@ -99,4 +99,11 @@ def tensormat(a, b):
 
 """Testing"""
 if __name__ == '__main__':
-    pass
+    from potion.common.mappings import LinearMapping
+    F = LinearMapping(2,3)
+    x = torch.ones(2, requires_grad=True)
+    y = F(x)
+    print(y)
+    print(jacobian(F,y))
+    #y.backward(torch.ones(3))
+    #print(x.grad)

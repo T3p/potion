@@ -27,18 +27,18 @@ def unpack(batch):
     "Unpacks list of tuples of tensors into one tuple of stacked arrays"
     return (torch.stack(x) for x in zip(*batch))
 
-def discount(rewards, gamma):
+def discount(rewards, disc):
     """rewards: array or tensor"""
     i = 0 if rewards.dim() < 2 else 1
-    discounts = torch.tensor(gamma**np.indices(rewards.shape)[i], dtype=torch.float)
+    discounts = torch.tensor(disc**np.indices(rewards.shape)[i], dtype=torch.float)
     return rewards * discounts
         
 def returns(batch, gamma):
     return [torch.sum(discount(rewards,gamma)).item() 
                                     for (_, _, rewards, _) in batch]
 
-def performance(batch, gamma):
-    return torch.mean(torch.tensor(returns(batch, gamma))).item()
+def performance(batch, disc):
+    return torch.mean(torch.tensor(returns(batch, disc))).item()
 
 def avg_horizon(batch):
     return torch.mean(torch.tensor([torch.sum(mask)
