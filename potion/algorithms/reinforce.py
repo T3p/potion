@@ -7,8 +7,7 @@ REINFORCE family of algorithms (actor-only policy gradient)
 
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon
-from potion.estimation.gradients import gpomdp_estimator, 
-shallow_gpomdp_estimator, reinforce_estimator, shallow_reinforce_estimator
+from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 from potion.meta.steppers import ConstantStepper
@@ -24,8 +23,8 @@ def reinforce(env, policy, horizon, *,
                     action_filter = None,
                     estimator = 'gpomdp',
                     baseline = 'avg',
-                    logger = Logger(name='REINFORCE'),
-                    shallow = True,
+                    logger = Logger(name='gpomdp'),
+                    shallow = False,
                     seed = None,
                     test_batchsize = False,
                     save_params = 100,
@@ -101,7 +100,7 @@ def reinforce(env, policy, horizon, *,
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
         log_keys += ['grad%d' % i for i in range(policy.num_params())]
-    if test_det:
+    if test_batchsize:
         log_keys += ['TestPerf', 'TestPerf']
     log_row = dict.fromkeys(log_keys)
     logger.open(log_row.keys())
@@ -146,9 +145,13 @@ def reinforce(env, policy, horizon, *,
     
         #Estimate policy gradient
         if estimator == 'gpomdp':
-            grad = gpomdp_estimator(batch, disc, policy, baseline, shallow)
+            grad = gpomdp_estimator(batch, disc, policy, 
+                                    baselinekind=baseline, 
+                                    shallow=shallow)
         elif estimator == 'reinforce':
-            grad = reinforce_estimator(batch, disc, policy, baseline, shallow)
+            grad = reinforce_estimator(batch, disc, policy, 
+                                       baselinekind=baseline, 
+                                       shallow=shallow)
         else:
             raise ValueError('Invalid policy gradient estimator')
         if verbose > 1:

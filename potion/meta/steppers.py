@@ -64,4 +64,4 @@ class RMSprop:
 
     def __str__(self):
         return 'RMSprop (alpha = %f, beta = %f, epsilon = %f)' % (
-                str(self.alpha), str(self.beta), str(self.epsilon))
+                self.alpha, self.beta, self.epsilon)
