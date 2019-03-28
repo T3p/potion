@@ -6,7 +6,7 @@ REINFORCE family of algorithms (actor-only policy gradient)
 """
 
 from potion.simulation.trajectory_generators import generate_batch
-from potion.common.misc_utils import performance, avg_horizon
+from potion.common.misc_utils import performance, avg_horizon, mean_sum_info
 from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
@@ -27,6 +27,7 @@ def reinforce(env, policy, horizon, *,
                     shallow = False,
                     seed = None,
                     test_batchsize = False,
+                    info_key = 'danger',
                     save_params = 100,
                     log_params = False,
                     log_grad = False,
@@ -34,7 +35,7 @@ def reinforce(env, policy, horizon, *,
                     render = False,
                     verbose = 1):
     """
-    REINFORCE/G(PO)MDP algorithm
+    REINFORCE/G(PO)MDP algorithmn
         
     env: environment
     policy: the one to improve
@@ -95,13 +96,14 @@ def reinforce(env, policy, horizon, *,
                 'StepSize', 
                 'GradNorm', 
                 'Time',
-                'StepSize']
+                'StepSize',
+                'Info']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
         log_keys += ['grad%d' % i for i in range(policy.num_params())]
     if test_batchsize:
-        log_keys += ['TestPerf', 'TestPerf']
+        log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
     log_row = dict.fromkeys(log_keys)
     logger.open(log_row.keys())
     
@@ -121,9 +123,11 @@ def reinforce(env, policy, horizon, *,
             test_batch = generate_batch(env, policy, horizon, test_batchsize, 
                                         action_filter=action_filter,
                                         seed=seed,
-                                        parallel=parallel,
-                                        deterministic=True)
+                                        njobs=parallel,
+                                        deterministic=True,
+                                        key=info_key)
             log_row['TestPerf'] = performance(test_batch, disc)
+            log_row['TestInfo'] = mean_sum_info(test_batch).item()
             log_row['UTestPerf'] = performance(test_batch, 1)
         
         #Render the agent's behavior
@@ -131,15 +135,17 @@ def reinforce(env, policy, horizon, *,
             generate_batch(env, policy, horizon, 
                            episodes=1, 
                            action_filter=action_filter, 
-                           render=True)
+                           render=True,
+                           key=info_key)
     
         #Collect trajectories
         batch = generate_batch(env, policy, horizon, batchsize, 
                                action_filter=action_filter, 
                                seed=seed, 
-                               parallel=parallel, 
-                               n_jobs=parallel)
+                               n_jobs=parallel,
+                               key=info_key)
         log_row['Perf'] = performance(batch, disc)
+        log_row['Info'] = mean_sum_info(batch).item()
         log_row['UPerf'] = performance(batch, disc=1.)
         log_row['AvgHorizon'] = avg_horizon(batch)
     

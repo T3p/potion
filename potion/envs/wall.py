@@ -21,7 +21,7 @@ References
 
 """
 
-class LQG1D(gym.Env):
+class Wall(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 30
@@ -29,52 +29,59 @@ class LQG1D(gym.Env):
 
     def __init__(self, discrete_reward=False):
         self.horizon = 20
-        self.gamma = 0.9
-        self.sigma_controller = 1.
+        self.gamma = 0.95
+        self.sigma_controller = 0.1
         self.discrete_reward = discrete_reward
-        self.max_pos = 4.0
-        self.max_action = 4.0
+        self.max_pos = 5.
+        self.max_action = 1.
         self.sigma_noise = 0
-        self.A = np.array([1]).reshape((1, 1))
-        self.B = np.array([1]).reshape((1, 1))
-        self.Q = np.array([0.9]).reshape((1, 1))
-        self.R = np.array([0.9]).reshape((1, 1))
+        self.A = np.eye(2)
+        self.B = np.eye(2)
+        self.Q = 1.
+        self.R = 0.1 * np.eye(2)
 
+        #Wall
+        self.wallh = 2.
+        self.wally = .25
+        self.wallw = 1.5
+        self.wallx = -.25 * self.max_pos
+    
         # gym attributes
         self.viewer = None
-        high = np.array([self.max_pos])
+        high = self.max_pos
         self.action_space = spaces.Box(low=-self.max_action,
                                        high=self.max_action,
-                                       shape=(1,))
-        self.observation_space = spaces.Box(low=-high, high=high)
-
-        self.initial_states = np.array([[1, 2, 5, 7, 10]]).T
+                                       shape=(2,))
+        self.observation_space = spaces.Box(low=-high, high=high, shape=(2,))
 
         # initialize state
         self.seed()
         self.reset()
 
     def step(self, action, render=False):
+        done = False
         u = np.clip(action, -self.max_action, self.max_action)
         noise = 0
         if self.sigma_noise > 0:
             noise = self.np_random.randn() * self.sigma_noise
         xn = np.clip(np.dot(self.A, self.state) + np.dot(self.B, u) + noise, -self.max_pos, self.max_pos)
-        cost = np.dot(self.state,
-                      np.dot(self.Q, self.state)) + \
+        cost = self.Q * self.state[0] ** 2 + \
             np.dot(u, np.dot(self.R, u))
+        
+        if abs(xn[0] - self.wallx) < self.wallw / 2 and xn[1] > self.wally and xn[1] < self.wally + self.wallh:
+            cost+=1000
+            #done = True
 
         self.state = np.array(xn.ravel())
         if self.discrete_reward:
             if abs(self.state[0]) <= 2 and abs(u) <= 2:
-                return self.get_state(), 0, False, {}
-            return self.get_state(), -1, False, {}
-        return self.get_state(), -np.asscalar(cost), False, {}
+                return self.get_state(), 0, done, {}
+            return self.get_state(), -1, done, {}
+        return self.get_state(), -np.asscalar(cost), done, {}
 
     def reset(self, state=None):
         if state is None:
-            self.state = np.array([self.np_random.uniform(low=-self.max_pos,
-                                                          high=self.max_pos)])
+            self.state = np.array([-.75 * self.max_pos, 0.])
         else:
             self.state = np.array(state)
 
@@ -95,16 +102,31 @@ class LQG1D(gym.Env):
             return
 
         screen_width = 600
-        screen_height = 400
+        screen_height = 600
 
-        world_width = (self.max_pos * 2) * 2
+        world_width = (self.max_pos * 2)
+        world_height = self.max_pos * 2
         scale = screen_width / world_width
-        bally = 100
+        scaley = screen_height / world_height
+        tracky = screen_height / 2.
         ballradius = 3
+
+        from gym.envs.classic_control import rendering
+
+        x = self.state[0]
+        y = self.state[1]
+        ballx = x * scale + screen_width / 2.0
+        bally = y * scale + screen_height / 2.0
+        """
+        token_tr = rendering.Transform(translation=(ballx, bally), scale=(.1,.1))
+        token = rendering.make_circle()
+        token.set_color(.9,.5,.5)
+        token.add_attr(token_tr)
+        self.viewer.add_geom(token)
+        """
 
         if self.viewer is None:
             clearance = 0  # y-offset
-            from gym.envs.classic_control import rendering
             self.viewer = rendering.Viewer(screen_width, screen_height)
             mass = rendering.make_circle(ballradius * 2)
             mass.set_color(.8, .3, .3)
@@ -112,16 +134,23 @@ class LQG1D(gym.Env):
             self.masstrans = rendering.Transform()
             mass.add_attr(self.masstrans)
             self.viewer.add_geom(mass)
-            self.track = rendering.Line((0, bally), (screen_width, bally))
+            self.track = rendering.Line((0, tracky), (screen_width, tracky))
             self.track.set_color(0.5, 0.5, 0.5)
             self.viewer.add_geom(self.track)
             zero_line = rendering.Line((screen_width / 2, 0),
                                        (screen_width / 2, screen_height))
             zero_line.set_color(0.5, 0.5, 0.5)
             self.viewer.add_geom(zero_line)
+            wallx = self.wallx * scale + screen_width / 2
+            wallh = self.wallh * scaley
+            wally = scaley * self.wally + screen_height / 2
+            wallw = self.wallw * scale
+            wall = rendering.FilledPolygon([[wallx-wallw/2, wally],
+                                           [wallx-wallw/2, wally+wallh],
+                                           [wallx+wallw/2, wally+wallh],
+                                           [wallx+wallw/2, wally]])
+            self.viewer.add_geom(wall)
 
-        x = self.state[0]
-        ballx = x * scale + screen_width / 2.0
         self.masstrans.set_translation(ballx, bally)
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')

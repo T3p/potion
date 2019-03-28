@@ -9,6 +9,7 @@ import torch
 import potion.common.torch_utils as tu
 from potion.common.misc_utils import unpack, discount
 from potion.common.torch_utils import tensormat, jacobian
+from potion.estimation.moments import incr_mean, incr_var
 
 
 def gpomdp_estimator(batch, disc, policy, baselinekind='avg', result='mean',
@@ -32,7 +33,7 @@ def gpomdp_estimator(batch, disc, policy, baselinekind='avg', result='mean',
         return _shallow_gpomdp_estimator(batch, disc, policy, baselinekind, result)
     
     N = len(batch)
-    states, actions, rewards, mask = unpack(batch) #NxHxd_s, NxHxd_a, NxH, NxH
+    states, actions, rewards, mask, _ = unpack(batch) #NxHxd_s, NxHxd_a, NxH, NxH
     H = rewards.shape[1]
     m = policy.num_params()
     
@@ -86,7 +87,7 @@ def reinforce_estimator(batch, disc, policy, baselinekind='avg',
         return _shallow_reinforce_estimator(batch, disc, policy, baselinekind, result)
     
     N = len(batch)
-    states, actions, rewards, mask = unpack(batch) #NxHxm, NxHxd, NxH, NxH
+    states, actions, rewards, mask, _ = unpack(batch) #NxHxm, NxHxd, NxH, NxH
     
     disc_rewards = discount(rewards, disc) #NxH
     rets = torch.sum(disc_rewards, 1) #N
@@ -123,7 +124,7 @@ def reinforce_estimator(batch, disc, policy, baselinekind='avg',
 
 def _shallow_gpomdp_estimator(batch, disc, policy, baselinekind='peters', result='mean'):
     with torch.no_grad():        
-        states, actions, rewards, mask = unpack(batch) # NxHxm, NxHxd, NxH, NxH
+        states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
         
         disc_rewards = discount(rewards, disc) #NxH
         scores = policy.score(states, actions) #NxHxM
@@ -147,7 +148,7 @@ def _shallow_gpomdp_estimator(batch, disc, policy, baselinekind='peters', result
         
 def _shallow_reinforce_estimator(batch, disc, policy, baselinekind='peters', result='mean'):
     with torch.no_grad():        
-        states, actions, rewards, mask = unpack(batch) #NxHxm, NxHxd, NxH, NxH
+        states, actions, rewards, mask, _ = unpack(batch) #NxHxm, NxHxd, NxH, NxH
         
         scores = policy.score(states, actions) #NxHxm
         scores = tensormat(scores, mask) #NxHxm
@@ -170,7 +171,37 @@ def _shallow_reinforce_estimator(batch, disc, policy, baselinekind='peters', res
             return _samples #Nxm
         else:
             return torch.mean(_samples, 0) #m
-            
+
+def _incr_shallow_gpomdp_estimator(traj, disc, policy, baselinekind='peters', result='mean', cum_1 = 0., cum_2 = 0., cum_3 = 0., tot_trajs = 1):
+    with torch.no_grad():
+        states, actions, rewards, mask, _ = traj #Hxm, Hxd, H, H
+    
+        disc_rewards = discount(rewards, disc) #H
+        scores = policy.score(states, actions).squeeze() #Hxm
+        G = torch.cumsum(scores * mask.unsqueeze(1), 0) #Hxm
+        if baselinekind == 'avg':
+            baseline = incr_mean(cum_2, disc_rewards, tot_trajs) #H
+            res_2 = baseline
+            res_3 = 0.
+            values = (disc_rewards - baseline).unsqueeze(1)
+        elif baselinekind == 'peters':
+            num = incr_mean(cum_2, G**2 * disc_rewards.unsqueeze(1), tot_trajs) #Hxm
+            den = incr_mean(cum_3, G**2, tot_trajs) #Hxm
+            baseline = num / den #Hxm
+            res_2 = num
+            res_3 = den
+            baseline[baseline!=baseline] = 0
+            values = disc_rewards.unsqueeze(1) - baseline
+        else:
+            values = disc_rewards.unsqueeze(1)
+            res_2 = 0.
+            res_3 = 0.
+        
+        _sample = torch.sum(G * values * mask.unsqueeze(1), 0)
+        if result == 'samples':
+            return _sample, res_2, res_3
+        else:
+            return incr_mean(cum_1, _sample, tot_trajs), res_2, res_3
         
 """Testing"""
 if __name__ == '__main__':
@@ -192,10 +223,23 @@ if __name__ == '__main__':
     o = gpomdp_estimator(batch, disc, pol, baselinekind='peters', 
                          shallow=True)
     print('Shallow GPOMDP (peters):', o)
-    o = gpomdp_estimator(batch, disc, pol, baselinekind='peters')
-    print('GPOMDP (peters)', o)
+    #o = gpomdp_estimator(batch, disc, pol, baselinekind='peters')
+    #print('GPOMDP (peters)', o)
+    #print()
+    
+    print('Cum version')
+    cum_1 = cum_2 = cum_3 = 0.
+    i = 0
+    for t in batch:
+        i+=1
+        cum_1, cum_2, cum3 = _incr_shallow_gpomdp_estimator(t, disc, pol, 'peters', 'mean', cum_1, cum_2, cum_3, i)
+        #print(cum_1, cum_2, cum_3)
+    o = cum_1
+    print(o)
     print()
     
+    """
+  
     o = gpomdp_estimator(batch, disc, pol, baselinekind='avg', 
                          shallow=True)
     print('Shallow GPOMDP (avg):', o)
@@ -229,4 +273,5 @@ if __name__ == '__main__':
     print('Shallow REINFORCE (zero):', o)
     o = reinforce_estimator(batch, disc, pol, baselinekind='zero')
     print('REINFORCE (zero):', o)
+    #"""
     

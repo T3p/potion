@@ -7,9 +7,7 @@ from gym.utils import seeding
 import numpy as np
 
 """
-Linear quadratic gaussian regulator task...with a cliff!
-The agent starts in the left half and there is a cliff (very negative reward)
-in the right half
+Linear quadratic gaussian regulator task.
 
 References
 ----------
@@ -23,7 +21,7 @@ References
 
 """
 
-class Cliff(gym.Env):
+class LQGX(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 30
@@ -31,17 +29,17 @@ class Cliff(gym.Env):
 
     def __init__(self, discrete_reward=False):
         self.horizon = 20
-        self.gamma = 0.99
+        self.gamma = 0.9
         self.sigma_controller = 1.
         self.discrete_reward = discrete_reward
-        self.max_pos = 4.0
-        self.max_action = 4.0
-        self.sigma_noise = 0
+        self.max_pos = 4.
+        self.max_action = 1.
+        self.sigma_noise = 0.
         self.A = np.array([1]).reshape((1, 1))
         self.B = np.array([1]).reshape((1, 1))
         self.Q = np.array([0.9]).reshape((1, 1))
-        self.R = np.array([0.9]).reshape((1, 1))
-
+        self.R = np.array([0.]).reshape((1, 1))
+        
         # gym attributes
         self.viewer = None
         high = np.array([self.max_pos])
@@ -50,7 +48,7 @@ class Cliff(gym.Env):
                                        shape=(1,))
         self.observation_space = spaces.Box(low=-high, high=high)
 
-        self.initial_states = np.array([[1, 2, 5, 7, 10]]).T
+        self.initial_states = np.array([0.9*self.max_pos, -0.9*self.max_pos]).T
 
         # initialize state
         self.seed()
@@ -70,22 +68,13 @@ class Cliff(gym.Env):
         self.state = np.array(xn.ravel())
         if self.discrete_reward:
             if abs(self.state[0]) <= 2 and abs(u) <= 2:
-                return self.get_state(), 0, False, {}
-            return self.get_state(), -1, False, {}
-        
-        reward = -np.asscalar(cost)
-        
-        #Cliff: get very negative reward and die
-        if (self.get_state() > -self.max_pos / 8).any():
-            reward -= 10 * self.horizon
-            done = True
-        
-        return self.get_state(), reward, done, {}
+                return self.get_state(), 0, done, {}
+            return self.get_state(), -1, done, {}
+        return self.get_state(), -np.asscalar(cost), done, {}
 
     def reset(self, state=None):
         if state is None:
-            self.state = np.array([self.np_random.uniform(low=-self.max_pos,
-                                                          high=-self.max_pos/2)])
+            self.state = np.array(np.random.choice(self.initial_states))
         else:
             self.state = np.array(state)
 
@@ -98,7 +87,7 @@ class Cliff(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def _render(self, mode='human', close=False):
+    def render(self, mode='human', close=False):
         if close:
             if self.viewer is not None:
                 self.viewer.close()
@@ -106,11 +95,11 @@ class Cliff(gym.Env):
             return
 
         screen_width = 600
-        screen_height = 400
+        screen_height = 600
 
-        world_width = (self.max_pos * 2) * 2
+        world_width = (self.max_pos * 2)
         scale = screen_width / world_width
-        bally = 100
+        bally = screen_height / 2
         ballradius = 3
 
         if self.viewer is None:
@@ -317,7 +306,7 @@ class Cliff(gym.Env):
 
 if __name__ == '__main__':
 
-    env = Cliff()
+    env = LQG1D()
     theta_star = env.computeOptimalK()
     print('theta^* = ', theta_star)
     print('J^* = ', env.computeJ(theta_star,env.sigma_controller))

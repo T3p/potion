@@ -12,7 +12,7 @@ from joblib import Parallel, delayed
 from potion.common.misc_utils import seed_all_agent
 
 def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes=float('inf'),
-                                 action_filter=None, render=False, deterministic=False):
+                                 action_filter=None, render=False, deterministic=False, key=None):
     n = 0
     while n < max_episodes:
         # Episode
@@ -22,6 +22,7 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
                               dtype=torch.float)
         rewards = torch.zeros(horizon, dtype=torch.float)
         mask = torch.zeros(horizon, dtype=torch.float)
+        infos = torch.zeros(horizon, dtype=torch.float)
         s = env.reset()
         done = False
         t = 0
@@ -32,22 +33,26 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             a = torch.tensor(a, dtype=torch.float).view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-            next_s, r, done, _ = env.step(a)
+            next_s, r, done, info = env.step(a)
             if render:
-                env.render()
-            
+                try:
+                    env.render()
+                except:
+                    pass
             states[t] = s
             actions[t] = a
             rewards[t] = r
+            if key is not None and key in info:
+                infos[t] = info[key]
             mask[t] = 1
             
             s = next_s
             t += 1
-            
-        yield states, actions, rewards, mask
+        
+        yield states, actions, rewards, mask, infos
         n += 1
 
-def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=None, seed=None, deterministic=False):
+def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=None, seed=None, deterministic=False, key=None):
         env.seed(seed)
         seed_all_agent(seed)
         states = torch.zeros((horizon, sum(env.observation_space.shape)),
@@ -56,6 +61,7 @@ def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=
                               dtype=torch.float)
         rewards = torch.zeros(horizon, dtype=torch.float)
         mask = torch.zeros(horizon, dtype=torch.float)
+        infos = torch.zeros(horizon, dtype=torch.float)
         s = env.reset()
         done = False
         t = 0
@@ -66,24 +72,26 @@ def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=
             a = torch.tensor(a, dtype=torch.float).view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-            next_s, r, done, _ = env.step(a)
+            next_s, r, done, info = env.step(a)
             
             states[t] = s
             actions[t] = a
             rewards[t] = r
             mask[t] = 1
+            if key is not None and key in info:
+                infos[t] = info[key]
             
             s = next_s
             t += 1
-        return states, actions, rewards, mask
+        return states, actions, rewards, mask, infos
 
-def generate_batch(env, policy, horizon, episodes, action_filter=None, parallel=False, render=False, n_jobs=4, seed=None, deterministic=False):
+def generate_batch(env, policy, horizon, episodes, action_filter=None, render=False, n_jobs=False, seed=None, deterministic=False, key=None):
     """Batch: list of (features, actions, rewards, mask) tuples"""
-    if not parallel:
-        gen = sequential_episode_generator(env, policy, horizon, episodes, action_filter, render, deterministic)
+    if not n_jobs:
+        gen = sequential_episode_generator(env, policy, horizon, episodes, action_filter, render, deterministic, key)
         batch = [ep for ep in gen]
     else:
-        batch = Parallel(n_jobs=n_jobs)(delayed(parallel_episode_generator)(env, policy, horizon, action_filter, seed=seed*1000+i, deterministic=deterministic) for i in range(episodes))
+        batch = Parallel(n_jobs=n_jobs)(delayed(parallel_episode_generator)(env, policy, horizon, action_filter, seed=seed*1000+i, deterministic=deterministic, key=key) for i in range(episodes))
     return batch
 
 """Testing"""

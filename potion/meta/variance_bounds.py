@@ -17,5 +17,5 @@ def gpomdp_var_bound(max_rew, disc, smooth_const, horizon=None):
         return var_bound
     else:
         return var_bound * (1 - disc**horizon) * (
-                1 - disc**horizon * (1 - disc**horizon) * horizon 
+                1 - disc**horizon * (1 - disc) * horizon 
                 - disc**horizon)

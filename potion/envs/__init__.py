@@ -15,21 +15,42 @@ register(
 )
 
 register(
-    id='ShortCartPole-v0',
-    entry_point='potion.envs.short_cartpole:ShortCartPole'
-)
-
-register(
     id='LQG1D-v0',
     entry_point='potion.envs.lqg1d:LQG1D'
 )
 
 register(
-    id='Cliff-v0',
-    entry_point='potion.envs.cliff:Cliff'
+    id='LQGX-v0',
+    entry_point='potion.envs.lqgx:LQGX'
+)
+
+
+register(
+    id='Hole-v0',
+    entry_point='potion.envs.hole:Hole'
 )
 
 register(
-    id='ContAcrobot-v0',
-    entry_point='potion.envs.acrobot:ContAcrobot'
+    id='LQG2D-v0',
+    entry_point='potion.envs.lqg2d:LQG2D'
+)
+
+register(
+    id='Pit-v0',
+    entry_point='potion.envs.pit:Pit'
+)
+
+register(
+    id='Wall-v0',
+    entry_point='potion.envs.wall:Wall'
+)
+
+register(
+    id='Mass-v0',
+    entry_point='potion.envs.mass:Mass'
+)
+
+register(
+    id='Robot-v0',
+    entry_point='potion.envs.robot:Robot'
 )

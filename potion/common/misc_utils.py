@@ -35,14 +35,18 @@ def discount(rewards, disc):
         
 def returns(batch, gamma):
     return [torch.sum(discount(rewards,gamma)).item() 
-                                    for (_, _, rewards, _) in batch]
+                                    for (_, _, rewards, _, _) in batch]
+
+def mean_sum_info(batch):
+    return torch.mean(torch.tensor([torch.sum(inf).item() 
+                for (_, _, _, _, inf) in batch]))
 
 def performance(batch, disc):
     return torch.mean(torch.tensor(returns(batch, disc))).item()
 
 def avg_horizon(batch):
     return torch.mean(torch.tensor([torch.sum(mask)
-                       for (_, _, _, mask) in batch], dtype=torch.float)).item()
+                       for (_, _, _, mask, _) in batch], dtype=torch.float)).item()
         
 def maybe_make_dir(directory):
     if not os.path.exists(directory):

@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.autograd as autograd
 import potion.common.torch_utils as tu
 from potion.common.mappings import LinearMapping
-from torch.distributions import Normal
+from torch.distributions import Normal, uniform
 
 class ContinuousPolicy(tu.FlatModule):
     """Alias"""
@@ -64,7 +64,7 @@ class ShallowGaussianPolicy(ContinuousPolicy):
             x = s
         logp = -((a - self.mu(x)) ** 2) / (2 * sigma ** 2) - \
             log_sigma  - .5 * math.log(2 * math.pi)
-        return logp.squeeze()
+        return torch.sum(logp, 2)
     
     def forward(self, s, a):
         return torch.exp(self.log_pdf(s, a))
@@ -113,7 +113,9 @@ class ShallowGaussianPolicy(ContinuousPolicy):
             x = self.feature_fun(s)
         else:
             x = s
-        return x * (a - self.mu(x)) / sigma ** 2
+        score = torch.einsum('ijk,ijh->ijkh', (x, (a - self.mu(x)) / sigma ** 2))
+        score = score.reshape((score.shape[0], score.shape[1], score.shape[2]*score.shape[3]))
+        return score
     
     def scale_score(self, s, a):
         sigma = torch.exp(self.logstd)
@@ -124,6 +126,8 @@ class ShallowGaussianPolicy(ContinuousPolicy):
         return (((a - self.mu(x)) / sigma) ** 2 - 1)
     
     def score(self, s, a):
+        s = tu.complete_out(s, 3)
+        a = tu.complete_out(a, 3)
         if self.learn_std:
             return torch.cat((self.scale_score(s, a),
                            self.loc_score(s, a)), 
@@ -140,6 +144,27 @@ class ShallowGaussianPolicy(ContinuousPolicy):
                 'LogstdInit': self.logstd_init,
                 'FeatureFun': self.feature_fun,
                 'SquashFun': self.squash_fun}
+        
+        
+class UniformPolicy(ContinuousPolicy):
+    def __init__(self, n_actions, min_action=None, max_action=None):
+        self.n_actions = n_actions
+        min_action = torch.Tensor(min_action) if min_action is not None else -torch.ones(n_actions)
+        max_action = torch.Tensor(max_action) if max_action is not None else torch.ones(n_actions)
+        assert min_action.shape == max_action.shape and max_action.shape == torch.Size([n_actions])
+        self.distr = uniform.Uniform(min_action, max_action)
+            
+    def log_pdf(self, s, a):
+        return torch.sum(self.distr.log_prob(a))
+    
+    def forward(self, s, a):
+        return torch.exp(self.log_pdf(s, a))
+    
+    def act(self, s=None, deterministic=False):
+        if not deterministic:
+            return self.distr.sample()
+        else:
+            return self.distr.mean
 
 
 """
@@ -165,4 +190,10 @@ if __name__ == '__main__':
         print(p.act(s))
         print(p.get_flat())
         print(p.log_pdf(s,a))
+        print()
+        ####
+        q = UniformPolicy(2, [-1., 0.], [2., 4.])
+        print(q.act(0))
+        print(q.act(0, True))
+        print(q.forward(0, torch.Tensor([-.4, 2.5])))
         print()

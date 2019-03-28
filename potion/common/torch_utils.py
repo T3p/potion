@@ -37,7 +37,7 @@ def set_from_flat(params, values):
         k = 0
         for p in params:
             shape = tuple(list(p.shape))
-            offset = sum(shape)
+            offset = torch.prod(torch.tensor(shape)).item()
             val = values[k : k + offset]
             val = val.view(shape)
             with torch.no_grad():
@@ -95,7 +95,11 @@ def tensormat(a, b):
     a*b: NxHxm 
     """
     return torch.einsum('ijk,ij->ijk', (a,b))
-    
+
+def complete_out(x, dim):
+    while x.dim() < dim:
+        x = x.unsqueeze(0)
+    return x
 
 """Testing"""
 if __name__ == '__main__':

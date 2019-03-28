@@ -21,7 +21,7 @@ References
 
 """
 
-class LQG1D(gym.Env):
+class Hole(gym.Env):
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 30
@@ -32,13 +32,17 @@ class LQG1D(gym.Env):
         self.gamma = 0.9
         self.sigma_controller = 1.
         self.discrete_reward = discrete_reward
-        self.max_pos = 4.0
-        self.max_action = 4.0
-        self.sigma_noise = 0
+        self.max_pos = 4.
+        self.max_action = 1.
+        self.sigma_noise = 0.
         self.A = np.array([1]).reshape((1, 1))
         self.B = np.array([1]).reshape((1, 1))
         self.Q = np.array([0.9]).reshape((1, 1))
-        self.R = np.array([0.9]).reshape((1, 1))
+        self.R = np.array([0.]).reshape((1, 1))
+        
+        #Hole
+        self.holer = 0.1 * self.max_pos
+        self.holep = 1000
 
         # gym attributes
         self.viewer = None
@@ -48,13 +52,14 @@ class LQG1D(gym.Env):
                                        shape=(1,))
         self.observation_space = spaces.Box(low=-high, high=high)
 
-        self.initial_states = np.array([[1, 2, 5, 7, 10]]).T
+        self.initial_states = np.array([0.9*self.max_pos, -0.9*self.max_pos]).T
 
         # initialize state
         self.seed()
         self.reset()
 
     def step(self, action, render=False):
+        done = False
         u = np.clip(action, -self.max_action, self.max_action)
         noise = 0
         if self.sigma_noise > 0:
@@ -64,17 +69,23 @@ class LQG1D(gym.Env):
                       np.dot(self.Q, self.state)) + \
             np.dot(u, np.dot(self.R, u))
 
+        if np.linalg.norm(self.state) < self.holer:
+            cost+=self.holep
+            done = True
+            info = {'danger' : 1.}
+        else:
+            info = {'danger' : 0.}
+
         self.state = np.array(xn.ravel())
         if self.discrete_reward:
             if abs(self.state[0]) <= 2 and abs(u) <= 2:
-                return self.get_state(), 0, False, {}
-            return self.get_state(), -1, False, {}
-        return self.get_state(), -np.asscalar(cost), False, {}
+                return self.get_state(), 0, done, info
+            return self.get_state(), -1, done, info
+        return self.get_state(), -np.asscalar(cost), done, info
 
     def reset(self, state=None):
         if state is None:
-            self.state = np.array([self.np_random.uniform(low=-self.max_pos,
-                                                          high=self.max_pos)])
+            self.state = np.array(np.random.choice(self.initial_states))
         else:
             self.state = np.array(state)
 
@@ -95,11 +106,11 @@ class LQG1D(gym.Env):
             return
 
         screen_width = 600
-        screen_height = 400
+        screen_height = 600
 
-        world_width = (self.max_pos * 2) * 2
+        world_width = (self.max_pos * 2)
         scale = screen_width / world_width
-        bally = 100
+        bally = screen_height / 2
         ballradius = 3
 
         if self.viewer is None:
@@ -119,6 +130,9 @@ class LQG1D(gym.Env):
                                        (screen_width / 2, screen_height))
             zero_line.set_color(0.5, 0.5, 0.5)
             self.viewer.add_geom(zero_line)
+            hole = rendering.make_circle(self.holer * scale)
+            hole.add_attr(rendering.Transform(translation=(screen_width/2, screen_height/2)))
+            self.viewer.add_geom(hole)
 
         x = self.state[0]
         ballx = x * scale + screen_width / 2.0
