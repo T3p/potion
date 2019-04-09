@@ -17,6 +17,8 @@ def clip(env):
     return lambda a : action_filter(a)
 
 def seed_all_agent(seed):
+    if seed is None:
+        return
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)

@@ -8,7 +8,7 @@ Created on Fri Mar 22 14:55:39 2019
 import torch
 from potion.common.misc_utils import unpack
 
-def importance_weights(batch, policy, target_params, normalize=False):
+def importance_weights(batch, policy, target_params, normalize=False, clip=None):
     #Samples
     states, actions, _, mask, _ = unpack(batch) #NxHx*
     
@@ -26,9 +26,12 @@ def importance_weights(batch, policy, target_params, normalize=False):
     #Importance weights
     iws = torch.exp(torch.sum((target - proposal) * mask, 1)) #N
     
+    if clip is not None:
+        iws = torch.clamp(iws, 0, clip)
+    
     #Self-normalization
     if normalize:
-        iws /= torch.mean(iws)
+        iws /= torch.sum(iws)
     
     return iws
 

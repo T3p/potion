@@ -13,7 +13,7 @@ References
 ----------
 """
 
-class Hole(gym.Env):
+class lqr1d(gym.Env):
 
     def __init__(self, discrete_reward=False):
         self.max_pos = 4.
@@ -22,9 +22,6 @@ class Hole(gym.Env):
         self.B = 1.
         self.Q = 0.9
         self.R = 0.1
-        
-        self.holer = 0.1 * self.max_pos
-        self.holep = 50
         
         # gym attributes
         self.viewer = None
@@ -43,19 +40,12 @@ class Hole(gym.Env):
         self.reset()
 
     def step(self, action, render=False):
-        done = False
-        info = {'danger': 0}
         u = np.clip(action, -self.max_action, self.max_action)
         x_1 = np.clip(self.A * self.state + self.B * u, -self.max_pos, self.max_pos)
         cost = self.state ** 2 * self.Q + u ** 2 * self.R
-        
-        if abs(self.state) < self.holer:
-            cost = np.array(self.holep)
-            done = True
-            info = {'danger': 1}
-        
+
         self.state = x_1
-        return self.state, -np.asscalar(cost), done, info
+        return self.state, -np.asscalar(cost), False, {}
 
     def reset(self, state=None):
         if state is None:

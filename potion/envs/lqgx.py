@@ -38,7 +38,7 @@ class LQGX(gym.Env):
         self.A = np.array([1]).reshape((1, 1))
         self.B = np.array([1]).reshape((1, 1))
         self.Q = np.array([0.9]).reshape((1, 1))
-        self.R = np.array([0.]).reshape((1, 1))
+        self.R = np.array([0.1]).reshape((1, 1))
         
         # gym attributes
         self.viewer = None

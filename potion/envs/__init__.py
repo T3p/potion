@@ -20,6 +20,12 @@ register(
 )
 
 register(
+    id='lqr1d-v0',
+    entry_point='potion.envs.lqr1d:lqr1d'
+)
+
+
+register(
     id='LQGX-v0',
     entry_point='potion.envs.lqgx:LQGX'
 )
