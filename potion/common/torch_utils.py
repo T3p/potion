@@ -101,6 +101,11 @@ def complete_out(x, dim):
         x = x.unsqueeze(0)
     return x
 
+def complete_in(x, dim):
+    while x.dim() < dim:
+        x = x.unsqueeze(-1)
+    return x
+
 """Testing"""
 if __name__ == '__main__':
     from potion.common.mappings import LinearMapping

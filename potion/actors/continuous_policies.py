@@ -148,6 +148,7 @@ class ShallowGaussianPolicy(ContinuousPolicy):
         
 class UniformPolicy(ContinuousPolicy):
     def __init__(self, n_actions, min_action=None, max_action=None):
+        super(UniformPolicy, self).__init__()
         self.n_actions = n_actions
         min_action = torch.Tensor(min_action) if min_action is not None else -torch.ones(n_actions)
         max_action = torch.Tensor(max_action) if max_action is not None else torch.ones(n_actions)
