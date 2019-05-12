@@ -24,6 +24,7 @@ def importance_weights(batch, policy, target_params, normalize=False, clip=None)
     policy.set_from_flat(params)
     
     #Importance weights
+    mask = mask.view(target.shape)
     iws = torch.exp(torch.sum((target - proposal) * mask, 1)) #N
     
     if clip is not None:

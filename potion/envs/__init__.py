@@ -15,6 +15,24 @@ register(
 )
 
 register(
+    id='GridWorld-v0',
+    entry_point='potion.envs.gridworld:GridWorld'
+)
+
+register(
+    id='TwoGoals-v0',
+    entry_point='potion.envs.twogoals:TwoGoals'
+)
+
+
+register(
+    id='PitWorld-v0',
+    entry_point='potion.envs.pitworld:PitWorld'
+)
+
+
+
+register(
     id='LQG1D-v0',
     entry_point='potion.envs.lqg1d:LQG1D'
 )

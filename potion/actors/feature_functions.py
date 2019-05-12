@@ -9,16 +9,10 @@ Created on Tue Apr  9 16:08:26 2019
 import torch
 import potion.common.torch_utils as tu
 
-def clip_fun(min_a, max_a):
-    def clip(a):
-        return torch.clamp(a, min_a, max_a)
-    
-    return clip
-
 def one_hot_fun(n_s, n_a):
     def one_hot(s, a):
-        s = torch.clamp(torch.tensor(s), 0, n_s - 1)
-        a = torch.clamp(torch.tensor(a), 0, n_a - 1)
+        s = torch.clamp(torch.tensor(s, dtype=torch.int64), 0, n_s - 1)
+        a = torch.clamp(torch.tensor(a, dtype=torch.int64), 0, n_a - 1)
         assert s.shape == a.shape
         feat = torch.zeros(s.shape + (n_s * n_a,))
         indexes = (s * n_a + a)

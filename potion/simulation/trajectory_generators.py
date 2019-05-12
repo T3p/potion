@@ -13,12 +13,18 @@ from potion.common.misc_utils import seed_all_agent
 
 def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes=float('inf'),
                                  action_filter=None, render=False, deterministic=False, key=None):
+    
+    ds = sum(env.observation_space.shape)
+    ds = max(ds, 1)
+    da = sum(env.action_space.shape)
+    da = max(da, 1)
+    
     n = 0
     while n < max_episodes:
         # Episode
-        states = torch.zeros((horizon, sum(env.observation_space.shape)),
+        states = torch.zeros((horizon, ds),
                              dtype=torch.float)
-        actions = torch.zeros((horizon, sum(env.action_space.shape)),
+        actions = torch.zeros((horizon, da),
                               dtype=torch.float)
         rewards = torch.zeros(horizon, dtype=torch.float)
         mask = torch.zeros(horizon, dtype=torch.float)
@@ -26,6 +32,11 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
         s = env.reset()
         done = False
         t = 0
+        if render:
+            try:    
+                env.render()
+            except:
+                pass
         while not done and t < horizon:
             s = np.array(s, dtype=np.float)
             s = torch.tensor(s, dtype=torch.float).view(-1)
@@ -53,11 +64,16 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
         n += 1
 
 def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=None, seed=None, deterministic=False, key=None):
+        ds = sum(env.observation_space.shape)
+        ds = max(ds, 1)
+        da = sum(env.action_space.shape)
+        da = max(da, 1)    
+    
         env.seed(seed)
         seed_all_agent(seed)
-        states = torch.zeros((horizon, sum(env.observation_space.shape)),
+        states = torch.zeros((horizon, ds),
                              dtype=torch.float)
-        actions = torch.zeros((horizon, sum(env.action_space.shape)),
+        actions = torch.zeros((horizon, da),
                               dtype=torch.float)
         rewards = torch.zeros(horizon, dtype=torch.float)
         mask = torch.zeros(horizon, dtype=torch.float)

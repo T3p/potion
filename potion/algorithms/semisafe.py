@@ -14,10 +14,12 @@ import torch
 from potion.estimation.eigenvalues import power
 import time
 import scipy.stats as sts
+from scipy.sparse.linalg import eigsh
+import math
 
 def semisafepg(env, policy, horizon, *,
                     conf = 0.05,
-                    min_batchsize = 10,
+                    min_batchsize = 32,
                     max_batchsize = 10000,
                     iterations = float('inf'),
                     max_samples = 2e6,
@@ -185,26 +187,38 @@ def semisafepg(env, policy, horizon, *,
             grad = torch.mean(grad_samples, 0)
             
             #Compute estimation error 
-            grad_var = torch.sum(torch.var(grad_samples, 0, unbiased=True))
-            quant = 2 * sts.t.interval(1 - conf, batchsize-1,loc=0.,scale=1.)[1]
-            eps = quant * torch.sqrt(grad_var).item()
+            centered = grad_samples - grad.unsqueeze(0)
+            grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
+            grad_var = torch.sum(torch.diag(grad_cov)).item()
+            max_eigv = eigsh(grad_cov.numpy(), 1)[0][0]
+            dfn = grad.shape[0]
+            quant = sts.f.ppf(1 - conf, dfn, batchsize - dfn)
+            eps = math.sqrt(max_eigv * dfn * quant / (batchsize - dfn))
+            
             if it > 0:
                 eps = (1 - forget) * old_eps + forget * eps
             
             #Optimal batch size
             opt_batchsize = torch.ceil(4 * eps**2 / 
-                                   (torch.norm(grad)**2)).item()
+                                   (torch.norm(grad)**2))
+            if opt_batchsize != opt_batchsize:
+                continue
+        
+            if batchsize >= max_batchsize or opt_batchsize == float('inf'):
+                low_samples = True
+                break
+            
+            if verbose and (batchsize - min_batchsize) % 1 == 0:
+                print('%d / %d trajectories' % (batchsize, opt_batchsize.item()))
+            
             if batchsize >= opt_batchsize:
                 low_samples = False
-                break
-            elif batchsize >= max_batchsize:
-                low_samples = True
                 break
         tot_samples += batchsize
         old_eps = eps
         
         #Log
-        log_row['SampleVar'] = grad_var.item()
+        log_row['SampleVar'] = grad_var
         log_row['ErrBound'] = eps
         log_row['Perf'] = performance(batch, disc)
         log_row['Info'] = mean_sum_info(batch).item()
