@@ -60,7 +60,7 @@ def mepg(env, policy,
     logger.write_info({**algo_info, **policy.info()})
     log_keys = ['Perf', 'UPerf', 'AvgHorizon', 
                 'StepSize', 'MetaStepSize', 'BatchSize', 'Exploration', 
-                'OmegaGrad', 'OmegaMetagrad', 'upsilonGradNorm']
+                'OmegaGrad', 'OmegaMetagrad', 'UpsilonGradNorm']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if test_batchsize:
@@ -93,8 +93,7 @@ def mepg(env, policy,
         #Set metaparameters
         omega = policy.get_scale_params()
         sigma = torch.exp(omega)
-        stepsize = alpha * sigma**2
-
+        
         #Collect trajectories
         batch = generate_batch(env, policy, horizon, batchsize, 
                                action_filter=action_filter, 
@@ -102,17 +101,19 @@ def mepg(env, policy,
                                n_jobs=parallel)
         
         #Estimate policy gradient
-        grad = gpomdp_estimator(batch, disc, policy, 
+        grad_samples = gpomdp_estimator(batch, disc, policy, 
                                     baselinekind='peters', 
-                                    shallow=True)
+                                    shallow=True,
+                                    result='samples')
+        grad = torch.mean(grad_samples, 0)
         upsilon_grad = grad[1:]
         omega_grad = grad[0]
         
         omega_metagrad = metagrad(batch, disc, policy, alpha, clip_at, 
-                                  grad=grad)
+                                  grad_samples=grad_samples)
         
         upsilon = policy.get_loc_params()
-        new_upsilon = upsilon + stepsize * upsilon_grad
+        new_upsilon = upsilon + alpha * sigma**2 * upsilon_grad
         policy.set_loc_params(new_upsilon)
         
         new_omega = omega + eta * omega_metagrad
@@ -120,7 +121,7 @@ def mepg(env, policy,
 
         # Log
         log_row['Exploration'] = policy.exploration()
-        log_row['StepSize'] = stepsize.item()
+        log_row['StepSize'] = (alpha * sigma**2).item()
         log_row['MetaStepSize'] = eta
         log_row['OmegaGrad'] = omega_grad.item()
         log_row['OmegaMetagrad'] = omega_metagrad.item()

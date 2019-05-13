@@ -123,7 +123,7 @@ class ShallowGaussianPolicy(ContinuousPolicy):
             x = self.feature_fun(s)
         else:
             x = s
-        return (((a - self.mu(x)) / sigma) ** 2 - 1)
+        return ((a - self.mu(x)) / sigma) ** 2 - 1
     
     def score(self, s, a):
         s = tu.complete_out(s, 3)
