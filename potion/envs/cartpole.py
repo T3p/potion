@@ -7,7 +7,7 @@ permalink: https://perma.cc/C9ZM-652R
 import logging
 import math
 import gym
-from gym import spaces
+import gym.spaces as spaces
 from gym.utils import seeding
 import numpy as np
 
@@ -40,8 +40,8 @@ class ContCartPole(gym.Env):
             self.theta_threshold_radians * 2,
             np.finfo(np.float32).max])
 
-        self.action_space = spaces.Box(low=-self.force_mag,high=self.force_mag,shape=(1,))
-        self.observation_space = spaces.Box(-high, high)
+        self.action_space = spaces.Box(low=-self.force_mag,high=self.force_mag,shape=(1,), dtype=np.float32)
+        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
 
         self.seed()
         self.viewer = None

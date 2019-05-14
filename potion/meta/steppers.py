@@ -18,6 +18,9 @@ class ConstantStepper:
     def reset(self):
         pass
     
+    def __str__(self):
+        return str(self.alpha)
+    
 class AlphaEta:
     def __init__(self, alpha, eta):
         self.alpha = alpha
@@ -26,6 +29,9 @@ class AlphaEta:
         step = torch.ones_like(grad) * self.alpha
         step[0] = self.eta
         return step
+    
+    def __str__(self):
+        return 'alpha = %f, eta = %f' % (str(self.alpha), str(self.eta))
 
 class SqrtDecay:
     def __init__(self, alpha):
@@ -38,6 +44,9 @@ class SqrtDecay:
     
     def reset(self):
         self.t = 1
+    
+    def __str__(self):
+        return str(self.alpha) + ' / sqrt(t)'
 
 class RMSprop:
     def __init__(self, alpha=1e-3, beta=0.9, epsilon=1e-8):
@@ -52,3 +61,7 @@ class RMSprop:
     
     def reset(self):
         self.m2 = 0
+
+    def __str__(self):
+        return 'RMSprop (alpha = %f, beta = %f, epsilon = %f)' % (
+                self.alpha, self.beta, self.epsilon)

@@ -8,13 +8,14 @@ Created on Wed Jan 16 14:47:33 2019
 import torch
 import gym
 import potion.envs
-from potion.meta.steppers import ConstantStepper, RMSprop
+from potion.meta.steppers import ConstantStepper, RMSprop, AlphaEta
 from potion.actors.continuous_policies import SimpleGaussianPolicy as Gauss
 from potion.common.logger import Logger
 from potion.algorithms.gpomdp import gpomdp_adaptive
 from potion.common.misc_utils import clip
 import argparse
 import re
+import math
 #from dm_control import suite
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
 
@@ -24,11 +25,11 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 
 parser.add_argument('--name', help='Experiment name', type=str, default='gpomdptest')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
+parser.add_argument('--env', help='Gym environment id', type=str, default='ShortCartPole-v0')
 parser.add_argument('--alpha', help='Step size', type=float, default=1e-1)
 parser.add_argument('--eta', help='Step size', type=float, default=1e-3)
-parser.add_argument('--horizon', help='Task horizon', type=int, default=1000)
-parser.add_argument('--batchsize', help='Batch size', type=int, default=500)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=300)
+parser.add_argument('--batchsize', help='Batch size', type=int, default=10)
 parser.add_argument('--iterations', help='Iterations', type=int, default=200)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
 parser.add_argument('--saveon', help='How often to save parameters', type=int, default=10)
@@ -73,9 +74,10 @@ env.seed(args.seed)
 
 m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
-mu_init = torch.zeros(m)
-#mu_init = torch.tensor([-0.7222,  1.6602,  3.9794,  7.8677])
-logstd_init = torch.log(torch.zeros(1) + args.sigmainit)
+
+#[ 0.7536, -0.4328,  1.9809,  6.3087, 13.0036]
+mu_init = torch.tensor([-0.4328,  1.9809,  6.3087, 13.0036])
+logstd_init = torch.log(torch.zeros(1) + 0.7536)
 policy = Gauss(m, d, mu_init=mu_init, logstd_init=logstd_init, learn_std=args.learnstd)
 
 if args.stepper == 'rmsprop':

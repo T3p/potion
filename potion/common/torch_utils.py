@@ -37,7 +37,7 @@ def set_from_flat(params, values):
         k = 0
         for p in params:
             shape = tuple(list(p.shape))
-            offset = sum(shape)
+            offset = torch.prod(torch.tensor(shape)).item()
             val = values[k : k + offset]
             val = val.view(shape)
             with torch.no_grad():
@@ -74,18 +74,18 @@ class FlatModule(nn.Module):
         
 def flat_gradients(module, loss, coeff=None):
     module.zero_grad()
-    if coeff is None:
-        coeff = torch.ones(loss.numel())
     loss.backward(coeff, retain_graph=True)
     return torch.cat([p.grad.view(-1) for p in module.parameters()])
 
-def jacobian(module, loss):
-    """INEFFICIENT!"""
-    jac = torch.zeros((loss.numel(), module.num_params()))
-    for i in range(loss.numel()):
-        mask = torch.zeros(loss.numel(), dtype=torch.float)
-        mask[i] = 1.
-        jac[i, :] = flat_gradients(module, loss, mask)
+def jacobian(module, loss, coeff=None):
+    """Inefficient! Use jacobian-vector product whenever possible
+    (still useful for nonlinear functions of gradients, such as 
+    in Peter's baseline for REINFORCE)"""
+    mask = torch.eye(loss.numel())
+
+    jac = torch.stack([flat_gradients(module, loss, mask[i,:]) 
+                      for i in range(loss.numel())],
+                      dim = 0)
     return jac
 
 def tensormat(a, b):
@@ -95,8 +95,24 @@ def tensormat(a, b):
     a*b: NxHxm 
     """
     return torch.einsum('ijk,ij->ijk', (a,b))
-    
+
+def complete_out(x, dim):
+    while x.dim() < dim:
+        x = x.unsqueeze(0)
+    return x
+
+def complete_in(x, dim):
+    while x.dim() < dim:
+        x = x.unsqueeze(-1)
+    return x
 
 """Testing"""
 if __name__ == '__main__':
-    pass
+    from potion.common.mappings import LinearMapping
+    F = LinearMapping(2,3)
+    x = torch.ones(2, requires_grad=True)
+    y = F(x)
+    print(y)
+    print(jacobian(F,y))
+    #y.backward(torch.ones(3))
+    #print(x.grad)
