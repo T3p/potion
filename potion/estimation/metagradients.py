@@ -59,7 +59,6 @@ def metagrad(batch, disc, policy, alpha, result='mean', grad_samples=None):
         A = omega_grad #N
         B = 2 * alpha * sigma**2 * grad_norm #N
         C = alpha * sigma**2 * norm_grad #N
-        print(torch.mean(A,0), torch.mean(B,0), torch.mean(C,0))
         samples = A + B + C #N
         if result == 'samples':
             return samples

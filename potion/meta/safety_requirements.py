@@ -11,7 +11,7 @@ class MonotonicImprovement:
         pass
     
     def next(self, *args):
-        return 0
+        return 0.
     
 class Budget:
     def __init__(self, initial_perf, *args):

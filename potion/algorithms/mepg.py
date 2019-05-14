@@ -21,7 +21,6 @@ def mepg(env, policy,
             disc = 0.99,
             alpha = 1e-1,
             eta = 1e-3,
-            clip_at = None,
             test_batchsize = False,
             render = False,
             seed = None,
@@ -109,20 +108,23 @@ def mepg(env, policy,
         upsilon_grad = grad[1:]
         omega_grad = grad[0]
         
-        omega_metagrad = metagrad(batch, disc, policy, alpha, clip_at, 
+        #Estimate meta gradient
+        omega_metagrad = metagrad(batch, disc, policy, alpha,
                                   grad_samples=grad_samples)
         
+        #Update mean parameters
         upsilon = policy.get_loc_params()
         new_upsilon = upsilon + alpha * sigma**2 * upsilon_grad / torch.norm(upsilon_grad)
         policy.set_loc_params(new_upsilon)
         
+        #Update variance parameters
         new_omega = omega + eta * omega_metagrad / torch.norm(omega_metagrad)
         policy.set_scale_params(new_omega)
 
         # Log
         log_row['Exploration'] = sigma.item()
-        log_row['StepSize'] = (alpha * sigma**2).item()
-        log_row['MetaStepSize'] = eta
+        log_row['StepSize'] = (alpha * sigma**2 / torch.norm(upsilon_grad)).item()
+        log_row['MetaStepSize'] = (eta / torch.norm(omega_metagrad)).item()
         log_row['OmegaGrad'] = omega_grad.item()
         log_row['OmegaMetagrad'] = omega_metagrad.item()
         log_row['UpsilonGradNorm'] = torch.norm(upsilon_grad).item()
