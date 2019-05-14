@@ -19,10 +19,11 @@ def mix_estimator(states, actions, disc_rewards, mask, policy, result='mean'):
     actions: NxHx1
     disc_rewards, mask: NxH
     """
+    sigma = torch.exp(policy.get_scale_params())
     upsilon_scores = policy.loc_score(states, actions) #NxHxm
     G = torch.cumsum(upsilon_scores, 1) #NxHxm
-    omega_scores = policy.scale_score(states, actions).squeeze() #NxH
-    H = torch.cumsum(omega_scores, 1) #NxH
+    sigma_scores = policy.scale_score(states, actions).squeeze() / sigma #NxH
+    H = torch.cumsum(sigma_scores, 1) #NxH
     
     baseline = torch.mean(tensormat(G, H * disc_rewards), 0) / torch.mean(tensormat(G, H), 0)
     baseline[baseline != baseline] = 0
@@ -31,13 +32,13 @@ def mix_estimator(states, actions, disc_rewards, mask, policy, result='mean'):
     
     G = tensormat(G, mask)
     terms = tensormat(G * values, H) #NxHxm
-    samples = torch.sum(terms, 1) #Nxm
+    samples = sigma * torch.sum(terms, 1) #Nxm
     if result == 'samples':
         return samples #Nxm
     else:
         return torch.mean(samples, 0) #m
         
-def metagrad(batch, disc, policy, alpha, clip_at=None, result='mean', grad_samples=None):
+def metagrad(batch, disc, policy, alpha, result='mean', grad_samples=None):
     sigma = torch.exp(policy.get_scale_params())
     
     if grad_samples is None:                
@@ -58,8 +59,7 @@ def metagrad(batch, disc, policy, alpha, clip_at=None, result='mean', grad_sampl
         A = omega_grad #N
         B = 2 * alpha * sigma**2 * torch.bmm(upsilon_grad.unsqueeze(1), upsilon_grad.unsqueeze(2)).view(-1) #N
         C = alpha * sigma**2 * norm_grad #N
-        if clip_at is not None:
-            C = torch.clamp(C, min=-clip_at, max=clip_at) #N
+        print(torch.mean(A,0), torch.mean(B,0), torch.mean(C,0))
         samples = A + B + C #N
         if result == 'samples':
             return samples
