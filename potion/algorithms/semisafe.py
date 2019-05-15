@@ -16,6 +16,8 @@ import time
 import scipy.stats as sts
 from scipy.sparse.linalg import eigsh
 import math
+from potion.actors.continuous_policies import ShallowGaussianPolicy
+from potion.meta.smoothing_constants import pirotta_coeff, gauss_lip_const
 
 def semisafepg(env, policy, horizon, *,
                     conf = 0.05,
@@ -277,6 +279,382 @@ def semisafepg(env, policy, horizon, *,
         new_params = params + stepsize * grad
         policy.set_from_flat(new_params)
         
+        #Save parameters
+        if save_params and it % save_params == 0:
+            logger.save_params(params, it)
+        
+        #Next iteration
+        log_row['Time'] = time.time() - start
+        logger.write_row(log_row, it)
+        it += 1
+    
+    #Save final parameters
+    if save_params:
+        logger.save_params(params, it)
+    
+    #Cleanup
+    logger.close()
+
+
+def adastep(env, policy, horizon, *,
+                conf = 0.2,
+                iterations = float('inf'),
+                max_samples = 1e7,
+                disc = 0.99,
+                max_feat = 1.,
+                max_rew = 1.,
+                action_vol = 1.,
+                batchsize = 500,
+                action_filter = None,
+                estimator = 'gpomdp',
+                baseline = 'peters',
+                logger = Logger(name='ADASTEP'),
+                shallow = True,
+                seed = None,
+                test_batchsize = False,
+                info_key = 'danger',
+                save_params = 100,
+                log_params = True,
+                log_grad = False,
+                parallel = False,
+                render = False,
+                verbose = 1):
+    """
+    AdaStep algorithm (2013)
+    Only for Shallow Gaussian policies with fixed variance
+    """
+    assert type(policy) == ShallowGaussianPolicy
+    assert not policy.learn_std
+    
+    #Defaults
+    if action_filter is None:
+        action_filter = clip(env)
+    
+    #Seed agent
+    if seed is not None:
+        seed_all_agent(seed)
+        
+    #Compute penalty coefficient
+    std_param = policy.get_scale_params()
+    std = torch.exp(std_param).item()
+    penalty_coeff = pirotta_coeff(max_feat, max_rew, disc, std, action_vol)
+    
+    #Prepare logger
+    algo_info = {'Algorithm': 'SafeStep',
+                   'Estimator': estimator,
+                   'Baseline': baseline,
+                   'Env': str(env), 
+                   'Horizon': horizon,
+                   'Disc': disc,
+                   'ConfidenceParam': conf,
+                   'PenaltyCoeff': penalty_coeff,
+                   'BatchSize': batchsize,
+                   'Seed': seed,
+                   }
+    logger.write_info({**algo_info, **policy.info()})
+    log_keys = ['Perf', 
+                'UPerf', 
+                'AvgHorizon', 
+                'StepSize', 
+                'GradNorm', 
+                'Time',
+                'StepSize',
+                'BatchSize',
+                'TotSamples',
+                'Info',
+                'GradVar',
+                'Eps',
+                'Exploration']
+    if log_params:
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
+    if log_grad:
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+    if test_batchsize:
+        log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
+    log_row = dict.fromkeys(log_keys)
+    logger.open(log_row.keys())
+    
+    #Learning loop
+    it = 0
+    tot_samples = 0
+    _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
+    while(it < iterations and tot_samples < max_samples):
+        #Begin iteration
+        start = time.time()
+        if verbose:
+            print('\nIteration ', it)
+        params = policy.get_flat()
+        
+        #Test the corresponding deterministic policy
+        if test_batchsize:
+            test_batch = generate_batch(env, policy, horizon, test_batchsize, 
+                                        action_filter=action_filter,
+                                        seed=seed,
+                                        parallel=parallel,
+                                        deterministic=True,
+                                        key=info_key)
+            log_row['TestPerf'] = performance(test_batch, disc)
+            log_row['UTestPerf'] = performance(test_batch, 1)
+            log_row['TestInfo'] = mean_sum_info(test_batch).item()
+        
+        #Render the agent's behavior
+        if render and it % render==0:
+            generate_batch(env, policy, horizon, 
+                           episodes=1, 
+                           action_filter=action_filter, 
+                           render=True,
+                           key=info_key)
+    
+        #Sample trajectories
+        batch = generate_batch(env, policy, horizon,
+                               episodes=batchsize,
+                               action_filter=action_filter, 
+                               seed=seed, 
+                               n_jobs=parallel,
+                               key=info_key)
+            
+        #Estimate policy gradient
+        grad_samples = _estimator(batch, disc, policy, 
+                                   baselinekind=baseline, 
+                                   shallow=shallow,
+                                   result='samples')
+        
+        grad = torch.mean(grad_samples, 0)
+        
+        #Compute gradient estimation error for mean parameters
+        if conf < 1:
+            grad_var = torch.var(grad_samples, dim=0)
+            quant = sts.t.ppf(1 - conf/(2 * grad.shape[0]), batchsize - 1)
+            eps = quant * torch.sqrt(grad_var / batchsize)
+        else:
+            eps = torch.zeros_like(grad)
+            grad_var = torch.zeros_like(grad)
+        
+        tot_samples += batchsize
+
+        #Log
+        log_row['Eps'] = torch.norm(eps).item()
+        log_row['GradVar'] = torch.sum(grad_var).item()
+        log_row['GradNorm'] = torch.norm(grad).item()
+        log_row['Perf'] = performance(batch, disc)
+        log_row['UPerf'] = performance(batch, disc=1.)
+        log_row['Info'] = mean_sum_info(batch).item()
+        log_row['AvgHorizon'] = avg_horizon(batch)
+        log_row['BatchSize'] = batchsize
+        log_row['TotSamples'] = tot_samples
+        log_row['Exploration'] = policy.exploration().item()
+        if log_params:
+            for i in range(policy.num_params()):
+                log_row['param%d' % i] = params[i].item()
+        if log_grad:
+            for i in range(policy.num_params()):
+                log_row['grad%d' % i] = grad[i].item()
+                    
+        #Step size
+        upper = torch.sum(torch.abs(grad) + eps)**2
+        lower = torch.norm(torch.clamp(torch.abs(grad) - eps, min=0, max=float('inf')))**2
+        stepsize = (1. / (2 * penalty_coeff) * (lower / upper)).item()
+        log_row['StepSize'] = stepsize
+        
+        #Update policy parameters
+        new_params = params + stepsize * grad
+        policy.set_from_flat(new_params)
+                
+        #Save parameters
+        if save_params and it % save_params == 0:
+            logger.save_params(params, it)
+        
+        #Next iteration
+        log_row['Time'] = time.time() - start
+        logger.write_row(log_row, it)
+        it += 1
+    
+    #Save final parameters
+    if save_params:
+        logger.save_params(params, it)
+    
+    #Cleanup
+    logger.close()
+    
+def adastep2(env, policy, horizon, *,
+                conf = 0.2,
+                iterations = float('inf'),
+                max_samples = 1e7,
+                disc = 0.99,
+                max_feat = 1.,
+                max_rew = 1.,
+                batchsize = 500,
+                adapt_batchsize = False,
+                action_filter = None,
+                estimator = 'gpomdp',
+                baseline = 'peters',
+                logger = Logger(name='ADASTEP2'),
+                shallow = True,
+                seed = None,
+                test_batchsize = False,
+                info_key = 'danger',
+                save_params = 100,
+                log_params = True,
+                log_grad = False,
+                parallel = False,
+                render = False,
+                verbose = 1):
+    """
+    AdaStep algorithm (2019)
+    Only for Shallow Gaussian policies with fixed variance
+    """
+    assert type(policy) == ShallowGaussianPolicy
+    assert not policy.learn_std
+    
+    #Defaults
+    if action_filter is None:
+        action_filter = clip(env)
+    
+    #Seed agent
+    if seed is not None:
+        seed_all_agent(seed)
+        
+    #Compute Lipschitz constant
+    std_param = policy.get_scale_params()
+    std = torch.exp(std_param).item()
+    lip_const = gauss_lip_const(max_feat, max_rew, disc, std)
+    
+    #Prepare logger
+    algo_info = {'Algorithm': 'SafeStep',
+                   'Estimator': estimator,
+                   'Baseline': baseline,
+                   'Env': str(env), 
+                   'Horizon': horizon,
+                   'Disc': disc,
+                   'ConfidenceParam': conf,
+                   'LipConst': lip_const,
+                   'BatchSize': batchsize,
+                   'Seed': seed,
+                   }
+    logger.write_info({**algo_info, **policy.info()})
+    log_keys = ['Perf', 
+                'UPerf', 
+                'AvgHorizon', 
+                'StepSize', 
+                'GradNorm', 
+                'Time',
+                'StepSize',
+                'BatchSize',
+                'LipConst',
+                'TotSamples',
+                'Info',
+                'MinBatchSize',
+                'GradVar',
+                'Eps',
+                'Exploration']
+    if log_params:
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
+    if log_grad:
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+    if test_batchsize:
+        log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
+    log_row = dict.fromkeys(log_keys)
+    logger.open(log_row.keys())
+    
+    #Learning loop
+    it = 0
+    tot_samples = 0
+    _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
+    while(it < iterations and tot_samples < max_samples):
+        #Begin iteration
+        start = time.time()
+        if verbose:
+            print('\nIteration ', it)
+        params = policy.get_flat()
+        
+        #Test the corresponding deterministic policy
+        if test_batchsize:
+            test_batch = generate_batch(env, policy, horizon, test_batchsize, 
+                                        action_filter=action_filter,
+                                        seed=seed,
+                                        parallel=parallel,
+                                        deterministic=True,
+                                        key=info_key)
+            log_row['TestPerf'] = performance(test_batch, disc)
+            log_row['UTestPerf'] = performance(test_batch, 1)
+            log_row['TestInfo'] = mean_sum_info(test_batch).item()
+        
+        #Render the agent's behavior
+        if render and it % render==0:
+            generate_batch(env, policy, horizon, 
+                           episodes=1, 
+                           action_filter=action_filter, 
+                           render=True,
+                           key=info_key)
+    
+        #Sample trajectories
+        batch = generate_batch(env, policy, horizon,
+                               episodes=batchsize,
+                               action_filter=action_filter, 
+                               seed=seed, 
+                               n_jobs=parallel,
+                               key=info_key)
+            
+        #Estimate policy gradient
+        grad_samples = _estimator(batch, disc, policy, 
+                                   baselinekind=baseline, 
+                                   shallow=shallow,
+                                   result='samples')
+        
+        grad = torch.mean(grad_samples, 0)
+        
+        #Compute gradient estimation error for mean parameters
+        if conf < 1 and grad_samples.size()[1] > 2:
+            centered = grad_samples - grad.unsqueeze(0)
+            grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
+            grad_var = torch.sum(torch.diag(grad_cov)).item()
+            max_eigv = eigsh(grad_cov.numpy(), 1)[0][0]
+            dfn = grad.shape[0]
+            quant = sts.f.ppf(1 - conf, dfn, batchsize - dfn)
+            eps = math.sqrt(max_eigv * dfn * quant / (batchsize - dfn))
+        elif conf < 1:
+            grad_var = torch.var(grad_samples).item()
+            quant = sts.t.ppf(1 - conf/2, batchsize - 1)
+            eps = quant * math.sqrt(grad_var / batchsize)
+        else:
+            eps = 0.
+            grad_var = 0.
+        
+        min_batchsize = torch.ceil(eps**2/ torch.norm(grad)**2 + 1e-12).item()
+        tot_samples += batchsize
+
+        #Log
+        log_row['MinBatchSize'] = min_batchsize
+        log_row['Eps'] = eps
+        log_row['GradVar'] = grad_var
+        log_row['GradNorm'] = torch.norm(grad).item()
+        log_row['Perf'] = performance(batch, disc)
+        log_row['UPerf'] = performance(batch, disc=1.)
+        log_row['Info'] = mean_sum_info(batch).item()
+        log_row['AvgHorizon'] = avg_horizon(batch)
+        log_row['BatchSize'] = batchsize
+        log_row['LipConst'] = lip_const
+        log_row['TotSamples'] = tot_samples
+        log_row['Exploration'] = policy.exploration().item()
+        if log_params:
+            for i in range(policy.num_params()):
+                log_row['param%d' % i] = params[i].item()
+        if log_grad:
+            for i in range(policy.num_params()):
+                log_row['grad%d' % i] = grad[i].item()
+                    
+        #Step size
+        stepsize = 1. / lip_const * (1 - eps / (math.sqrt(batchsize) * torch.norm(grad).item()))
+        log_row['StepSize'] = stepsize
+        
+        #Batch size
+        if adapt_batchsize and conf < 1:
+            batchsize = max(batchsize, min_batchsize)
+        
+        #Update policy parameters
+        new_params = params + stepsize * grad
+        policy.set_from_flat(new_params)
+                
         #Save parameters
         if save_params and it % save_params == 0:
             logger.save_params(params, it)

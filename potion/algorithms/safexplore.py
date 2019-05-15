@@ -407,7 +407,6 @@ def adabatch(env, policy,
             verbose = True):
     """
         Only for SIMPLE Gaussian policy w/ scalar variance
-        Policy must have learn_std = False, as std is META-learned
     """
         
     # Defaults

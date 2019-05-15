@@ -39,3 +39,7 @@ def gibbs_lip_const(max_feat, max_rew, disc, temp):
     lip = 2 * max_feat**2 * max_rew / (temp * (1 - disc))**2 * (
             3 + 4 * disc / (1 - disc))
     return lip
+
+def pirotta_coeff(max_feat, max_rew, disc, std, action_vol):
+    return max_rew * max_feat**2 / ((1 - disc)**2 * std**2) * \
+            (action_vol / (math.sqrt(2 * math.pi) * std) + disc / (2 * (1 - disc)))

@@ -10,7 +10,7 @@ import gym
 import potion.envs
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.common.logger import Logger
-from potion.algorithms.sepg import sepg
+from potion.algorithms.sepg import sepg, naive_sepg
 import argparse
 import re
 from potion.meta.safety_requirements import MonotonicImprovement, Budget, FixedThreshold
@@ -44,7 +44,11 @@ parser.add_argument("--test", help="Test on deterministic policy",
                     action="store_true")
 parser.add_argument("--no-test", help="Online learning only",
                     action="store_false")
-parser.set_defaults(render=False, temp=False, test=False) 
+parser.add_argument("--naive", help="Do not use metagradient",
+                    action="store_true")
+parser.add_argument("--no-naive", help="Use metagradient",
+                    action="store_false")
+parser.set_defaults(render=False, temp=False, test=False, naive=False) 
 
 args = parser.parse_args()
 
@@ -86,7 +90,8 @@ else:
     logger = Logger(directory='../logs', name = logname)
     
 #Run
-sepg(env, policy,
+algo = naive_sepg if args.naive else sepg
+algo(env, policy,
             horizon = args.horizon,
             batchsize = args.batchsize,
             iterations = args.iterations,

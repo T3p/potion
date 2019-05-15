@@ -24,7 +24,7 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                     action_filter = None,
                     estimator = 'gpomdp',
                     baseline = 'peters',
-                    logger = Logger(name='safepg'),
+                    logger = Logger(name='SPG'),
                     shallow = True,
                     seed = None,
                     test_batchsize = False,
@@ -84,7 +84,7 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
         seed_all_agent(seed)
     
     #Prepare logger
-    algo_info = {'Algorithm': 'REINFORCE',
+    algo_info = {'Algorithm': 'SPG',
                    'Estimator': estimator,
                    'Baseline': baseline,
                    'Env': str(env), 
@@ -232,4 +232,5 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
     
     #Cleanup
     logger.close()
+
     

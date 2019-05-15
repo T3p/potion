@@ -97,6 +97,7 @@ def reinforce(env, policy, horizon, *,
                 'GradNorm', 
                 'Time',
                 'StepSize',
+                'Exploration',
                 'Info']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
@@ -148,6 +149,7 @@ def reinforce(env, policy, horizon, *,
         log_row['Info'] = mean_sum_info(batch).item()
         log_row['UPerf'] = performance(batch, disc=1.)
         log_row['AvgHorizon'] = avg_horizon(batch)
+        log_row['Exploration'] = policy.exploration().item()
     
         #Estimate policy gradient
         if estimator == 'gpomdp':
