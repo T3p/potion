@@ -38,6 +38,7 @@ def plot_ci(dfs, key='Perf', conf=0.95, name=''):
         warnings.filterwarnings("ignore", message="invalid value encountered in multiply")
         interval = sts.t.interval(conf, n_runs-1,loc=mean,scale=std/math.sqrt(n_runs))
     plt.fill_between(range(len(mean)), interval[0], interval[1], alpha=0.3)
+    print('%s: %f +- %f' % (name, np.mean(mean), np.mean(std)))
     return line
 
 def save_csv(env, name, key, conf=0.95, path='.', rows=None):
