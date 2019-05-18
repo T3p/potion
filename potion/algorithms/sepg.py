@@ -112,6 +112,7 @@ def sepg(env, policy,
                                seed=seed, 
                                n_jobs=parallel)
         perf = performance(batch, disc)
+        H = avg_horizon(batch)
         
         #Estimate policy gradient
         grad_samples = gpomdp_estimator(batch, disc, policy, 
@@ -144,7 +145,7 @@ def sepg(env, policy,
         
             #Compute safe step size for mean parameters
             req = safety_req.next(perf)
-            F = gauss_lip_const(max_feat, max_rew, disc, std=1.)
+            F = gauss_lip_const(max_feat, max_rew, disc, std=1.) * (1 - disc**H)
             max_req = sigma**2 * \
                         (upsilon_grad_norm - upsilon_eps / math.sqrt(batchsize))**2 / \
                         (2 * F)
@@ -181,7 +182,7 @@ def sepg(env, policy,
                 
             #Compute safe meta step size
             req = safety_req.next(perf)
-            G = std_lip_const(max_rew, disc)
+            G = std_lip_const(max_rew, disc) * (1 - disc**H)
             proj = omega_grad.view(-1).dot(omega_metagrad.view(-1)) / torch.norm(omega_metagrad)
             max_req = (torch.abs(proj) - omega_eps / math.sqrt(batchsize))**2 / (2 * G)
             eta = (torch.abs(proj) - omega_eps / math.sqrt(batchsize)) / \
