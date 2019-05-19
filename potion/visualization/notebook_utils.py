@@ -60,10 +60,10 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=None):
 
 
 
-def load_all(name):
-    return [pd.read_csv(file, index_col=False, nrows=200) for file in glob.glob("*.csv") if file.startswith(name + '_')]
+def load_all(name, nrows):
+    return [pd.read_csv(file, index_col=False, nrows=nrows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
 
-def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None):
+def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, nrows=200):
     for key in keys:
         plt.figure()
         if ymin is not None and ymax is not None:
@@ -72,7 +72,7 @@ def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, y
             os.chdir(logdir)
         handles = []
         for name in names:
-            dfs = load_all(env + '_' + name)
+            dfs = load_all(env + '_' + name, nrows=nrows)
             if separate:
                 handles+=(plot_all(dfs, key, name))
             else:

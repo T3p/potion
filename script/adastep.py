@@ -13,9 +13,6 @@ from potion.common.logger import Logger
 from potion.algorithms.semisafe import adastep
 import argparse
 import re
-from potion.meta.safety_requirements import MonotonicImprovement, Budget, FixedThreshold
-from potion.simulation.trajectory_generators import generate_batch
-from potion.common.misc_utils import performance
 
 #Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
