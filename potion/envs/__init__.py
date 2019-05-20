@@ -15,6 +15,11 @@ register(
 )
 
 register(
+    id='MiniGolf-v0',
+    entry_point='potion.envs.minigolf:MiniGolf'
+)
+
+register(
     id='GridWorld-v0',
     entry_point='potion.envs.gridworld:GridWorld'
 )

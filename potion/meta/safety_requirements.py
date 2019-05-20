@@ -27,3 +27,9 @@ class FixedThreshold:
     def next(self, curr_perf, *args):
         budget = curr_perf - self.threshold
         return -budget
+    
+class FixedImprovement:
+    def __init__(self, improvement, *args):
+        self.improvement = improvement
+    def next(self, *args):
+        return self.improvement

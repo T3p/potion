@@ -41,8 +41,8 @@ def plot_ci(dfs, key='Perf', conf=0.95, name=''):
     print('%s: %f +- %f' % (name, np.mean(mean), np.mean(std)/n_runs))
     return line
 
-def save_csv(env, name, key, conf=0.95, path='.', rows=None):
-    dfs = load_all(env + '_' + name)
+def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500):
+    dfs = load_all(env + '_' + name, rows)
     n_runs = len(dfs)
     mean_df, std_df = moments(dfs)
     mean = mean_df[key].values
@@ -53,14 +53,17 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=None):
         mean = mean[:rows]
         low = low[:rows]
         high = high[:rows]
-    x = mean_df['BatchSize'].values
+    if 'BatchSize' in mean_df:
+        x = mean_df['BatchSize'].values
+    else:
+        x = [batchsize] * len(mean)
     x = np.cumsum(x) - x[0]
     plotdf = pd.DataFrame({"Episodes": x, "Mean" : mean, "Low" : low, "High": high})
     plotdf.to_csv(path + '/' + env.lower() + '_' + name.lower() + '_' + key.lower() + '.csv', index=False, header=False)
 
 
 
-def load_all(name, nrows):
+def load_all(name, nrows=200):
     return [pd.read_csv(file, index_col=False, nrows=nrows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
 
 def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, nrows=200):

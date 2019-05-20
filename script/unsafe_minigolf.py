@@ -14,7 +14,8 @@ from potion.algorithms.reinforce import reinforce
 import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
-
+import numpy as np
+import math
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -23,14 +24,14 @@ parser.add_argument('--name', help='Experiment name', type=str, default='GPOMDP'
 parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=1000)
-parser.add_argument('--batchsize', help='Initial batch size', type=int, default=500)
+parser.add_argument('--env', help='Gym environment id', type=str, default='MiniGolf-v0')
+parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
+parser.add_argument('--batchsize', help='Initial batch size', type=int, default=50)
 parser.add_argument('--iterations', help='Iterations', type=int, default=200)
-parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
+parser.add_argument('--gamma', help='Discount factor', type=float, default=1.)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
-parser.add_argument('--alpha', help='Step size', type=float, default=1e-1)
+parser.add_argument('--alpha', help='Step size', type=float, default=0.01)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -56,14 +57,20 @@ args = parser.parse_args()
 env = gym.make(args.env)
 env.seed(args.seed)
 
-m = sum(env.observation_space.shape)
+def feat(o):
+    o /= 20.
+    return torch.cat((o**0, o, o**2, o**3), -1)
+
+m = 4
 d = sum(env.action_space.shape)
-mu_init = torch.zeros(m*d)
-logstd_init = torch.log(torch.zeros(d) + args.sigmainit)
+mu_init = torch.zeros(m*d) + 0.2
+std_init = math.sqrt(0.1)
+logstd_init = torch.log(torch.zeros(d) + std_init)
 policy = ShallowGaussianPolicy(m, d, 
                                mu_init=mu_init, 
                                logstd_init=logstd_init, 
-                               learn_std=args.learnstd)
+                               learn_std=args.learnstd,
+                               feature_fun=feat)
 
 test_batchsize = args.batchsize if args.test else 0
 
