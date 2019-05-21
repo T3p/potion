@@ -364,6 +364,7 @@ def naive_sepg(env, policy,
             max_req = sigma**2 * \
                         (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))**2 / \
                         (2 * F)
+            req = min(req, max_req)
             alpha = (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))  / \
                         F * \
                         (1 + math.sqrt(1 - req / max_req))
@@ -394,6 +395,7 @@ def naive_sepg(env, policy,
             req = safety_req.next(perf)
             G = std_lip_const(max_rew, disc)
             max_req = (omega_grad_norm - omega_eps / math.sqrt(batchsize))**2 / (2 * G)
+            req = min(req, max_req)
             eta = (omega_grad_norm - omega_eps / math.sqrt(batchsize)) / \
                     G * \
                     (1 + torch.sqrt(1 - req / max_req))
