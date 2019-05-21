@@ -149,6 +149,7 @@ def sepg(env, policy,
             max_req = sigma**2 * \
                         (upsilon_grad_norm - upsilon_eps / math.sqrt(batchsize))**2 / \
                         (2 * F)
+            req = min(req, max_req)
             alpha = (upsilon_grad_norm - upsilon_eps / math.sqrt(batchsize))  / \
                         (2 * F) * \
                         (1 + math.sqrt(1 - req / max_req))
@@ -185,6 +186,7 @@ def sepg(env, policy,
             G = std_lip_const(max_rew, disc) * (1 - disc**H)
             proj = omega_grad.view(-1).dot(omega_metagrad.view(-1)) / torch.norm(omega_metagrad)
             max_req = (torch.abs(proj) - omega_eps / math.sqrt(batchsize))**2 / (2 * G)
+            req = min(req, max_req)
             eta = (torch.abs(proj) - omega_eps / math.sqrt(batchsize)) / \
                     G * \
                     (torch.sign(proj) + torch.sqrt(1 - req / max_req))
