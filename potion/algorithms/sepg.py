@@ -338,6 +338,7 @@ def naive_sepg(env, policy,
         upsilon_grad_norm = torch.norm(upsilon_grad)
         omega_grad = grad[0]
         omega_grad_norm = torch.norm(omega_grad)
+        dfn = grad.shape[0]
         
         ### Mean-update iteration
         if it % 2 == 0:
@@ -347,13 +348,12 @@ def naive_sepg(env, policy,
                 grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
                 upsilon_grad_var = torch.sum(torch.diag(grad_cov)).item()
                 max_eigv = eigsh(grad_cov.numpy(), 1)[0][0]
-                dfn = grad.shape[0]
                 quant = sts.f.ppf(1 - conf, dfn, batchsize - dfn)
-                upsilon_eps = math.sqrt(max_eigv * dfn * quant / (batchsize - dfn))
+                upsilon_eps = math.sqrt(max_eigv * dfn * quant)
             elif conf < 1:
                 upsilon_grad_var = torch.var(grad_samples[:, 1]).item()
                 quant = sts.t.ppf(1 - conf/2, batchsize - 1)
-                upsilon_eps = quant * math.sqrt(upsilon_grad_var / batchsize)
+                upsilon_eps = quant * math.sqrt(upsilon_grad_var)
             else:
                 upsilon_eps = 0.
                 upsilon_grad_var = 0.
@@ -362,15 +362,15 @@ def naive_sepg(env, policy,
             req = safety_req.next(perf)
             F = gauss_lip_const(max_feat, max_rew, disc, std=1.)
             max_req = sigma**2 * \
-                        (upsilon_grad_norm - upsilon_eps / math.sqrt(batchsize))**2 / \
+                        (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))**2 / \
                         (2 * F)
-            alpha = (upsilon_grad_norm - upsilon_eps / math.sqrt(batchsize))  / \
+            alpha = (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))  / \
                         F * \
                         (1 + math.sqrt(1 - req / max_req))
             stepsize = (alpha * sigma**2 / upsilon_grad_norm).item()
             
             #Ensure minimum safe batchsize
-            min_batchsize = math.ceil((upsilon_eps**2 / upsilon_grad_norm**2).item() + 1e-12)
+            min_batchsize = math.ceil((upsilon_eps**2 / upsilon_grad_norm**2).item() + 1e-12) + dfn
             if conf < 1 and adapt_batchsize:
                 batchsize = max(batchsize, min_batchsize)
             
@@ -385,7 +385,7 @@ def naive_sepg(env, policy,
             if conf < 1:
                 omega_grad_var = torch.var(grad_samples[:, 0]).item()
                 quant = sts.t.ppf(1 - conf/2, batchsize - 1)
-                omega_eps = quant * math.sqrt(omega_grad_var / batchsize)
+                omega_eps = quant * math.sqrt(omega_grad_var)
             else:
                 omega_grad_var = 0.
                 omega_eps = 0.
