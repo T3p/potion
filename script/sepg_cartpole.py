@@ -29,9 +29,9 @@ parser.add_argument('--max_feat', help='Max state feature', type=float, default=
 parser.add_argument('--horizon', help='Task horizon', type=int, default=1000)
 parser.add_argument('--batchsize', help='Batch size', type=int, default=500)
 parser.add_argument('--iterations', help='Iterations', type=int, default=1000000)
-parser.add_argument('--safety', help='Safety creterion', type=str, default=-10)
+parser.add_argument('--safety', help='Safety creterion', type=str, default=-5)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
-parser.add_argument('--delta', help='Confidence parameter', type=float, default=0.2)
+parser.add_argument('--delta', help='Confidence parameter', type=float, default=1.)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=5.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
