@@ -147,13 +147,17 @@ def sepg(env, policy,
             #Compute safe step size for mean parameters
             req = safety_req.next(perf)
             F = gauss_lip_const(max_feat, max_rew, disc, std=1.) * (1 - disc**H)
+            delta = torch.clamp(upsilon_grad_norm - upsilon_eps, min=0, max=float('inf'))
             max_req = sigma**2 * \
-                        (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))**2 / \
+                        (delta / math.sqrt((batchsize - dfn)))**2 / \
                         (2 * F)
             req = min(req, max_req)
-            alpha = (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))  / \
-                        F * \
-                        (1 + math.sqrt(1 - req / max_req))
+            if max_req != 0:
+                alpha = (delta / math.sqrt((batchsize - dfn)))  / \
+                            F * \
+                            (1 + math.sqrt(1 - req / max_req))
+            else:
+                alpha = 0.
             stepsize = (alpha * sigma**2 / upsilon_grad_norm).item()
             
             #Ensure minimum safe batchsize
@@ -186,11 +190,15 @@ def sepg(env, policy,
             req = safety_req.next(perf)
             G = std_lip_const(max_rew, disc) * (1 - disc**H)
             proj = omega_grad.view(-1).dot(omega_metagrad.view(-1)) / torch.norm(omega_metagrad)
-            max_req = (torch.abs(proj) - omega_eps / math.sqrt(batchsize))**2 / (2 * G)
+            delta = torch.clamp(torch.abs(proj) - omega_eps, min=0, max=float('inf'))
+            max_req = (delta / math.sqrt(batchsize))**2 / (2 * G)
             req = min(req, max_req)
-            eta = (torch.abs(proj) - omega_eps / math.sqrt(batchsize)) / \
-                    G * \
-                    (torch.sign(proj) + torch.sqrt(1 - req / max_req))
+            if max_req != 0:
+                eta = (delta / math.sqrt(batchsize)) / \
+                        G * \
+                        (torch.sign(proj) + torch.sqrt(1 - req / max_req))
+            else:
+                eta = 0.
             metastepsize = (eta / omega_metagrad_norm).item()
             
             #Ensure minimum safe batchsize
