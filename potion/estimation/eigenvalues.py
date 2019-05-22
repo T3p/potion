@@ -11,14 +11,15 @@ from potion.estimation.gradients import gpomdp_estimator
 from potion.estimation.importance_sampling import importance_weights
 from potion.simulation.trajectory_generators import generate_batch
 
-def power(policy, batch, grad, disc, pow_alpha=0.01, err_tol=0.1, max_it=100, max_attempts=3, estimator=gpomdp_estimator, baseline='peters', shallow=True, clip=0.2, verbose=True):
+def power(policy, batch, grad, disc, pow_alpha=0.01, err_tol=0.1, max_it=100, max_attempts=3, estimator=gpomdp_estimator, baseline='peters', shallow=True, clip=0.2, verbose=True, mask=None):
     params = policy.get_flat()
-    
+    if mask is None:
+        mask = torch.ones_like(params)
     err = 999
     attempts = 0
     while err > err_tol and attempts < max_attempts:
         pow_it = 0
-        psi = torch.rand_like(grad)
+        psi = torch.rand_like(grad) * mask
         _lip_const = torch.norm(psi).item()
         while err > err_tol and pow_it < max_it:
             params_2 = params + pow_alpha * psi / torch.norm(psi)
@@ -33,7 +34,7 @@ def power(policy, batch, grad, disc, pow_alpha=0.01, err_tol=0.1, max_it=100, ma
             grad_2 = torch.mean(grad_2_samples * iws.unsqueeze(1))
             clipped_grad_2 = torch.mean(grad_2_samples * clipped_iws.unsqueeze(1))
             grad_2 = max(grad_2, clipped_grad_2)
-            psi = 1. / pow_alpha * (grad_2 - grad)
+            psi = 1. / pow_alpha * (grad_2 - grad) * mask
             lip_const = torch.norm(psi).item()
             if math.isnan(lip_const):
                 err = 999

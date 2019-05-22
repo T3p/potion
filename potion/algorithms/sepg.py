@@ -469,7 +469,7 @@ def ssepg(env, policy,
             log_params = True,
             verbose = True):
     """
-        SEPG algorithm
+        SSEPG algorithm
         Only for shallow Gaussian policy w/ scalar variance
     """
         
@@ -555,16 +555,6 @@ def ssepg(env, policy,
         omega_grad = grad[0]        
         dfn = upsilon_grad.shape[0]
         
-        #Power method
-        G = F = power(policy, batch, grad, disc, 
-                  pow_alpha=pow_alpha, 
-                  err_tol=pow_err_tol, 
-                  max_it=max_pow_it, 
-                  max_attempts=max_pow_attempts,
-                  shallow=True, 
-                  clip=pow_clip,
-                  verbose=verbose)
-        
         ### Mean-update iteration
         if it % 2 == 0:
             #Compute gradient estimation error for mean parameters
@@ -584,15 +574,25 @@ def ssepg(env, policy,
                 upsilon_grad_var = 0.
                     
             #Compute safe step size for mean parameters
+            mask = torch.ones_like(grad)
+            mask[0] = 0.
+            F = power(policy, batch, grad, disc, 
+                  pow_alpha=pow_alpha, 
+                  err_tol=pow_err_tol, 
+                  max_it=max_pow_it, 
+                  max_attempts=max_pow_attempts,
+                  shallow=True, 
+                  clip=pow_clip,
+                  verbose=verbose,
+                  mask=mask)
             req = safety_req.next(perf)
-            max_req = sigma**2 * \
-                        (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))**2 / \
+            max_req = (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))**2 / \
                         (2 * F)
             req = min(req, max_req)
             alpha = (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))  / \
                         F * \
                         (1 + math.sqrt(1 - req / max_req))
-            stepsize = (alpha * sigma**2 / upsilon_grad_norm).item()
+            stepsize = (alpha / upsilon_grad_norm).item()
             
             #Ensure minimum safe batchsize
             min_batchsize = math.ceil((upsilon_eps**2 / upsilon_grad_norm**2).item() + 1e-12) + dfn
@@ -621,6 +621,17 @@ def ssepg(env, policy,
                 omega_eps = 0.
                 
             #Compute safe meta step size
+            mask = torch.zeros_like(grad)
+            mask[0] = 1.
+            G = power(policy, batch, grad, disc, 
+                      pow_alpha=pow_alpha, 
+                      err_tol=pow_err_tol, 
+                      max_it=max_pow_it, 
+                      max_attempts=max_pow_attempts,
+                      shallow=True, 
+                      clip=pow_clip,
+                      verbose=verbose,
+                      mask=mask)
             req = safety_req.next(perf)
             proj = omega_grad.view(-1).dot(omega_metagrad.view(-1)) / torch.norm(omega_metagrad)
             max_req = (torch.abs(proj) - omega_eps / math.sqrt(batchsize))**2 / (2 * G)
