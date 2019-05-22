@@ -27,7 +27,7 @@ parser.add_argument('--env', help='Gym environment id', type=str, default='ContC
 parser.add_argument('--max_rew', help='Max reward', type=float, default=1.)
 parser.add_argument('--max_feat', help='Max state feature', type=float, default=1.)
 parser.add_argument('--horizon', help='Task horizon', type=int, default=1000)
-parser.add_argument('--batchsize', help='Batch size', type=int, default=100)
+parser.add_argument('--batchsize', help='Batch size', type=int, default=500)
 parser.add_argument('--iterations', help='Iterations', type=int, default=1000000)
 parser.add_argument('--safety', help='Safety creterion', type=str, default=-10)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
