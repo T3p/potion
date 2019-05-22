@@ -146,7 +146,7 @@ def sepg(env, policy,
         
             #Compute safe step size for mean parameters
             req = safety_req.next(perf)
-            F = gauss_lip_const(max_feat, max_rew, disc, std=1.)
+            F = gauss_lip_const(max_feat, max_rew, disc, std=1.) * (1 - disc**H)
             max_req = sigma**2 * \
                         (upsilon_grad_norm - upsilon_eps / math.sqrt((batchsize - dfn)))**2 / \
                         (2 * F)
