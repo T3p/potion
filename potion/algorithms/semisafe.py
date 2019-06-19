@@ -33,10 +33,11 @@ def semisafepg(env, policy, horizon, *,
                     logger = Logger(name='SSPG'),
                     shallow = True,
                     pow_alpha = 0.01,
-                    max_pow_it = 100,
+                    pow_gamma = 0.1,
+                    max_pow_it = 20,
                     pow_err_tol = 0.1,
                     pow_clip = 0.2,
-                    max_pow_attempts = 3,
+                    max_pow_attempts = 5,
                     seed = None,
                     test_batchsize = False,
                     info_key = 'danger',
@@ -138,9 +139,11 @@ def semisafepg(env, policy, horizon, *,
     
     #Learning loop
     it = 0
+    target_batchsize = min_batchsize
     old_lip_const = 0.
     old_eps = 0.
     tot_samples = 0
+    _conf = conf
     _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
     while(it < iterations and tot_samples < max_samples):
         #Begin iteration
@@ -172,50 +175,56 @@ def semisafepg(env, policy, horizon, *,
     
         #Collect trajectories
         batch = []
-        while True:
+        batchsize = 0
+        low_samples = False
+        unsafe = False
+        while(batchsize < target_batchsize and batchsize < max_batchsize):
             batch += generate_batch(env, policy, horizon, 
-                                   episodes=min_batchsize, 
-                                   action_filter=action_filter, 
-                                   seed=seed,
-                                   n_jobs=parallel,
-                                   key=info_key)
+                       episodes=target_batchsize - batchsize, 
+                       action_filter=action_filter, 
+                       seed=seed,
+                       n_jobs=parallel,
+                       key=info_key)
             batchsize = len(batch)
-        
+            
             #Estimate policy gradient
             grad_samples = _estimator(batch, disc, policy, 
                                         baselinekind=baseline, 
                                         shallow=shallow,
                                         result='samples')
             grad = torch.mean(grad_samples, 0)
-            
+                
             #Compute estimation error 
             centered = grad_samples - grad.unsqueeze(0)
             grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
             grad_var = torch.sum(torch.diag(grad_cov)).item()
             max_eigv = eigsh(grad_cov.numpy(), 1)[0][0]
             dfn = grad.shape[0]
-            quant = sts.f.ppf(1 - conf, dfn, batchsize - dfn)
-            eps = math.sqrt(max_eigv * dfn * quant / (batchsize - dfn))
+            quant = sts.f.ppf(1 - _conf, dfn, batchsize - dfn)
+            eps = math.sqrt(max_eigv * dfn * quant)
             
             if it > 0:
                 eps = (1 - forget) * old_eps + forget * eps
             
             #Optimal batch size
-            opt_batchsize = torch.ceil(4 * eps**2 / 
-                                   (torch.norm(grad)**2))
-            if opt_batchsize != opt_batchsize:
-                continue
-        
-            if batchsize >= max_batchsize or opt_batchsize == float('inf'):
+            target_batchsize = torch.ceil(4 * eps**2 / 
+                                   (torch.norm(grad)**2)) + dfn
+            if target_batchsize > max_batchsize:
+                #min safe batchsize
+                target_batchsize = eps**2 / torch.norm(grad).item()**2 + dfn
                 low_samples = True
-                break
-            
-            if verbose and (batchsize - min_batchsize) % 1 == 0:
-                print('%d / %d trajectories' % (batchsize, opt_batchsize.item()))
-            
-            if batchsize >= opt_batchsize:
-                low_samples = False
-                break
+            if target_batchsize > max_batchsize:
+                unsafe = True
+                if target_batchsize < float('inf'):
+                    print('Unsafe, skipping. Would require %d samples' % target_batchsize)
+                else:
+                    print('Unsafe, skipping. Would require a ridicolous number of samples')
+                target_batchsize = max_batchsize
+            if verbose:
+                print('%d / %d' % (batchsize, target_batchsize))
+            _conf /= 2
+            target_batchsize = max(target_batchsize, min_batchsize)
+
         tot_samples += batchsize
         old_eps = eps
         
@@ -237,21 +246,24 @@ def semisafepg(env, policy, horizon, *,
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Check if number of samples is sufficient
-        min_safe_batchsize = eps**2 / torch.norm(grad).item()**2
-        if batchsize < min_safe_batchsize:
-            print('Unsafe, stopping. Would require %d samples' % min_safe_batchsize)
+        if unsafe:
             log_row['LipConst'] = old_lip_const
             log_row['StepSize'] = 0.
             log_row['Time'] = time.time() - start
             logger.write_row(log_row, it)
-            break
+            _conf /= 2
+            it += 1
+            continue
+        else:
+            _conf = conf
         
         #Power method
         if verbose:
             print('Estimating the Lipschitz Constant')
             start_pow = time.time()
         lip_const = power(policy, batch, grad, disc, 
-              pow_alpha=pow_alpha, 
+              alpha=pow_alpha, 
+              gamma=pow_gamma,
               err_tol=pow_err_tol, 
               max_it=max_pow_it, 
               max_attempts=max_pow_attempts, 
@@ -271,7 +283,7 @@ def semisafepg(env, policy, horizon, *,
         stepsize = 1. /(2 * lip_const)
         if low_samples:
             if verbose:
-                print('Low sample regire: reducing step size')
+                print('Low sample regime: reducing step size')
             stepsize *= 2. * (1 - eps / (torch.norm(grad) * batchsize).item())
         log_row['StepSize'] = stepsize
                 
