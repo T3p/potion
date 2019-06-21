@@ -10,6 +10,7 @@ import torch
 import numpy as np
 from joblib import Parallel, delayed
 from potion.common.misc_utils import seed_all_agent
+import random
 
 def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes=float('inf'),
                                  action_filter=None, render=False, deterministic=False, key=None):
@@ -107,7 +108,9 @@ def generate_batch(env, policy, horizon, episodes, action_filter=None, render=Fa
         gen = sequential_episode_generator(env, policy, horizon, episodes, action_filter, render, deterministic, key)
         batch = [ep for ep in gen]
     else:
-        batch = Parallel(n_jobs=n_jobs)(delayed(parallel_episode_generator)(env, policy, horizon, action_filter, seed=seed*1000+i, deterministic=deterministic, key=key) for i in range(episodes))
+        if seed is None:
+            seed = random.randint(0,999999)
+        batch = Parallel(n_jobs=n_jobs)(delayed(parallel_episode_generator)(env, policy, horizon, action_filter, seed=seed*10000+i, deterministic=deterministic, key=key) for i in range(episodes))
     return batch
 
 """Testing"""

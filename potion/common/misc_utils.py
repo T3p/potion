@@ -13,6 +13,8 @@ import os
 from gym.spaces.box import Box
 from gym.spaces.discrete import Discrete
 
+separator = '---------------------------------------------------------'
+
 def clip(env):
     if type(env.action_space) is Box:
         low = env.action_space.low
