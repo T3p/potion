@@ -10,7 +10,7 @@ import gym
 import potion.envs
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.common.logger import Logger
-from potion.algorithms.safe import adastep
+from potion.algorithms.safe import adabatch
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
@@ -28,7 +28,8 @@ parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='lqr1d-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, default=1e6)
-parser.add_argument('--batchsize', help='(Minimum) batch size', type=int, default=100)
+parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, default=32)
+parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, default=10000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
 parser.add_argument('--conf', help='Discount factor', type=float, default=0.2)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=0.1)
@@ -69,7 +70,7 @@ policy = ShallowGaussianPolicy(m, d,
                                logstd_init=logstd_init, 
                                learn_std=args.learnstd)
 
-test_batchsize = args.batchsize if args.test else 0
+test_batchsize = args.min_batchsize if args.test else 0
 
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1]
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
@@ -92,11 +93,12 @@ else:
 
 
 # Run
-adastep(env, policy,
+adabatch(env, policy,
             pen_coeff = pen_coeff,
             var_bound = var_bound,
             horizon = args.horizon,
-            batchsize = args.batchsize,
+            min_batchsize = args.min_batchsize,
+            max_batchsize = args.max_batchsize,
             max_samples = args.max_samples,
             disc = args.disc,
             conf = args.conf,
