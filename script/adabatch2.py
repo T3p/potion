@@ -23,6 +23,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 
 parser.add_argument('--name', help='Experiment name', type=str, default='SPG')
 parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
+parser.add_argument('--bound', help='Statistical inequality for optimal batch size', type=str, default='student')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='lqr1d-v0')
@@ -63,7 +64,7 @@ env.seed(args.seed)
 
 m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
-mu_init = torch.zeros(m)
+mu_init = torch.zeros(m) - 0.29
 logstd_init = torch.log(torch.zeros(1) + args.std_init)
 policy = ShallowGaussianPolicy(m, d, 
                                mu_init=mu_init, 
@@ -95,7 +96,7 @@ else:
 # Run
 adabatch2(env, policy,
             pen_coeff = pen_coeff,
-            var_bound = var_bound,
+            bound = args.bound,
             horizon = args.horizon,
             min_batchsize = args.min_batchsize,
             max_batchsize = args.max_batchsize,

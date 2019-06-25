@@ -355,7 +355,7 @@ def semisafepg(env, policy, horizon, *,
     logger.close()
     
     
-def adabatch2(env, policy, horizon, pen_coeff, var_bound, *,
+def adabatch2(env, policy, horizon, pen_coeff, *,
                     conf = 0.05,
                     min_batchsize = 32,
                     max_batchsize = 5000,
@@ -447,8 +447,8 @@ def adabatch2(env, policy, horizon, pen_coeff, var_bound, *,
                    'MinBatchSize': min_batchsize,
                    'MaxBatchSize': max_batchsize,
                    'PenalizationCoefficient': pen_coeff,
-                   'VarianceBound': var_bound,
-                   'Fast': fast
+                   'Bound': bound,
+                   'Fast': fast,
                    }
     logger.write_info({**algo_info, **policy.info()})
     log_keys = ['Perf', 
@@ -462,6 +462,7 @@ def adabatch2(env, policy, horizon, pen_coeff, var_bound, *,
                 'LipConst',
                 'ErrBound',
                 'SampleVar',
+                'GradRange',
                 'Info',
                 'TotSamples',
                 'Safety']
@@ -484,7 +485,9 @@ def adabatch2(env, policy, horizon, pen_coeff, var_bound, *,
     optimal_batchsize = min_batchsize
     min_safe_batchsize = min_batchsize
     _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
-    old_lip_const = 0.
+    params = policy.get_flat()
+    max_grad = torch.zeros_like(params) - float('inf')
+    min_grad = torch.zeros_like(params) + float('inf')
     
     #Learning loop
     while(it < iterations and tot_samples < max_samples):
@@ -544,16 +547,37 @@ def adabatch2(env, policy, horizon, pen_coeff, var_bound, *,
             grad_infnorm = torch.max(torch.abs(grad))
             coordinate = torch.min(torch.argmax(torch.abs(grad))).item()
                 
-            #Compute estimation error with ellipsoid confidence region
+            #Compute statistics for estimation error
             centered = grad_samples - grad.unsqueeze(0)
             grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
             grad_var = torch.max(torch.diag(grad_cov)).item()
-            quant = sts.t.ppf(1 - _conf, batchsize) 
-            eps = quant * math.sqrt(grad_var)
+            max_grad = torch.max(grad, max_grad)
+            min_grad = torch.min(min_grad, grad)
+            grad_range = torch.max(max_grad - min_grad).item()
+            if grad_range <= 0:
+                grad_range = torch.max(2 * abs(max_grad)).item()
             
+            if bound == 'student':
+                quant = sts.t.ppf(1 - _conf, batchsize) 
+                eps = quant * math.sqrt(grad_var)
+            elif bound == 'hoeffding':
+                eps = grad_range * math.sqrt(math.log(2. / conf) / 2)
+            else: #elif bound == 'bernstein'
+                eps = math.sqrt(2 * grad_var * math.log(3. / conf))
+                eps2 = 3 * grad_range * math.log(3. / conf)
             #Optimal batch size
-            optimal_batchsize = math.ceil(((13 + 3 * math.sqrt(17)) * eps**2 / (2 * grad_infnorm**2)).item())
-            min_safe_batchsize = math.ceil((eps**2 / grad_infnorm**2).item())
+            if bound in ['student', 'hoeffding']:
+                optimal_batchsize = math.ceil(((13 + 3 * math.sqrt(17)) * eps**2 / (2 * grad_infnorm**2)).item())
+                min_safe_batchsize = math.ceil((eps**2 / grad_infnorm**2).item())
+            else:
+                min_safe_batchsize = math.ceil((eps + math.sqrt(eps**2 + 4 * eps2 * grad_infnorm)) / (2 * grad_infnorm))
+                optimal_batchsize = min_safe_batchsize
+                stepsize = ((grad_infnorm - eps / math.sqrt(batchsize))**2 \
+                    /(2 * pen_coeff * (grad_infnorm + eps / math.sqrt(batchsize))**2)).item()
+                ups = lambda n: grad_infnorm**2 * stepsize * (1 - pen_coeff * stepsize)
+                while ups(optimal_batchsize + 1) > ups(optimal_batchsize):
+                    optimal_batchsize += 1
+                
             if verbose and optimal_batchsize < max_batchsize:
                 print('Collected %d / %d trajectories' % (batchsize, optimal_batchsize))
             elif verbose:
@@ -588,6 +612,7 @@ def adabatch2(env, policy, horizon, pen_coeff, var_bound, *,
         
         #Log
         log_row['SampleVar'] = grad_var
+        log_row['GradRange'] = grad_range
         log_row['Safety'] = safety
         log_row['ErrBound'] = eps
         log_row['Perf'] = performance(batch, disc)
