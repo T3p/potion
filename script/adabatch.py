@@ -21,21 +21,32 @@ from potion.meta.variance_bounds import gpomdp_var_bound, reinforce_var_bound
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--name', help='Experiment name', type=str, default='SPG')
-parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
-parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
+parser.add_argument('--name', help='Experiment name', type=str, 
+                    default='AdaBatch')
+parser.add_argument('--estimator', help='PG estimator (reinforce/gpomdp)', 
+                    type=str, default='gpomdp')
+parser.add_argument('--baseline', help='control variate (avg/peters/zero)', 
+                    type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-parser.add_argument('--env', help='Gym environment id', type=str, default='lqr1d-v0')
+parser.add_argument('--env', help='Gym environment id', type=str, 
+                    default='lqr1d-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
-parser.add_argument('--max_samples', help='Maximum total samples', type=int, default=1e6)
-parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, default=32)
-parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, default=10000)
+parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
+                    default=1e6)
+parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, 
+                    default=100)
+parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
+                    default=10000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--conf', help='Discount factor', type=float, default=0.2)
-parser.add_argument('--std_init', help='Initial policy std', type=float, default=0.1)
-parser.add_argument('--max_feat', help='Maximum state feature', type=float, default=4.)
-parser.add_argument('--max_rew', help='Maximum reward', type=float, default=14.5)
-parser.add_argument('--action_vol', help='Volume of action space', type=float, default=8.)
+parser.add_argument('--conf', help='Confidence', type=float, default=0.2)
+parser.add_argument('--std_init', help='Initial policy std', type=float,
+                    default=1.)
+parser.add_argument('--max_feat', help='Maximum state feature', type=float,
+                    default=4.)
+parser.add_argument('--max_rew', help='Maximum reward', type=float,
+                    default=14.5)
+parser.add_argument('--action_vol', help='Volume of action space', type=float,
+                    default=8.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -83,9 +94,11 @@ else:
 
 #Constants
 _, kappa, _ = gauss_smooth_const(args.max_feat, args.std_init)
-pen_coeff = pirotta_coeff(args.max_feat, args.max_rew, args.disc, args.std_init, args.action_vol)
+pen_coeff = pirotta_coeff(args.max_feat, args.max_rew, args.disc, 
+                          args.std_init, args.action_vol)
 if args.estimator == 'reinforce':
-    var_bound = reinforce_var_bound(args.max_rew, args.disc, kappa, args.horizon)
+    var_bound = reinforce_var_bound(args.max_rew, args.disc, kappa,
+                                    args.horizon)
 elif args.estimator == 'gpomdp':
     var_bound = gpomdp_var_bound(args.max_rew, args.disc, kappa, args.horizon)
 else:

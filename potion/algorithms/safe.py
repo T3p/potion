@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Safe Policy Gradient (SPG)
+Safe Policy Gradient algorithms
 @author: Matteo Papini
 """
 
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import (performance, avg_horizon, mean_sum_info, 
-                                      clip, seed_all_agent, returns)
+                                      clip, seed_all_agent, returns, separator)
 from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
 import scipy.stats as sts
@@ -18,7 +18,7 @@ import math
 def safepg(env, policy, horizon, lip_const, var_bound, *,
                     conf = 0.2,
                     min_batchsize = 32,
-                    max_batchsize = 5000,
+                    max_batchsize = 10000,
                     iterations = float('inf'),
                     max_samples = 1e6,
                     disc = 0.9,
@@ -140,7 +140,7 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
     while(it < iterations and tot_samples < max_samples):
         start = time.time()
         if verbose:
-            print('\nIteration ', it)
+            print('\n* Iteration %d *' % it)
         params = policy.get_flat()
         
         #Test the corresponding deterministic policy
@@ -256,7 +256,11 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
             #Log
             log_row['StepSize'] = 0.
             log_row['Time'] = time.time() - start
+            if verbose:
+                print(separator)
             logger.write_row(log_row, it)
+            if verbose:
+                print(separator)
             
             #Adjust confidence before collecting new data for the same update
             _conf /= 2
@@ -285,7 +289,11 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
         
         #Next iteration
         log_row['Time'] = time.time() - start
+        if verbose:
+            print(separator)
         logger.write_row(log_row, it)
+        if verbose:
+            print(separator)
         it += 1
     
     #Save final parameters
@@ -328,8 +336,8 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
     pen_coeff: penalty coefficient for policy update
     var_bound: upper bound on the variance of the PG estimator
     conf: probability of failure
-    max_batchsize: maximum number of trajectories to estimate policy gradient
-    iterations: number of policy updates
+    batchsize: number of trajectories to estimate policy gradient
+    iterations: maximum number of learning iterations
     max_samples: maximum number of total trajectories
     disc: discount factor
     action_filter: function to apply to the agent's action before feeding it to 
@@ -343,6 +351,7 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
     logger: for human-readable logs (standard output, csv, tensorboard...)
     shallow: whether to employ pre-computed score functions (only available for
         shallow policies)
+    meta_conf: confidence level of safe-update test (for evaluation only)
     seed: random seed (None for random behavior)
     test_batchsize: number of test trajectories used to evaluate the 
         corresponding deterministic policy at each iteration. If 0 or False, no 
@@ -357,7 +366,7 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
         sequential simulation is performed.
     render: how often (every x iterations) to render the agent's behavior
         on a sample trajectory. If False, no rendering happens
-    verbose: level of verbosity
+    verbose: level of verbosity on standard output
     """
     #Defaults
     if action_filter is None:
@@ -368,7 +377,7 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
         seed_all_agent(seed)
     
     #Prepare logger
-    algo_info = {'Algorithm': 'SPG',
+    algo_info = {'Algorithm': 'AdaStep',
                    'Estimator': estimator,
                    'Baseline': baseline,
                    'Env': str(env), 
@@ -406,7 +415,8 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
     it = 0
     tot_samples = 0
     safety = 1.
-    _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
+    _estimator = (reinforce_estimator if estimator=='reinforce' 
+                  else gpomdp_estimator)
     updated = False
     updates = 0
     unsafe_updates = 0
@@ -416,7 +426,7 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
     while(it < iterations and tot_samples < max_samples):
         start = time.time()
         if verbose:
-            print('\nIteration ', it)
+            print('\n* Iteration %d *' % it)
         params = policy.get_flat()
         
         #Test the corresponding deterministic policy
@@ -438,8 +448,6 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
                            action_filter=action_filter, 
                            render=True)
     
-    
-        #Experience loop
         #Collect trajectories according to batch size
         batch = generate_batch(env, policy, horizon, 
                                 episodes=batchsize, 
@@ -454,7 +462,8 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
                                     result='samples')
         grad = torch.mean(grad_samples, 0)
         
-        lower = torch.clamp(torch.abs(grad) - eps / math.sqrt(batchsize), 0, float('inf'))
+        lower = torch.clamp(torch.abs(grad) - eps / math.sqrt(batchsize), 0, 
+                            float('inf'))
         upper = torch.abs(grad) + eps / math.sqrt(batchsize)
 
         #Update long-term quantities
@@ -469,7 +478,8 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
             if pval / 2 < meta_conf and tscore > 0:
                 unsafe_updates += 1
                 if verbose:
-                    print('The previous update was unsafe! (p-value = %f)' % (pval / 2))
+                    print('The previous update was unsafe! (p-value = %f)' 
+                          % (pval / 2))
             old_rets = new_rets
             safety = 1 - unsafe_updates / updates
         
@@ -492,10 +502,11 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
         #Check if number of samples is sufficient to perform update
         if torch.norm(lower) == 0 and verbose:
                 updated = False
-                print('No update is performed, would be unsafe. Please increase batch size to keep updating')
+                print('No update, would require more samples')
         
         #Select step size
-        stepsize = (torch.norm(lower)**2 / (2 * pen_coeff * torch.sum(upper)**2)).item()
+        stepsize = (torch.norm(lower)**2 /
+                    (2 * pen_coeff * torch.sum(upper)**2)).item()
         log_row['StepSize'] = stepsize
                 
         #Update policy parameters
@@ -510,7 +521,12 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
         
         #Next iteration
         log_row['Time'] = time.time() - start
+        if verbose:
+            print(separator)
         logger.write_row(log_row, it)
+        if verbose:
+            print(separator)
+
         it += 1
     
     #Save final parameters
@@ -524,14 +540,14 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
 def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
                     conf = 0.2,
                     min_batchsize = 32,
-                    max_batchsize = 5000,
+                    max_batchsize = 10000,
                     iterations = float('inf'),
                     max_samples = 1e6,
                     disc = 0.9,
                     action_filter = None,
                     estimator = 'gpomdp',
                     baseline = 'peters',
-                    logger = Logger(name='SPG'),
+                    logger = Logger(name='AdaBatch'),
                     shallow = True,
                     meta_conf = 0.05,
                     seed = None,
@@ -554,6 +570,7 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
     pen_coeff: penalty coefficient for policy update
     var_bound: upper bound on the variance of the PG estimator
     conf: probability of failure
+    min_batchsize: minimum number of trajectories to estimate policy gradient
     max_batchsize: maximum number of trajectories to estimate policy gradient
     iterations: number of policy updates
     max_samples: maximum number of total trajectories
@@ -569,6 +586,7 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
     logger: for human-readable logs (standard output, csv, tensorboard...)
     shallow: whether to employ pre-computed score functions (only available for
         shallow policies)
+    meta_conf: confidence level of safe-update test (for evaluation only)
     seed: random seed (None for random behavior)
     test_batchsize: number of test trajectories used to evaluate the 
         corresponding deterministic policy at each iteration. If 0 or False, no 
@@ -594,7 +612,7 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
         seed_all_agent(seed)
     
     #Prepare logger
-    algo_info = {'Algorithm': 'SPG',
+    algo_info = {'Algorithm': 'AdaBatch',
                    'Estimator': estimator,
                    'Baseline': baseline,
                    'Env': str(env), 
@@ -619,7 +637,8 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
                 'BatchSize',
                 'Info',
                 'TotSamples',
-                'Safety']
+                'Safety',
+                'Err']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
@@ -634,8 +653,8 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
     tot_samples = 0
     safety = 1.
     optimal_batchsize = min_batchsize
-    min_safe_batchsize = min_batchsize
-    _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
+    _estimator = (reinforce_estimator if estimator=='reinforce' 
+                  else gpomdp_estimator)
     updated = False
     updates = 0
     unsafe_updates = 0
@@ -644,7 +663,7 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
     while(it < iterations and tot_samples < max_samples):
         start = time.time()
         if verbose:
-            print('\nIteration ', it)
+            print('\n* Iteration %d *' % it)
         params = policy.get_flat()
         
         #Test the corresponding deterministic policy
@@ -666,56 +685,31 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
                            action_filter=action_filter, 
                            render=True)
     
-    
-        #Experience loop
-        _conf = conf
         #Collect trajectories according to previous optimal batch size
         batch = generate_batch(env, policy, horizon, 
-                                episodes=max(min_batchsize, min(max_batchsize, optimal_batchsize)), 
+                                episodes=max(min_batchsize, 
+                                             min(max_batchsize, 
+                                                 optimal_batchsize)), 
                                 action_filter=action_filter,
                                 n_jobs=parallel,
                                 key=info_key)
         batchsize = len(batch)
+            
+        #Estimate policy gradient
+        grad_samples = _estimator(batch, disc, policy, 
+                                    baselinekind=baseline, 
+                                    shallow=shallow,
+                                    result='samples')
+        grad = torch.mean(grad_samples, 0)
+        grad_infnorm = torch.max(torch.abs(grad))
+        coordinate = torch.min(torch.argmax(torch.abs(grad))).item()
         
-        do = True
-        while do or batchsize < min_safe_batchsize:
-            do = False
-            #Collect more trajectories to match minimum safe batch size
-            batch += generate_batch(env, policy, horizon, 
-                        episodes=min(max_batchsize, min_safe_batchsize) - batchsize, 
-                        action_filter=action_filter,
-                        n_jobs=parallel,
-                        key=info_key)
-            batchsize = len(batch)
-            
-            #Estimate policy gradient
-            grad_samples = _estimator(batch, disc, policy, 
-                                        baselinekind=baseline, 
-                                        shallow=shallow,
-                                        result='samples')
-            grad = torch.mean(grad_samples, 0)
-            grad_infnorm = torch.max(torch.abs(grad))
-            coordinate = torch.min(torch.argmax(torch.abs(grad))).item()
-            
-            #Optimal batch size
-            eps = math.sqrt(var_bound / _conf)
-            optimal_batchsize = math.ceil(((13 + 3 * math.sqrt(17)) * eps**2 / (2 * grad_infnorm**2)).item())
-            min_safe_batchsize = math.ceil((eps**2 / grad_infnorm**2).item())
-            if verbose and optimal_batchsize < max_batchsize:
-                print('Collected %d / %d trajectories' % (batchsize, optimal_batchsize))
-            elif verbose:
-                print('Collected %d / %d trajectories' % (batchsize, min(max_batchsize, min_safe_batchsize)))
-            
-            #Adjust confidence before collecting more data for the same update
-            _conf /= 2
-            if batchsize >= max_batchsize:
-                break
-        
+        #Optimal batch size
+        eps = math.sqrt(var_bound / conf)
+        optimal_batchsize = math.ceil(((13 + 3 * math.sqrt(17)) * eps**2 / 
+                                       (2 * grad_infnorm**2)).item())
         if verbose:
-            print('Optimal batch size: %d' % optimal_batchsize if optimal_batchsize < float('inf') else -1)
-            print('Minimum safe batch size: %d' % min_safe_batchsize if min_safe_batchsize < float('inf') else -1)
-            if batchsize >= min_safe_batchsize and batchsize < optimal_batchsize:
-                print('Low sample regime')
+            print('Optimal batch size: %d' % optimal_batchsize)
 
         #Update long-term quantities
         tot_samples += batchsize
@@ -729,11 +723,13 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
             if pval / 2 < meta_conf and tscore > 0:
                 unsafe_updates += 1
                 if verbose:
-                    print('The previous update was unsafe! (p-value = %f)' % (pval / 2))
+                    print('The previous update was unsafe! (p-value = %f)' 
+                          % (pval / 2))
             old_rets = new_rets
             safety = 1 - unsafe_updates / updates
         
         #Log
+        log_row['Err'] = eps / math.sqrt(batchsize)
         log_row['Safety'] = safety
         log_row['Perf'] = performance(batch, disc)
         log_row['Info'] = mean_sum_info(batch).item()
@@ -750,29 +746,32 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Check if number of samples is sufficient to perform update
-        if batchsize < min_safe_batchsize:
+        if grad_infnorm < eps / math.sqrt(batchsize):
             updated = False
             if verbose:
-                print('Unsafe, skipping')
+                print('No update, need more samples')
+                
             #Log
             log_row['StepSize'] = 0.
             log_row['Time'] = time.time() - start
+            if verbose:
+                print(separator)
             logger.write_row(log_row, it)
-            
-            #Adjust confidence before collecting new data for the same update
-            _conf /= 2
+            if verbose:
+                print(separator)
             
             #Skip to next iteration (current trajectories are discarded)
             it += 1
             continue
         
         #Select step size
-        stepsize = ((grad_infnorm - eps)**2 / (2 * pen_coeff * (grad_infnorm + eps)**2)).item()
+        stepsize = (13 - 3 * math.sqrt(17)) / (4 * pen_coeff)
         log_row['StepSize'] = stepsize
                 
         #Update policy parameters
         new_params = params
-        new_params[coordinate] = params[coordinate] + stepsize * grad[coordinate]
+        new_params[coordinate] = (params[coordinate] 
+                                    + stepsize * grad[coordinate])
         policy.set_from_flat(new_params)
         updated = True
         updates += 1
@@ -783,7 +782,11 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
         
         #Next iteration
         log_row['Time'] = time.time() - start
+        if verbose:
+            print(separator)
         logger.write_row(log_row, it)
+        if verbose:
+            print(separator)
         it += 1
     
     #Save final parameters
@@ -792,3 +795,4 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
     
     #Cleanup
     logger.close()
+    

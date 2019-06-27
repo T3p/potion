@@ -158,6 +158,7 @@ def semisafepg(env, policy, horizon, *,
     tot_samples = 0
     optimal_batchsize = min_batchsize
     min_safe_batchsize = min_batchsize
+    _conf = conf
     _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
     old_lip_const = 0.
     dfn = policy.get_flat().shape[0]
@@ -189,9 +190,6 @@ def semisafepg(env, policy, horizon, *,
                            action_filter=action_filter, 
                            render=True)
     
-    
-        #Experience loop
-        _conf = conf
         target_batchsize = min_safe_batchsize if fast else optimal_batchsize
         #Collect trajectories according to target batch size
         batch = generate_batch(env, policy, horizon, 
@@ -304,6 +302,9 @@ def semisafepg(env, policy, horizon, *,
             #Skip to next iteration (current trajectories are discarded)
             it += 1
             continue
+        
+        #Reset confidence for next update
+        _conf = conf
         
         #Estimate (local) gradient Lipschitz constant with off-policy Power Method
         lip_const = power(policy, batch, grad, disc, 
@@ -486,6 +487,7 @@ def adabatch2(env, policy, horizon, pen_coeff, *,
     tot_samples = 0
     optimal_batchsize = min_batchsize
     min_safe_batchsize = min_batchsize
+    _conf = conf
     _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
     params = policy.get_flat()
     max_grad = torch.zeros_like(params) - float('inf')
@@ -517,11 +519,8 @@ def adabatch2(env, policy, horizon, pen_coeff, *,
                            action_filter=action_filter, 
                            render=True)
     
-    
-        #Experience loop
-        _conf = conf
-        target_batchsize = min_safe_batchsize if fast else optimal_batchsize
         #Collect trajectories according to target batch size
+        target_batchsize = min_safe_batchsize if fast else optimal_batchsize
         batch = generate_batch(env, policy, horizon, 
                                 episodes=max(min_batchsize, min(max_batchsize, target_batchsize)), 
                                 action_filter=action_filter,
@@ -651,6 +650,9 @@ def adabatch2(env, policy, horizon, pen_coeff, *,
             #Skip to next iteration (current trajectories are discarded)
             it += 1
             continue
+        
+        #Reset confidence for next update
+        _conf = conf
         
         #Select step size
         stepsize = ((grad_infnorm - eps / math.sqrt(batchsize))**2 \
