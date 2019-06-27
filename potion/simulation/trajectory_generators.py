@@ -45,7 +45,7 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             a = torch.tensor(a, dtype=torch.float).view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-            next_s, r, done, info = env.step(a)
+            next_s, r, done, info = env.step(a.numpy())
             if render:
                 try:
                     env.render()
@@ -89,7 +89,7 @@ def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=
             a = torch.tensor(a, dtype=torch.float).view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-            next_s, r, done, info = env.step(a)
+            next_s, r, done, info = env.step(a.numpy())
             
             states[t] = s
             actions[t] = a

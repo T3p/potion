@@ -6,7 +6,8 @@ Safe Policy Gradient (SPG)
 """
 
 from potion.simulation.trajectory_generators import generate_batch
-from potion.common.misc_utils import performance, avg_horizon, mean_sum_info, clip, seed_all_agent, returns
+from potion.common.misc_utils import (performance, avg_horizon, mean_sum_info, 
+                                      clip, seed_all_agent, returns)
 from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
 import scipy.stats as sts
@@ -46,9 +47,10 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
     lip_const: Lipschitz constant of the gradient (upper bound)
     var_bound: upper bound on the variance of the PG estimator
     conf: probability of failure
+    min_batchsize: minimum number of trajectories to estimate policy gradient
     max_batchsize: maximum number of trajectories to estimate policy gradient
-    iterations: number of policy updates
-    max_samples: maximum number of total trajectories
+    iterations: maximum number of learning iterations
+    max_samples: maximum number of total collected trajectories
     disc: discount factor
     action_filter: function to apply to the agent's action before feeding it to 
         the environment, not considered in gradient estimation. By default,
@@ -61,6 +63,7 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
     logger: for human-readable logs (standard output, csv, tensorboard...)
     shallow: whether to employ pre-computed score functions (only available for
         shallow policies)
+    meta_conf: confidence level of safe-update test (for evaluation only)
     seed: random seed (None for random behavior)
     test_batchsize: number of test trajectories used to evaluate the 
         corresponding deterministic policy at each iteration. If 0 or False, no 
@@ -75,7 +78,7 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
         sequential simulation is performed.
     render: how often (every x iterations) to render the agent's behavior
         on a sample trajectory. If False, no rendering happens
-    verbose: level of verbosity
+    verbose: level of verbosity on standard output
     """
     #Defaults
     if action_filter is None:
@@ -93,7 +96,6 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                    'Horizon': horizon,
                    'Discount': disc,
                    'Confidence': conf,
-                   'ConfidenceParam': conf,
                    'Seed': seed,
                    'MinBatchSize': min_batchsize,
                    'MaxBatchSize': max_batchsize,
@@ -127,7 +129,9 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
     safety = 1.
     optimal_batchsize = min_batchsize
     min_safe_batchsize = min_batchsize
-    _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
+    _conf = conf
+    _estimator = (reinforce_estimator if estimator=='reinforce' 
+                  else gpomdp_estimator)
     updated = False
     updates = 0
     unsafe_updates = 0
@@ -158,12 +162,11 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                            action_filter=action_filter, 
                            render=True)
     
-    
-        #Experience loop
-        _conf = conf
         #Collect trajectories according to previous optimal batch size
         batch = generate_batch(env, policy, horizon, 
-                                episodes=max(min_batchsize, min(max_batchsize, optimal_batchsize)), 
+                                episodes=max(min_batchsize, 
+                                             min(max_batchsize, 
+                                                 optimal_batchsize)), 
                                 action_filter=action_filter,
                                 n_jobs=parallel,
                                 key=info_key)
@@ -174,7 +177,8 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
             do = False
             #Collect more trajectories to match minimum safe batch size
             batch += generate_batch(env, policy, horizon, 
-                        episodes=min(max_batchsize, min_safe_batchsize) - batchsize, 
+                        episodes=(min(max_batchsize, min_safe_batchsize) 
+                                    - batchsize), 
                         action_filter=action_filter,
                         n_jobs=parallel,
                         key=info_key)
@@ -193,9 +197,11 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
             min_safe_batchsize = torch.ceil(var_bound / 
                                  (conf * torch.norm(grad)**2)).item()
             if verbose and optimal_batchsize < max_batchsize:
-                print('Collected %d / %d trajectories' % (batchsize, optimal_batchsize))
+                print('Collected %d / %d trajectories' % (batchsize, 
+                                                          optimal_batchsize))
             elif verbose:
-                print('Collected %d / %d trajectories' % (batchsize, min(max_batchsize, min_safe_batchsize)))
+                print('Collected %d / %d trajectories' % 
+                      (batchsize, min(max_batchsize, min_safe_batchsize)))
             
             #Adjust confidence before collecting more data for the same update
             _conf /= 2
@@ -203,10 +209,10 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                 break
         
         if verbose:
-            print('Optimal batch size: %d' % optimal_batchsize if optimal_batchsize < float('inf') else -1)
-            print('Minimum safe batch size: %d' % min_safe_batchsize if min_safe_batchsize < float('inf') else -1)
-            if batchsize >= min_safe_batchsize and batchsize < optimal_batchsize:
-                print('Low sample regime')
+            print('Optimal batch size: %d' % optimal_batchsize 
+                  if optimal_batchsize < float('inf') else -1)
+            print('Minimum safe batch size: %d' % min_safe_batchsize 
+                  if min_safe_batchsize < float('inf') else -1)
 
         #Update long-term quantities
         tot_samples += batchsize
@@ -220,7 +226,8 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
             if pval / 2 < meta_conf and tscore > 0:
                 unsafe_updates += 1
                 if verbose:
-                    print('The previous update was unsafe! (p-value = %f)' % (pval / 2))
+                    print('The previous update was unsafe! (p-value = %f)' 
+                          % (pval / 2))
             old_rets = new_rets
             safety = 1 - unsafe_updates / updates
         
@@ -244,7 +251,8 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
         if batchsize < min_safe_batchsize:
             updated = False
             if verbose:
-                print('Unsafe, skipping')
+                print('No update, would require more samples than allowed')
+            
             #Log
             log_row['StepSize'] = 0.
             log_row['Time'] = time.time() - start
@@ -257,8 +265,12 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
             it += 1
             continue
         
+        #Reset confidence for next update
+        _conf = conf
+        
         #Select step size
-        stepsize = 1. / lip_const * (1 - math.sqrt(var_bound) / (torch.norm(grad) * math.sqrt(batchsize * conf)).item())
+        stepsize = 1. / lip_const * (1 - math.sqrt(var_bound) 
+                    / (torch.norm(grad) * math.sqrt(batchsize * conf))).item()
         log_row['StepSize'] = stepsize
                 
         #Update policy parameters

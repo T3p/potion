@@ -160,6 +160,8 @@ def semisafepg(env, policy, horizon, *,
     min_safe_batchsize = min_batchsize
     _estimator = reinforce_estimator if estimator=='reinforce' else gpomdp_estimator
     old_lip_const = 0.
+    dfn = policy.get_flat().shape[0]
+    min_batchsize = max(min_batchsize, dfn + 1)
     
     #Learning loop
     while(it < iterations and tot_samples < max_samples):
@@ -222,7 +224,6 @@ def semisafepg(env, policy, horizon, *,
             grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
             grad_var = torch.sum(torch.diag(grad_cov)).item() #only for human-readable logs
             max_eigv = eigsh(grad_cov.numpy(), 1)[0][0]
-            dfn = grad.shape[0]
             quant = sts.f.ppf(1 - _conf, dfn, batchsize - dfn)
             eps = math.sqrt(max_eigv * dfn * quant)
             
@@ -230,10 +231,11 @@ def semisafepg(env, policy, horizon, *,
             optimal_batchsize = torch.ceil(4 * eps**2 / 
                                    (torch.norm(grad)**2) + dfn).item()
             min_safe_batchsize = torch.ceil(eps**2 / torch.norm(grad)**2 + dfn).item()
+            target_batchsize = min_safe_batchsize if fast else optimal_batchsize
             if verbose and optimal_batchsize < max_batchsize:
-                print('Collected %d / %d trajectories' % (batchsize, optimal_batchsize))
+                print('Collected %d / %d trajectories' % (batchsize, target_batchsize))
             elif verbose:
-                print('Collected %d / %d trajectories' % (batchsize, min(max_batchsize, min_safe_batchsize)))
+                print('Collected %d / %d trajectories' % (batchsize, min(max_batchsize, target_batchsize)))
             
             #Adjust confidence before collecting more data for the same update
             _conf /= 2

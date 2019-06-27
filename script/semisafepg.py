@@ -14,7 +14,7 @@ from potion.algorithms.semisafe import semisafepg
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
-
+import roboschool
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -54,7 +54,7 @@ args = parser.parse_args()
 
 # Prepare
 if args.env.startswith('rllab'):
-    env_rllab_class = rllab_env_from_name(args.env)
+    env_rllab_class = rllab_env_from_name(args.env[6:])
     env_rllab = env_rllab_class()
     env = Rllab2GymWrapper(env_rllab)
 else:
