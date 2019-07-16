@@ -25,11 +25,11 @@ parser.add_argument('--baseline', help='baseline for policy gradient estimator (
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='lqr1d-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
-parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, default=32)
+parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, default=10000)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, default=1e6)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--conf', help='Confidence parameter', type=float, default=0.05)
+parser.add_argument('--conf', help='Confidence parameter', type=float, default=0.2)
 parser.add_argument('--forget', help='Forgetting parameter', type=float, default=0.1)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=0.1)
 parser.add_argument("--render", help="Render an episode",
