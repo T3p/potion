@@ -32,8 +32,8 @@ class LQG1D(gym.Env):
         self.gamma = 0.9
         self.sigma_controller = 1.
         self.discrete_reward = discrete_reward
-        self.max_pos = 4.0
-        self.max_action = 4.0
+        self.max_pos = 2.0
+        self.max_action = 2.0
         self.sigma_noise = 0
         self.A = np.array([1]).reshape((1, 1))
         self.B = np.array([1]).reshape((1, 1))

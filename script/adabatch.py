@@ -15,7 +15,8 @@ import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
 from potion.meta.smoothing_constants import pirotta_coeff, gauss_smooth_const
-from potion.meta.variance_bounds import gpomdp_var_bound, reinforce_var_bound
+from potion.meta.variance_bounds import (gpomdp_var_bound, reinforce_var_bound, 
+                                            gauss_gradient_range)
 
 
 # Command line arguments
@@ -25,6 +26,8 @@ parser.add_argument('--name', help='Experiment name', type=str,
                     default='AdaBatch')
 parser.add_argument('--estimator', help='PG estimator (reinforce/gpomdp)', 
                     type=str, default='gpomdp')
+parser.add_argument('--bound', help='Statistical inequality', 
+                    type=str, default='chebyshev')
 parser.add_argument('--baseline', help='control variate (avg/peters/zero)', 
                     type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
@@ -34,7 +37,7 @@ parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
                     default=1e6)
 parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, 
-                    default=100)
+                    default=32)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=10000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
@@ -42,11 +45,13 @@ parser.add_argument('--conf', help='Confidence', type=float, default=0.2)
 parser.add_argument('--std_init', help='Initial policy std', type=float,
                     default=1.)
 parser.add_argument('--max_feat', help='Maximum state feature', type=float,
-                    default=4.)
+                    default=2.)
 parser.add_argument('--max_rew', help='Maximum reward', type=float,
-                    default=14.5)
+                    default=4)
 parser.add_argument('--action_vol', help='Volume of action space', type=float,
-                    default=8.)
+                    default=4.)
+parser.add_argument('--max_action', help='Radius of action space', 
+                    type=float, default=2.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -59,8 +64,12 @@ parser.add_argument("--test", help="Test on deterministic policy",
                     action="store_true")
 parser.add_argument("--no-test", help="Online learning only",
                     action="store_false")
-parser.set_defaults(render=False, temp=False, learnstd=False, test=False) 
-
+parser.add_argument("--emp", help="Use empirical range",
+                    action="store_true")
+parser.add_argument("--no-emp", help="Use theoretical range",
+                    action="store_false")
+parser.set_defaults(render=False, temp=False, learnstd=False, test=False, 
+                        emp=False) 
 args = parser.parse_args()
 
 # Prepare
@@ -104,11 +113,19 @@ elif args.estimator == 'gpomdp':
 else:
     raise NotImplementedError
 
+if args.emp:
+    grad_range = None
+else:
+    grad_range = gauss_gradient_range(args.max_rew, args.max_feat, args.disc, 
+                                  args.horizon, args.max_action, 
+                                  args.std_init, estimator=args.estimator)
 
 # Run
 adabatch(env, policy,
             pen_coeff = pen_coeff,
+            bound = args.bound,
             var_bound = var_bound,
+            grad_range = grad_range,
             horizon = args.horizon,
             min_batchsize = args.min_batchsize,
             max_batchsize = args.max_batchsize,

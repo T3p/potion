@@ -172,10 +172,10 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                                 key=info_key)
         batchsize = len(batch)
         
+        #Collect more trajectories to match minimum safe batch size
         do = True
         while do or batchsize < min_safe_batchsize:
             do = False
-            #Collect more trajectories to match minimum safe batch size
             batch += generate_batch(env, policy, horizon, 
                         episodes=(min(max_batchsize, min_safe_batchsize) 
                                     - batchsize), 
@@ -204,9 +204,9 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                       (batchsize, min(max_batchsize, min_safe_batchsize)))
             
             #Adjust confidence before collecting more data for the same update
-            _conf /= 2
             if batchsize >= max_batchsize:
                 break
+            _conf /= 2
         
         if verbose:
             print('Optimal batch size: %d' % optimal_batchsize 
@@ -448,7 +448,7 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
                            action_filter=action_filter, 
                            render=True)
     
-        #Collect trajectories according to batch size
+        #Collect trajectories according to fixed batch size
         batch = generate_batch(env, policy, horizon, 
                                 episodes=batchsize, 
                                 action_filter=action_filter,
@@ -500,8 +500,9 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Check if number of samples is sufficient to perform update
-        if torch.norm(lower) == 0 and verbose:
-                updated = False
+        if torch.norm(lower) == 0:
+            updated = False
+            if verbose:
                 print('No update, would require more samples')
         
         #Select step size
@@ -537,7 +538,10 @@ def adastep(env, policy, horizon, pen_coeff, var_bound, *,
     logger.close()
 
 
-def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
+def adabatch(env, policy, horizon, pen_coeff, *,
+                    bound = 'chebyshev',
+                    var_bound = None,
+                    grad_range = None,
                     conf = 0.2,
                     min_batchsize = 32,
                     max_batchsize = 10000,
@@ -568,7 +572,12 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
     policy: the one to improve
     horizon: maximum task horizon
     pen_coeff: penalty coefficient for policy update
-    var_bound: upper bound on the variance of the PG estimator
+    bound: statistical inequality used to determine optimal batchsize 
+        (chebyshev/student/hoeffding/bernstein)
+    var_bound: upper bound on the variance of the PG estimator. Must not be 
+        None if Chebyshev's bound is employed
+    grad_range: theoretical range of gradient estimate. If none, it is 
+        estimated from data (in a biased way)
     conf: probability of failure
     min_batchsize: minimum number of trajectories to estimate policy gradient
     max_batchsize: maximum number of trajectories to estimate policy gradient
@@ -606,6 +615,9 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
     #Defaults
     if action_filter is None:
         action_filter = clip(env)
+    if bound == 'chebyshev' and var_bound is None:
+        raise NotImplementedError
+    empirical_range = (grad_range is None)
     
     #Seed agent
     if seed is not None:
@@ -624,7 +636,8 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
                    'MinBatchSize': min_batchsize,
                    'MaxBatchSize': max_batchsize,
                    'PenalizationCoefficient': pen_coeff,
-                   'VarianceBound': var_bound
+                   'VarianceBound': var_bound,
+                   'Bound': bound
                    }
     logger.write_info({**algo_info, **policy.info()})
     log_keys = ['Perf', 
@@ -637,8 +650,11 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
                 'BatchSize',
                 'Info',
                 'TotSamples',
+                'GradVar',
+                'GradRange',
                 'Safety',
-                'Err']
+                'Err',
+                'GradInfNorm']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
@@ -658,6 +674,9 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
     updated = False
     updates = 0
     unsafe_updates = 0
+    params = policy.get_flat()
+    max_grad = torch.zeros_like(params) - float('inf')
+    min_grad = torch.zeros_like(params) + float('inf')
     
     #Learning loop
     while(it < iterations and tot_samples < max_samples):
@@ -704,10 +723,65 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
         grad_infnorm = torch.max(torch.abs(grad))
         coordinate = torch.min(torch.argmax(torch.abs(grad))).item()
         
-        #Optimal batch size
-        eps = math.sqrt(var_bound / conf)
-        optimal_batchsize = math.ceil(((13 + 3 * math.sqrt(17)) * eps**2 / 
-                                       (2 * grad_infnorm**2)).item())
+        #Compute statistics for estimation error
+        if bound in ['bernstein', 'student']:
+            grad_var = torch.var(grad_samples, 0, unbiased = True)
+            grad_var = torch.max(grad_var).item()
+            log_row['GradVar'] = grad_var
+        else:
+            log_row['GradVar'] = var_bound
+        if bound in ['bernstein', 'hoeffding'] and empirical_range:
+            max_grad = torch.max(grad, max_grad)
+            min_grad = torch.min(min_grad, grad)
+            grad_range = torch.max(max_grad - min_grad).item()
+            if grad_range <= 0:
+                grad_range = torch.max(2 * abs(max_grad)).item()
+        log_row['GradRange'] = grad_range
+          
+        #Compute estimation error
+        if bound == 'chebyshev':
+            eps = math.sqrt(var_bound / conf)
+        elif bound == 'student':
+            quant = sts.t.ppf(1 - conf, batchsize) 
+            eps = quant * math.sqrt(grad_var)
+        elif bound == 'hoeffding':
+            eps = grad_range * math.sqrt(math.log(2. / conf) / 2)
+        elif bound == 'bernstein':
+            eps = math.sqrt(2 * grad_var * math.log(3. / conf))
+            eps2 = 3 * grad_range * math.log(3. / conf)
+        
+        #Compute optimal batch size
+        if bound in ['chebyshev', 'student', 'hoeffding']:
+            optimal_batchsize = math.ceil(((13 + 3 * math.sqrt(17)) * eps**2 / 
+                                           (2 * grad_infnorm**2)).item())
+            min_safe_batchsize = math.ceil((eps**2 / grad_infnorm**2).item())
+        else:
+            min_safe_batchsize = math.ceil(((eps + math.sqrt(eps**2 
+                                                            + 4 * eps2 
+                                                            * grad_infnorm)) 
+                                            / (2 * grad_infnorm))**2)
+            optimal_batchsize = min_safe_batchsize
+            _stepsize = ((grad_infnorm - eps / math.sqrt(optimal_batchsize)
+                            - eps2 / optimal_batchsize)**2
+                         / (2 * pen_coeff * (grad_infnorm + eps 
+                            / math.sqrt(optimal_batchsize)
+                            + eps2 / optimal_batchsize)**2)).item()
+            ups = (grad_infnorm**2  * _stepsize * (1 - pen_coeff * _stepsize)
+                    / optimal_batchsize)
+            old_ups = -float('inf')
+            while ups > old_ups:
+                optimal_batchsize += 1
+                old_ups = ups
+                _stepsize = ((grad_infnorm - eps / math.sqrt(optimal_batchsize)
+                            - eps2 / optimal_batchsize)**2
+                         / (2 * pen_coeff * (grad_infnorm + eps 
+                            / math.sqrt(optimal_batchsize)
+                            + eps2 / optimal_batchsize)**2)).item()
+                ups = (grad_infnorm**2  * _stepsize 
+                       * (1 - pen_coeff * _stepsize)
+                       / optimal_batchsize)
+            optimal_batchsize -= 1
+        
         if verbose:
             print('Optimal batch size: %d' % optimal_batchsize)
 
@@ -729,13 +803,14 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
             safety = 1 - unsafe_updates / updates
         
         #Log
-        log_row['Err'] = eps / math.sqrt(batchsize)
+        log_row['Err'] = eps
         log_row['Safety'] = safety
         log_row['Perf'] = performance(batch, disc)
         log_row['Info'] = mean_sum_info(batch).item()
         log_row['UPerf'] = performance(batch, disc=1.)
         log_row['AvgHorizon'] = avg_horizon(batch)
         log_row['GradNorm'] = torch.norm(grad).item()
+        log_row['GradInfNorm'] = grad_infnorm.item()
         log_row['BatchSize'] = batchsize
         log_row['TotSamples'] = tot_samples
         if log_params:
@@ -765,7 +840,14 @@ def adabatch(env, policy, horizon, pen_coeff, var_bound, *,
             continue
         
         #Select step size
-        stepsize = (13 - 3 * math.sqrt(17)) / (4 * pen_coeff)
+        if bound == 'bernstein':
+            stepsize = ((grad_infnorm - eps / math.sqrt(batchsize)
+                            - eps2 / batchsize)**2
+                         / (2 * pen_coeff * (grad_infnorm + eps 
+                            / math.sqrt(batchsize)
+                            + eps2 / batchsize)**2)).item()
+        else:
+            stepsize = (13 - 3 * math.sqrt(17)) / (4 * pen_coeff)
         log_row['StepSize'] = stepsize
                 
         #Update policy parameters
