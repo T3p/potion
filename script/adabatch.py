@@ -32,7 +32,7 @@ parser.add_argument('--baseline', help='control variate (avg/peters/zero)',
                     type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, 
-                    default='lqg1d-v0')
+                    default='LQG1D-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
                     default=3e7)
