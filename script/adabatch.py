@@ -41,13 +41,13 @@ parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int,
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=10000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--conf', help='Confidence', type=float, default=0.2)
+parser.add_argument('--conf', help='Confidence', type=float, default=0.25)
 parser.add_argument('--std_init', help='Initial policy std', type=float,
                     default=1.)
 parser.add_argument('--max_feat', help='Maximum state feature', type=float,
                     default=2.)
 parser.add_argument('--max_rew', help='Maximum reward', type=float,
-                    default=7.2)
+                    default=4.)
 parser.add_argument('--action_vol', help='Volume of action space', type=float,
                     default=4.)
 parser.add_argument('--max_action', help='Radius of action space', 
