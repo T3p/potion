@@ -12,10 +12,10 @@ import screenutils as su
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--command', help='Command', type=str, default='echo hello')
 parser.add_argument('--name', help='Name', type=str, default='hello')
-parser.add_argument('--nseeds', help='Number of seeds', type=int, default=5)
+parser.add_argument('--nseeds', help='Number of seeds', type=int, default=10)
 args = parser.parse_args()
 
-seeds = [198, 833, 693, 826, 354]
+seeds = [198, 833, 693, 826, 354, 963, 263, 176, 140, 154]
 
 for seed in seeds[:args.nseeds]:    
     screen = su.Screen(args.name + '_' + str(seed), create=True)

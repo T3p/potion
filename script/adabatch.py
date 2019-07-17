@@ -35,7 +35,7 @@ parser.add_argument('--env', help='Gym environment id', type=str,
                     default='lqr1d-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
-                    default=1e7)
+                    default=3e7)
 parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, 
                     default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
