@@ -16,12 +16,12 @@ References
 class lqr1d(gym.Env):
 
     def __init__(self, discrete_reward=False):
-        self.max_pos = 4.
+        self.max_pos = 2.
         self.max_action = 1.
         self.A = 1.
         self.B = 1.
-        self.Q = 0.9
-        self.R = 0.1
+        self.Q = 0.5
+        self.R = 0.5
         
         # gym attributes
         self.viewer = None
@@ -32,8 +32,8 @@ class lqr1d(gym.Env):
                                        high=self.max_pos,
                                        shape=(1,))
 
-        #self.initial_states = np.linspace(-self.max_pos, self.max_pos, 100)
-        self.initial_states = np.array([-0.9 * self.max_pos, 0.9 * self.max_pos])
+        self.initial_states = np.linspace(-self.max_pos, self.max_pos, 100)
+        #self.initial_states = np.array([-0.9 * self.max_pos, 0.9 * self.max_pos])
 
         # initialize state
         self.seed()
