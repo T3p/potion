@@ -18,7 +18,7 @@ def power(policy, batch, grad, disc, step=0.01, decay=0.1, tol=0.1, max_it=20, m
     attempts = 0
     psi = torch.rand_like(grad) * mask
     #must not be orthogonal to gradient!
-    while(abs(psi.dot(grad)) < 0.1):
+    while(abs(psi.dot(grad)) < 1e-12):
         psi = torch.rand_like(grad) * mask
     psi /= torch.norm(psi) #normalize
     old_lip_const = torch.norm(psi).item()
