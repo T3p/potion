@@ -45,7 +45,7 @@ for param in params:
     batch = generate_batch(env, pol, horizon, batchsize)
     grad = gpomdp_estimator(batch, disc, pol, shallow=True)
     
-    estimated.append(power(pol, batch, grad, disc,alpha=0.01, gamma=0.1, clip=0.2))
+    estimated.append(power(pol, batch, grad, disc, step=0.01, max_it=100, clip=0.1))
     real.append(abs(env._hess(param, std, disc, horizon=horizon)))
     #bound.append(gauss_lip_const(max_feat, max_rew, disc, std))
     

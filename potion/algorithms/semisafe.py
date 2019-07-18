@@ -32,11 +32,10 @@ def semisafepg(env, policy, horizon, *,
                     logger = Logger(name='SSPG'),
                     shallow = True,
                     pow_step = 0.01,
-                    pow_decay = 1,
+                    pow_decay = 0.99,
                     pow_it = 100,
-                    pow_epochs = 5,
-                    pow_tol = 0.2,
-                    pow_clip = 0.2,
+                    pow_tol = 0.05,
+                    pow_clip = 0.1,
                     fast = False,
                     meta_conf = 0.05,
                     seed = None,
@@ -78,7 +77,6 @@ def semisafepg(env, policy, horizon, *,
     pow_step: step size of the power method
     pow_decay: initial decay parameter of the power method
     pow_it: maximum number of iterations (per epoch) of the power method
-    pow_epochs: maximum number of epochs of the power method
     pow_tol: relative-error tolerance of the power method
     pow_clip: importance-weight clipping parameter for the power method 
         (default 0.2)
@@ -125,7 +123,6 @@ def semisafepg(env, policy, horizon, *,
                    'PowerStep': pow_step,
                    'PowerDecay': pow_decay,
                    'PowerIters': pow_it,
-                   'PowerEpochs': pow_epochs,
                    'PowerTolerance': pow_tol,
                    'Fast': fast
                    }
@@ -330,10 +327,9 @@ def semisafepg(env, policy, horizon, *,
         #Estimate gradient Lipschitz constant with off-policy Power Method
         lip_const = power(policy, batch, grad, disc, 
               step=pow_step, 
-              decay=pow_decay,
+              decay_rate=pow_decay,
               tol=pow_tol, 
               max_it=pow_it, 
-              max_ep=pow_epochs, 
               estimator=_estimator, 
               baseline=baseline, 
               shallow=shallow, 
