@@ -14,11 +14,12 @@ import os
 import glob
 import warnings
 
-def plot_all(dfs, key='Perf', name=''):
+def plot_all(dfs, key='Perf', name='', xkey=None):
     lines = []
     for df in dfs:
         value = df[key]
-        line, = plt.plot(range(len(value)), value, label=name)
+        xx = range(len(value)) if xkey is None else df[xkey]
+        line, = plt.plot(xx, value, label=name)
         lines.append(line)
     plt.xlabel('Iterations')
     plt.ylabel(key)
@@ -28,16 +29,17 @@ def moments(dfs):
     cdf = pd.concat(dfs, sort=True).groupby(level=0)
     return cdf.mean(), cdf.std().fillna(0)
     
-def plot_ci(dfs, key='Perf', conf=0.95, name=''):
+def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None):
     n_runs = len(dfs)
     mean_df, std_df = moments(dfs)
     mean = mean_df[key]
     std = std_df[key]
-    line, = plt.plot(range(len(mean)), mean, label=name)
+    xx = range(len(mean)) if xkey is None else mean_df[xkey]
+    line, = plt.plot(xx, mean, label=name)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="invalid value encountered in multiply")
         interval = sts.t.interval(conf, n_runs-1,loc=mean,scale=std/math.sqrt(n_runs))
-    plt.fill_between(range(len(mean)), interval[0], interval[1], alpha=0.3)
+    plt.fill_between(xx, interval[0], interval[1], alpha=0.3)
     print('%s: %f +- %f' % (name, np.mean(mean), np.mean(std)/n_runs))
     return line
 
@@ -66,7 +68,7 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500):
 def load_all(name, nrows=200):
     return [pd.read_csv(file, index_col=False, nrows=nrows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
 
-def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, nrows=200):
+def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, nrows=200, xkey=None):
     for key in keys:
         plt.figure()
         if ymin is not None and ymax is not None:
@@ -77,8 +79,8 @@ def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, y
         for name in names:
             dfs = load_all(env + '_' + name, nrows=nrows)
             if separate:
-                handles+=(plot_all(dfs, key, name))
+                handles+=(plot_all(dfs, key, name, xkey=xkey))
             else:
-                handles.append(plot_ci(dfs, key, conf, name))
+                handles.append(plot_ci(dfs, key, conf, name, xkey=xkey))
         plt.legend(handles=handles)
         plt.show()

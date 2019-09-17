@@ -15,6 +15,21 @@ register(
 )
 
 register(
+    id='LQ-v0',
+    entry_point='potion.envs.lq:LQ'
+)
+
+register(
+    id='Drone-v0',
+    entry_point='potion.envs.drone:Drone'
+)
+
+register(
+    id='DroneCrash-v0',
+    entry_point='potion.envs.drone_crash:DroneCrash'
+)
+
+register(
     id='MiniGolf-v0',
     entry_point='potion.envs.minigolf:MiniGolf'
 )
@@ -82,4 +97,9 @@ register(
 register(
     id='Robot-v0',
     entry_point='potion.envs.robot:Robot'
+)
+
+register(
+    id='Corridor-v0',
+    entry_point='potion.envs.corridor:Corridor'
 )

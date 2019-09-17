@@ -14,6 +14,9 @@ from potion.algorithms.semisafe import semisafepg
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
+from gym.spaces.discrete import Discrete
+from potion.actors.discrete_policies import ShallowGibbsPolicy
+
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -28,7 +31,7 @@ parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, de
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, default=50000)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, default=3e7)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--conf', help='Confidence parameter', type=float, default=0.95)
+parser.add_argument('--conf', help='Confidence parameter', type=float, default=0.2)
 parser.add_argument('--forget', help='Forgetting parameter', type=float, default=0.1)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
 parser.add_argument("--render", help="Render an episode",
@@ -60,11 +63,15 @@ else:
     env = gym.make(args.env)
 env.seed(args.seed)
 
-m = sum(env.observation_space.shape)
-d = sum(env.action_space.shape)
-mu_init = torch.zeros(m*d)
-logstd_init = torch.log(torch.zeros(d) + args.std_init)
-policy = ShallowGaussianPolicy(m, d, 
+if type(env.action_space) is Discrete:
+    policy = ShallowGibbsPolicy(env, 
+                                temp=1.)
+else:
+    m = sum(env.observation_space.shape)
+    d = sum(env.action_space.shape)
+    mu_init = torch.zeros(m*d)
+    logstd_init = torch.log(torch.zeros(d) + args.sigmainit)
+    policy = ShallowGaussianPolicy(m, d, 
                                mu_init=mu_init, 
                                logstd_init=logstd_init, 
                                learn_std=args.learnstd)

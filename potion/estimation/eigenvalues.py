@@ -32,11 +32,13 @@ def power(policy, batch, grad, disc, step=0.01, tol=0.1, max_it=100, decay_rate=
                                   result='samples')
         policy.set_from_flat(params)
         iws = importance_weights(batch, policy, params_2)
-        grad_2 = torch.mean(grad_2_samples * iws.unsqueeze(1), 0)
+        _iws = iws.unsqueeze(1) if len(iws.shape) < 2 else iws
+        grad_2 = torch.mean(grad_2_samples * _iws, 0)
         psi = (1 - decay) * psi + decay / step * (grad_2 - grad) * mask
         if clip is not None:
             clipped_iws = torch.clamp(iws, 1-clip, 1+clip)
-            clipped_grad_2 = torch.mean(grad_2_samples * clipped_iws.unsqueeze(1), 0)
+            _clipped_iws = clipped_iws.unsqueeze(1) if len(clipped_iws.shape) < 2 else clipped_iws
+            clipped_grad_2 = torch.mean(grad_2_samples * _clipped_iws, 0)
             clipped_psi = (1 - decay) * psi + decay / step * (clipped_grad_2 - grad) * mask
             if torch.norm(clipped_psi) > torch.norm(psi):
                 psi = clipped_psi

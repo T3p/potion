@@ -105,7 +105,7 @@ class ShallowGaussianPolicy(ContinuousPolicy):
             self.logstd.data = torch.tensor(val)
     
     def exploration(self):
-        return torch.exp(self.logstd).data
+        return torch.exp(torch.sum(self.logstd)).data
             
     def loc_score(self, s, a):
         sigma = torch.exp(self.logstd)

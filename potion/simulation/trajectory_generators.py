@@ -11,6 +11,7 @@ import numpy as np
 from joblib import Parallel, delayed
 from potion.common.misc_utils import seed_all_agent
 import random
+import math
 
 def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes=float('inf'),
                                  action_filter=None, render=False, deterministic=False, key=None):
@@ -45,7 +46,13 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             a = torch.tensor(a, dtype=torch.float).view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-            next_s, r, done, info = env.step(a.numpy())
+            if len(a.shape) <= 1:
+                a = a.item()
+                if a - math.floor(a) == 0:
+                    a = int(a)
+            else:
+                a = a.numpy()
+            next_s, r, done, info = env.step(a)
             if render:
                 try:
                     env.render()

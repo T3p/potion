@@ -13,11 +13,30 @@ def one_hot_fun(n_s, n_a):
     def one_hot(s, a):
         s = torch.clamp(torch.tensor(s, dtype=torch.int64), 0, n_s - 1)
         a = torch.clamp(torch.tensor(a, dtype=torch.int64), 0, n_a - 1)
-        assert s.shape == a.shape
-        feat = torch.zeros(s.shape + (n_s * n_a,))
-        indexes = (s * n_a + a)
+        assert s.shape[:-1] == a.shape
+        feat = torch.zeros(s.shape[:-1] + (n_s * n_a,))
+        indexes = (s * n_a + a.unsqueeze(-1))
         indexes = tu.complete_in(indexes, len(feat.shape))
         feat.scatter_(-1, indexes, 1)
         return feat
     
     return one_hot
+
+def stack_fun(n_a):
+    def stack(s, a):
+        a = torch.clamp(torch.tensor(a, dtype=torch.int64), 0, n_a - 1)
+        s_dim = s.shape[-1]
+        assert s.shape[:-1] == a.squeeze().shape
+        
+        s = s.unsqueeze(-1)
+        s = s.repeat((1,)*(len(s.shape) - 1) + (n_a,))
+        
+        indexes = tu.complete_in(a, s.dim())
+        indexes = indexes.repeat((1,)*(len(indexes.shape)-2) + (s_dim,) + (1,))
+        mask = torch.zeros_like(s)
+        mask.scatter_(-1, indexes, 1)
+        feat = s * mask
+        feat = feat.view(feat.shape[:-2] + (feat.shape[-2] * feat.shape[-1],))
+        return feat
+    
+    return stack

@@ -39,8 +39,8 @@ class MiniGolf(gym.Env):
 
         # gym attributes
         self.viewer = None
-        low = np.array([self.min_pos])
-        high = np.array([self.max_pos])
+        low = np.array([1., self.min_pos, 0., self.min_pos**3, 0.])
+        high = np.array([1., self.max_pos, self.max_pos**2, self.max_pos**3, self.max_pos**4])
         self.action_space = spaces.Box(low=self.min_action,
                                        high=self.max_action,
                                        shape=(1,))
@@ -100,7 +100,7 @@ class MiniGolf(gym.Env):
         return self.get_state()
 
     def get_state(self):
-        return np.array(self.state)
+        return np.array([1., self.state, self.state**2, self.state**3, self.state**4])
 
     def get_true_state(self):
         """For testing purposes"""
@@ -303,8 +303,10 @@ class ComplexMiniGolf(gym.Env):
 
         # gym attributes
         self.viewer = None
+        ###!
         low = np.array([self.min_pos])
         high = np.array([self.max_pos])
+        ###
         self.action_space = spaces.Box(low=self.min_action,
                                        high=self.max_action,
                                        shape=(1,))
@@ -364,7 +366,9 @@ class ComplexMiniGolf(gym.Env):
         return self.get_state()
 
     def get_state(self):
-        return np.array(self.state)
+        ###!
+        return np.array([1., self.state, self.state**2, self.state**3, self.state**4])
+        ###
 
     def get_true_state(self):
         """For testing purposes"""

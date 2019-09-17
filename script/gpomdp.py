@@ -9,12 +9,13 @@ import torch
 import gym
 import potion.envs
 from potion.actors.continuous_policies import ShallowGaussianPolicy
+from potion.actors.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
 from potion.algorithms.reinforce import reinforce
 import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
-
+from gym.spaces.discrete import Discrete
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -24,7 +25,7 @@ parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gp
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=1000)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=500)
 parser.add_argument('--batchsize', help='Initial batch size', type=int, default=500)
 parser.add_argument('--iterations', help='Iterations', type=int, default=200)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
@@ -56,11 +57,15 @@ args = parser.parse_args()
 env = gym.make(args.env)
 env.seed(args.seed)
 
-m = sum(env.observation_space.shape)
-d = sum(env.action_space.shape)
-mu_init = torch.zeros(m*d)
-logstd_init = torch.log(torch.zeros(d) + args.sigmainit)
-policy = ShallowGaussianPolicy(m, d, 
+if type(env.action_space) is Discrete:
+    policy = ShallowGibbsPolicy(env, 
+                                temp=1.)
+else:
+    m = sum(env.observation_space.shape)
+    d = sum(env.action_space.shape)
+    mu_init = torch.zeros(m*d)
+    logstd_init = torch.log(torch.zeros(d) + args.sigmainit)
+    policy = ShallowGaussianPolicy(m, d, 
                                mu_init=mu_init, 
                                logstd_init=logstd_init, 
                                learn_std=args.learnstd)

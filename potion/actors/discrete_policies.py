@@ -11,7 +11,9 @@ import potion.common.torch_utils as tu
 from potion.common.mappings import LinearMapping
 from random import randint
 from torch.distributions.categorical import Categorical
-from potion.actors.feature_functions import one_hot_fun
+from potion.actors.feature_functions import one_hot_fun, stack_fun
+from gym.spaces.discrete import Discrete
+from gym.spaces.box import Box
 
 class DiscretePolicy(tu.FlatModule):
     """Alias"""
@@ -41,13 +43,21 @@ class ShallowGibbsPolicy(DiscretePolicy):
     linear mean \mu_{\theta}(s, a)
     Fixed temperature \tau
     """
-    def __init__(self, n_states, n_actions, feature_fun=None, squash_fun=None,
+    def __init__(self, env, feature_fun=None, squash_fun=None,
                  pref_init=None, temp=1.):
         super(ShallowGibbsPolicy, self).__init__()
-        self.n_states = n_states
-        self.n_actions = n_actions
-        self.feat = feature_fun if feature_fun is not None else one_hot_fun(n_states, n_actions)
-        input_dim = self.feat(0, 0).shape[0]
+        if type(env.action_space) == Discrete:
+            self.n_actions = env.action_space.n
+        else:
+            raise NotImplementedError
+        if type(env.observation_space) == Discrete:
+            self.n_states = env.observation_space.n
+            self.feat = feature_fun if feature_fun is not None else one_hot_fun(self.n_states, self.n_actions)
+            input_dim = self.feat(0, 0).shape[0]
+        elif type(env.observation_space) == Box:
+            self.n_states = sum(env.observation_space.shape)
+            self.feat = feature_fun if feature_fun is not None else stack_fun(self.n_actions)
+            input_dim = self.n_states * self.n_actions
         self.squash_fun = squash_fun
         self.temp = temp
         self.pref_init = pref_init
@@ -58,17 +68,16 @@ class ShallowGibbsPolicy(DiscretePolicy):
             self.pref.set_from_flat(pref_init)
 
     def log_pdf(self, s, a):
-        s = torch.clamp(torch.tensor(s), 0, self.n_states - 1)
-        s = tu.complete_in(s, 1)
-        a = torch.clamp(torch.tensor(a), 0, self.n_actions - 1)
         a = tu.complete_in(a, 1)
-        actions = torch.arange(0, self.n_actions).repeat(s.shape + (1,)) #|s| x n_a        
-        states = s.repeat((self.n_actions,) + (1,)*len(s.shape)) #|s| x n_a
-        states = states.view(actions.shape)
+        actions = torch.arange(0, self.n_actions) #|s| x n_a
+        actions = tu.complete_in(actions, len(s.shape))
+        actions = actions.repeat((1,) + s.shape[:-1])        
+        states = tu.complete_out(s, 1 + len(s.shape))
+        states = states.repeat((self.n_actions,) + (1,)*len(s.shape)) #|s| x n_a
         prefs = self.pref(self.feat(states, actions)).squeeze(-1) #|s| x n_a
-        stab = torch.max(prefs, -1)[0]
-        prefs -= stab.unsqueeze(-1)
-        norm = torch.log(torch.sum(torch.exp(prefs / self.temp), -1)) #|s|
+        stab = torch.max(prefs, 0)[0]
+        prefs -= stab.unsqueeze(0)
+        norm = torch.log(torch.sum(torch.exp(prefs / self.temp), 0)) #|s|
         return 1. / self.temp * (self.pref(self.feat(s,a)).squeeze(-1) - stab) - norm #|s|
     
     def forward(self, s, a):
@@ -76,17 +85,14 @@ class ShallowGibbsPolicy(DiscretePolicy):
     
     def act(self, s, deterministic=False):
         with torch.no_grad():
-            s = torch.clamp(torch.tensor(s), 0, self.n_states - 1)
-            s = tu.complete_in(s, 1)
-            actions = torch.arange(0, self.n_actions).repeat(s.shape + (1,)) #|s| x n_a
-            states = s.repeat(self.n_actions, 1) #|s| x n_a
-            states = states.view(actions.shape)
+            states = tu.complete_out(s, 2)
+            actions = torch.arange(0, self.n_actions)
+            states = states.repeat((self.n_actions, 1)) # #s x n_a
             probs = self(states, actions) #|s| x n_a
             if deterministic:
                 return torch.max(probs, -1)[1]
      
-            distr = Categorical(probs)
-            a = distr.sample()
+            a = Categorical(probs).sample()
         
             if self.squash_fun is not None:
                 a = self.squash_fun(a)
@@ -94,20 +100,17 @@ class ShallowGibbsPolicy(DiscretePolicy):
      
     def score(self, s, a):
         with torch.no_grad():
-            s = torch.clamp(torch.tensor(s), 0, self.n_states - 1)
-            s = tu.complete_in(s, 1)
-            a = torch.clamp(torch.tensor(a), 0, self.n_actions - 1)
-            a = tu.complete_in(a, 1)
-            _s = s.view(-1)
-            _a = a.view(-1)
-            
-            actions = torch.arange(0, self.n_actions).repeat(_s.shape + (1,)) #|s| x n_a
-            states = _s.repeat(self.n_actions, 1) #|s| x n_a
-            states = states.view(actions.shape)
+            actions = torch.arange(0, self.n_actions) #|s| x n_a
+            actions = tu.complete_in(actions, len(s.shape))
+            actions = actions.repeat((1,) + s.shape[:-1])   #|s| x n_a
+            states = tu.complete_out(s, 1 + len(s.shape)) #|s| x n_a
+            states = states.repeat((self.n_actions,) + (1,)*len(s.shape))
             probs = self(states, actions) #|s| x n_a
-            expect = torch.sum(self.feat(states, actions) * probs.unsqueeze(-1), -2)
-            _res =  1. / self.temp * (self.feat(_s, _a) - expect)
-            return _res.view(s.shape[:-1] + (self.n_params,))
+            expect = torch.sum(self.feat(states, actions) * probs.unsqueeze(-1), 0)
+            return  1. / self.temp * (self.feat(s, a.squeeze(-1)) - expect)
+            
+    def exploration(self):
+        return torch.tensor(self.temp)
         
     def info(self):
         return {'PolicyClass': self.__class__.__name__,
