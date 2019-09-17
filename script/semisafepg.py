@@ -25,13 +25,13 @@ parser.add_argument('--name', help='Experiment name', type=str, default='SSPG')
 parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-parser.add_argument('--env', help='Gym environment id', type=str, default='LQG1D-v0')
+parser.add_argument('--env', help='Gym environment id', type=str, default='lqr1d-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
 parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, default=50000)
-parser.add_argument('--max_samples', help='Maximum total samples', type=int, default=3e7)
+parser.add_argument('--max_samples', help='Maximum total samples', type=int, default=1e6)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--conf', help='Confidence parameter', type=float, default=0.2)
+parser.add_argument('--conf', help='Confidence parameter', type=float, default=0.95)
 parser.add_argument('--forget', help='Forgetting parameter', type=float, default=0.1)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
 parser.add_argument("--render", help="Render an episode",
@@ -50,7 +50,11 @@ parser.add_argument("--fast", help="Test on deterministic policy",
                     action="store_true")
 parser.add_argument("--no-fast", help="Online learning only",
                     action="store_false")
-parser.set_defaults(render=False, temp=False, learnstd=False, test=False, fast=False) 
+parser.add_argument("--oracle", help="Use curvature oracle",
+                    action="store_true")
+parser.add_argument("--no-oracle", help="Use curvature bound",
+                    action="store_false")
+parser.set_defaults(render=False, temp=False, learnstd=False, test=False, fast=False, oracle=False) 
 
 args = parser.parse_args()
 
@@ -70,7 +74,7 @@ else:
     m = sum(env.observation_space.shape)
     d = sum(env.action_space.shape)
     mu_init = torch.zeros(m*d)
-    logstd_init = torch.log(torch.zeros(d) + args.sigmainit)
+    logstd_init = torch.log(torch.zeros(d) + args.std_init)
     policy = ShallowGaussianPolicy(m, d, 
                                mu_init=mu_init, 
                                logstd_init=logstd_init, 
@@ -89,6 +93,7 @@ else:
 
 # Run
 semisafepg(env, policy,
+            curv_oracle = args.oracle,
             horizon = args.horizon,
             min_batchsize = args.min_batchsize,
             max_batchsize = args.max_batchsize,

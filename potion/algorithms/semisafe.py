@@ -19,6 +19,7 @@ import math
 
 
 def semisafepg(env, policy, horizon, *,
+                   curv_oracle,
                     conf = 0.05,
                     min_batchsize = 32,
                     max_batchsize = 5000,
@@ -124,7 +125,8 @@ def semisafepg(env, policy, horizon, *,
                    'PowerDecay': pow_decay,
                    'PowerIters': pow_it,
                    'PowerTolerance': pow_tol,
-                   'Fast': fast
+                   'Fast': fast,
+                   'CurvatureOracle' : curv_oracle
                    }
     logger.write_info({**algo_info, **policy.info()})
     log_keys = ['Perf', 
@@ -173,6 +175,8 @@ def semisafepg(env, policy, horizon, *,
         if verbose:
             print('\n* Iteration %d *' % it)
         params = policy.get_flat()
+        if curv_oracle:
+            std = torch.exp(policy.get_scale_params())
         
         #Test the corresponding deterministic policy
         if test_batchsize:
@@ -325,16 +329,19 @@ def semisafepg(env, policy, horizon, *,
         _conf = conf
         
         #Estimate gradient Lipschitz constant with off-policy Power Method
-        lip_const = power(policy, batch, grad, disc, 
-              step=pow_step, 
-              decay_rate=pow_decay,
-              tol=pow_tol, 
-              max_it=pow_it, 
-              estimator=_estimator, 
-              baseline=baseline, 
-              shallow=shallow, 
-              clip=pow_clip,
-              verbose=verbose)
+        if curv_oracle:
+            lip_const = abs(env._hess(params, std, disc)).item()
+        else:
+            lip_const = power(policy, batch, grad, disc, 
+                  step=pow_step, 
+                  decay_rate=pow_decay,
+                  tol=pow_tol, 
+                  max_it=pow_it, 
+                  estimator=_estimator, 
+                  baseline=baseline, 
+                  shallow=shallow, 
+                  clip=pow_clip,
+                  verbose=verbose)
         
         #Update "global" lipschitz constant
         if it > 0:

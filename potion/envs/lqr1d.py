@@ -17,7 +17,7 @@ class lqr1d(gym.Env):
 
     def __init__(self, discrete_reward=False):
         self.max_pos = 2.
-        self.max_action = 1.
+        self.max_action = 2.
         self.A = 1.
         self.B = 1.
         self.Q = 0.5

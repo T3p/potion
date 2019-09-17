@@ -16,6 +16,7 @@ import time
 import math
 
 def safepg(env, policy, horizon, lip_const, var_bound, *,
+                    curv_oracle = False,
                     conf = 0.2,
                     min_batchsize = 32,
                     max_batchsize = 10000,
@@ -100,7 +101,8 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                    'MinBatchSize': min_batchsize,
                    'MaxBatchSize': max_batchsize,
                    'LipschitzConstant': lip_const,
-                   'VarianceBound': var_bound
+                   'VarianceBound': var_bound,
+                   'CurvatureOracle' : curv_oracle
                    }
     logger.write_info({**algo_info, **policy.info()})
     log_keys = ['Perf', 
@@ -113,7 +115,8 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                 'BatchSize',
                 'Info',
                 'TotSamples',
-                'Safety']
+                'Safety',
+                'LipConst']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
@@ -142,6 +145,8 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
         if verbose:
             print('\n* Iteration %d *' % it)
         params = policy.get_flat()
+        if curv_oracle:
+            std = torch.exp(policy.get_scale_params())
         
         #Test the corresponding deterministic policy
         if test_batchsize:
@@ -273,14 +278,186 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
         _conf = conf
         
         #Select step size
+        if curv_oracle:
+            lip_const = abs(env._hess(params, std, disc)).item()
         stepsize = 1. / lip_const * (1 - math.sqrt(var_bound) 
                     / (torch.norm(grad) * math.sqrt(batchsize * conf))).item()
+        log_row['LipConst'] = lip_const
         log_row['StepSize'] = stepsize
                 
         #Update policy parameters
         new_params = params + stepsize * grad
         policy.set_from_flat(new_params)
         updated = True
+        updates += 1
+        
+        #Save parameters
+        if save_params and it % save_params == 0:
+            logger.save_params(params, it)
+        
+        #Next iteration
+        log_row['Time'] = time.time() - start
+        if verbose:
+            print(separator)
+        logger.write_row(log_row, it)
+        if verbose:
+            print(separator)
+        it += 1
+    
+    #Save final parameters
+    if save_params:
+        logger.save_params(params, it)
+    
+    #Cleanup
+    logger.close()
+    
+    
+def safepg_exact(env, policy, horizon,
+                    iterations = float('inf'),
+                    max_samples = 1e6,
+                    disc = 0.9,
+                    action_filter = None,
+                    logger = Logger(name='ESPG'),
+                    shallow = True,
+                    meta_conf = 0.05,
+                    seed = None,
+                    test_batchsize = 100,
+                    info_key = 'danger',
+                    save_params = 100,
+                    log_params = True,
+                    log_grad = False,
+                    parallel = False,
+                    render = False,
+                    verbose = 1):
+    """
+    Exact version of Safe PG algorithm from "Smoothing Policies and Safe Policy Gradients",
+                                Papini et al., 2019
+    """
+    #Defaults
+    if action_filter is None:
+        action_filter = clip(env)
+    
+    #Seed agent
+    if seed is not None:
+        seed_all_agent(seed)
+    
+    #Prepare logger
+    algo_info = {'Algorithm': 'SPG',
+                   'Env': str(env), 
+                   'Horizon': horizon,
+                   'Discount': disc,
+                   'Seed': seed,
+                   'TestBatchSize': test_batchsize,
+                   }
+    logger.write_info({**algo_info, **policy.info()})
+    log_keys = ['Perf', 
+                'UPerf', 
+                'AvgHorizon', 
+                'StepSize', 
+                'GradNorm', 
+                'Time',
+                'Info',
+                'TotSamples',
+                'Safety',
+                'LipConst']
+    if log_params:
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
+    if log_grad:
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+    if test_batchsize:
+        log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
+    log_row = dict.fromkeys(log_keys)
+    logger.open(log_row.keys())
+    
+    #Initializations
+    it = 0
+    tot_samples = 0
+    safety = 1.
+    updates = 0
+    unsafe_updates = 0
+    
+    #Learning loop
+    while(it < iterations and tot_samples < max_samples):
+        start = time.time()
+        if verbose:
+            print('\n* Iteration %d *' % it)
+        params = policy.get_flat()
+        std = torch.exp(policy.get_scale_params())
+        
+        #Test the corresponding deterministic policy
+        if test_batchsize:
+            test_batch = generate_batch(env, policy, horizon, 
+                                        episodes=test_batchsize, 
+                                        action_filter=action_filter,
+                                        n_jobs=parallel,
+                                        deterministic=False,
+                                        key=info_key)
+            log_row['TestPerf'] = performance(test_batch, disc)
+            log_row['UTestPerf'] = performance(test_batch, 1)
+            log_row['TestInfo'] = mean_sum_info(test_batch).item()
+        
+        #Render the agent's behavior
+        if render and it % render==0:
+            generate_batch(env, policy, horizon,
+                           episodes=1,
+                           action_filter=action_filter, 
+                           render=True)
+    
+        
+        #Compute policy gradient
+        grad = torch.tensor(env._grad(params, std, disc))
+        
+        #Update long-term quantities
+        tot_samples += test_batchsize
+        
+        #Update safety measure
+        if updates == 0:
+            old_rets= returns(test_batch, disc)
+        else:
+            new_rets = returns(test_batch, disc)
+            tscore, pval = sts.ttest_ind(old_rets, new_rets)
+            if pval / 2 < meta_conf and tscore > 0:
+                unsafe_updates += 1
+                if verbose:
+                    print('The previous update was unsafe! (p-value = %f)' 
+                          % (pval / 2))
+            old_rets = new_rets
+            safety = 1 - unsafe_updates / updates
+            
+        #Log
+        log_row['Safety'] = safety
+        log_row['Perf'] = performance(test_batch, disc)
+        log_row['ExPerf'] = env._performance(params, std, disc, horizon=horizon).item()
+        log_row['Info'] = mean_sum_info(test_batch).item()
+        log_row['UPerf'] = performance(test_batch, disc=1.)
+        log_row['AvgHorizon'] = avg_horizon(test_batch)
+        log_row['GradNorm'] = torch.norm(grad).item()
+        log_row['TotSamples'] = tot_samples
+        if log_params:
+            for i in range(policy.num_params()):
+                log_row['param%d' % i] = params[i].item()
+        if log_grad:
+            for i in range(policy.num_params()):
+                log_row['grad%d' % i] = grad[i].item()
+                
+        #Log
+        log_row['StepSize'] = 0.
+        log_row['Time'] = time.time() - start
+        if verbose:
+            print(separator)
+        logger.write_row(log_row, it)
+        if verbose:
+            print(separator)
+        
+        #Select step size
+        lip_const = abs(env._hess(params, std, disc))
+        stepsize = (1. / lip_const).item()
+        log_row['StepSize'] = stepsize
+        log_row['LipConst'] = lip_const.item()
+                
+        #Update policy parameters
+        new_params = params + stepsize * grad
+        policy.set_from_flat(new_params)
         updates += 1
         
         #Save parameters
