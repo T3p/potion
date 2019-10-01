@@ -6,7 +6,7 @@ Created on Fri Apr  5 14:22:11 2019
 @author: matteo
 """
 
-from potion.estimation.eigenvalues import power
+from potion.estimation.eigenvalues import power, oja
 import gym
 import potion.envs
 from potion.actors.continuous_policies import ShallowGaussianPolicy
@@ -22,7 +22,7 @@ std = 0.1
 disc = 0.9
 horizon = 20
 batchsize = 100
-points = 50
+points = 100
 max_feat = env.max_pos
 max_rew = env.Q * env.max_pos**2 + env.R * env.max_action**2
 seed = 0
@@ -30,7 +30,8 @@ env.seed(seed)
 seed_all_agent(seed)
 pol = ShallowGaussianPolicy(1, 1, learn_std=False, logstd_init=np.log(std))
 
-estimated = []
+_power = []
+_oja = []
 bound = []
 real = []
 fo = []
@@ -45,12 +46,14 @@ for param in params:
     batch = generate_batch(env, pol, horizon, batchsize)
     grad = gpomdp_estimator(batch, disc, pol, shallow=True)
     
-    estimated.append(power(pol, batch, grad, disc, step=0.01, max_it=100, clip=0.1))
+    _oja.append(oja(pol, batch, disc))
+    _power.append(power(pol, batch, grad, disc, step=0.01, max_it=100, clip=0.1))
     real.append(abs(env._hess(param, std, disc, horizon=horizon)))
     #bound.append(gauss_lip_const(max_feat, max_rew, disc, std))
     
 
-plt.plot(params, estimated, label='Estimated')
+plt.plot(params, _power, label='Power Method')
+plt.plot(params, _oja, label='Oja')
 plt.plot(params, real, label='True')
 #plt.plot(params, bound, label='Bound')
 plt.legend()

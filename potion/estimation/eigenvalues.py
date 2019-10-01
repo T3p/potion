@@ -10,6 +10,25 @@ import math
 from potion.estimation.gradients import gpomdp_estimator
 from potion.estimation.importance_sampling import importance_weights
 
+def oja(policy, batch, disc, iterations=None, step1=None, step2=1e-2, estimator=gpomdp_estimator, shallow=True, verbose=False):
+    params = policy.get_flat()
+    eigvec = torch.randn_like(params)
+    if iterations == None:
+        iterations = len(batch)
+    if step1 == None:
+        step1 = 1. / math.sqrt(iterations)
+    for traj in batch:
+        grad = estimator(batch, disc, policy, baselinekind='peters', shallow=shallow)
+        pert_params = params + step2 * eigvec
+        policy.set_from_flat(pert_params)
+        iw = importance_weights(batch, policy, pert_params)
+        pert_grad = torch.mean(iw * estimator(batch, disc, policy, baselinekind='peters', shallow=shallow, result='samples'), 0)
+        policy.set_from_flat(params)
+        hvp = (pert_grad - grad) / step2
+        eigvec = eigvec + step1 * hvp
+        eigvec = eigvec / torch.norm(eigvec)
+    return torch.dot(eigvec, hvp)
+
 def power(policy, batch, grad, disc, step=0.01, tol=0.1, max_it=100, decay_rate=0.99, estimator=gpomdp_estimator, baseline='peters', shallow=True, clip=0.2, verbose=True, mask=None):
     params = policy.get_flat()
     if mask is None:
