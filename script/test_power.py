@@ -21,7 +21,7 @@ env = gym.make('lqr1d-v0')
 std = 0.1
 disc = 0.9
 horizon = 20
-batchsize = 100
+batchsize = 1000
 points = 100
 max_feat = env.max_pos
 max_rew = env.Q * env.max_pos**2 + env.R * env.max_action**2
@@ -30,31 +30,24 @@ env.seed(seed)
 seed_all_agent(seed)
 pol = ShallowGaussianPolicy(1, 1, learn_std=False, logstd_init=np.log(std))
 
-_power = []
-_oja = []
-bound = []
+steps = [1., 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
+_oja = np.zeros((len(steps), points))
 real = []
-fo = []
-op = []
 params = np.linspace(-1., 0., points)
-it = 0
-for param in params:
+for (j, param) in enumerate(params):
     plt.close()
-    it+=1
-    print(it)
+    print('%d/%d' % (j+1, points))
     pol.set_from_flat([param])
     batch = generate_batch(env, pol, horizon, batchsize)
     grad = gpomdp_estimator(batch, disc, pol, shallow=True)
     
-    _oja.append(oja(pol, batch, disc))
-    _power.append(power(pol, batch, grad, disc, step=0.01, max_it=100, clip=0.1))
+    for (i, beta) in enumerate(steps):
+        _oja[i, j] = oja(pol, batch, disc, iterations=100)
     real.append(abs(env._hess(param, std, disc, horizon=horizon)))
-    #bound.append(gauss_lip_const(max_feat, max_rew, disc, std))
     
 
-plt.plot(params, _power, label='Power Method')
-plt.plot(params, _oja, label='Oja')
+for i in range(len(steps)): 
+    plt.plot(params, _oja[i, :], label='oja %f' % steps[i])
 plt.plot(params, real, label='True')
-#plt.plot(params, bound, label='Bound')
 plt.legend()
 plt.show()

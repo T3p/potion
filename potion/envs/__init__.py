@@ -20,6 +20,12 @@ register(
 )
 
 register(
+    id='mass-v0',
+    entry_point='potion.envs.mass:mass'
+)
+
+
+register(
     id='Drone-v0',
     entry_point='potion.envs.drone:Drone'
 )

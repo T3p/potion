@@ -186,7 +186,7 @@ class LQ(gym.Env):
                                  np.dot(self.B.T, np.dot(P, self.A)))
         return K
 
-    def computeJ(self, K, Sigma, n_random_x0=100):
+    def computeJ(self, K, Sigma, n_random_x0=10000):
         """
         This function computes the discounted reward associated to the provided
         linear controller (u = Kx + \epsilon, \epsilon \sim N(0,\Sigma)).
@@ -207,10 +207,11 @@ class LQ(gym.Env):
             Sigma = np.array([Sigma]).reshape(1, 1)
 
         P = self._computeP2(K)
-        W =  (1 / (1 - self.gamma)) * \
-                np.trace(np.dot(
+        temp = np.dot(
                     Sigma, (self.R + self.gamma * np.dot(self.B.T,
-                                             np.dot(P, self.B)))))
+                                             np.dot(P, self.B))))
+        temp = np.trace(temp) if np.ndim(temp) > 1 else temp
+        W =  (1 / (1 - self.gamma)) * temp
 
         if np.size(K)==1:
             return min(0,np.asscalar(-self.max_pos**2*P/3 - W))

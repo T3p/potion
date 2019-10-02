@@ -11,12 +11,11 @@ from potion.common.misc_utils import (performance, avg_horizon, mean_sum_info,
 from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
 import torch
-from potion.estimation.eigenvalues import power
+from potion.estimation.eigenvalues import oja
 import time
 import scipy.stats as sts
 from scipy.sparse.linalg import eigsh
 import math
-
 
 def semisafepg(env, policy, horizon, *,
                    curv_oracle,
@@ -32,11 +31,6 @@ def semisafepg(env, policy, horizon, *,
                     baseline = 'peters',
                     logger = Logger(name='SSPG'),
                     shallow = True,
-                    pow_step = 0.01,
-                    pow_decay = 0.99,
-                    pow_it = 100,
-                    pow_tol = 0.05,
-                    pow_clip = 0.1,
                     fast = False,
                     meta_conf = 0.05,
                     seed = None,
@@ -50,7 +44,7 @@ def semisafepg(env, policy, horizon, *,
                     verbose = 1):
     """
     Semi-safe PG algorithm from "Smoothing Policies and Safe Policy Gradients,
-                                    Papini et al., 2019
+                                    Papini et al., 2019"
         
     env: environment
     policy: the one to improve
@@ -75,12 +69,6 @@ def semisafepg(env, policy, horizon, *,
     logger: for human-readable logs (standard output, csv, tensorboard)
     shallow: whether to employ pre-computed score functions (only available for
         shallow policies)
-    pow_step: step size of the power method
-    pow_decay: initial decay parameter of the power method
-    pow_it: maximum number of iterations (per epoch) of the power method
-    pow_tol: relative-error tolerance of the power method
-    pow_clip: importance-weight clipping parameter for the power method 
-        (default 0.2)
     fast: whether to pursue maximum convergence speed 
         (under safety constraints)
     meta_conf: confidence level of safe update test (for evaluation)
@@ -121,10 +109,6 @@ def semisafepg(env, policy, horizon, *,
                    'MinBatchSize': min_batchsize,
                    'MaxBatchSize': max_batchsize,
                    'ForgetParam': forget,
-                   'PowerStep': pow_step,
-                   'PowerDecay': pow_decay,
-                   'PowerIters': pow_it,
-                   'PowerTolerance': pow_tol,
                    'Fast': fast,
                    'CurvatureOracle' : curv_oracle
                    }
@@ -143,7 +127,8 @@ def semisafepg(env, policy, horizon, *,
                 'Info',
                 'TotSamples',
                 'Safety',
-                'UScore']
+                'UScore',
+                'OracleLipConst']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
@@ -175,8 +160,7 @@ def semisafepg(env, policy, horizon, *,
         if verbose:
             print('\n* Iteration %d *' % it)
         params = policy.get_flat()
-        if curv_oracle:
-            std = torch.exp(policy.get_scale_params())
+        std = torch.exp(policy.get_scale_params())
         
         #Test the corresponding deterministic policy
         if test_batchsize:
@@ -254,7 +238,7 @@ def semisafepg(env, policy, horizon, *,
             #Adjust confidence before collecting more data for the same update
             if batchsize >= max_batchsize:
                 break
-            _conf /= 2
+            #_conf /= 2
         
         if verbose:
             print('Optimal batch size: %d' 
@@ -285,6 +269,10 @@ def semisafepg(env, policy, horizon, *,
         tot_samples += batchsize
         
         #Log
+        try:
+            log_row['OracleLipConst'] = abs(env._hess(params, std, disc)).item()
+        except:
+            log_row['OracleLipConst'] = -1  
         log_row['SampleVar'] = grad_var
         log_row['UScore'] = torch.norm(grad).item() / math.sqrt(grad_var)
         log_row['Safety'] = safety
@@ -328,20 +316,11 @@ def semisafepg(env, policy, horizon, *,
         #Reset confidence for next update
         _conf = conf
         
-        #Estimate gradient Lipschitz constant with off-policy Power Method
+        #Estimate gradient Lipschitz constant with (off-policy) Oja algorithm
         if curv_oracle:
             lip_const = abs(env._hess(params, std, disc)).item()
         else:
-            lip_const = power(policy, batch, grad, disc, 
-                  step=pow_step, 
-                  decay_rate=pow_decay,
-                  tol=pow_tol, 
-                  max_it=pow_it, 
-                  estimator=_estimator, 
-                  baseline=baseline, 
-                  shallow=shallow, 
-                  clip=pow_clip,
-                  verbose=verbose)
+            lip_const = oja(policy, batch, disc, iterations=100).item()
         
         #Update "global" lipschitz constant
         if it > 0:
