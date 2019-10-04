@@ -7,7 +7,7 @@ REINFORCE family of algorithms (actor-only policy gradient)
 
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon, mean_sum_info
-from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
+from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator, egpomdp_estimator
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 from potion.meta.steppers import ConstantStepper
@@ -20,6 +20,7 @@ def reinforce(env, policy, horizon, *,
                     iterations = 1000,
                     disc = 0.99,
                     stepper = ConstantStepper(1e-2),
+                    entropy_coeff = 0.,
                     action_filter = None,
                     estimator = 'gpomdp',
                     baseline = 'avg',
@@ -88,6 +89,7 @@ def reinforce(env, policy, horizon, *,
                    'Disc': disc, 
                    'StepSizeCriterion': str(stepper), 
                    'Seed': seed,
+                   'EntropyCoefficient': entropy_coeff
                    }
     logger.write_info({**algo_info, **policy.info()})
     log_keys = ['Perf', 
@@ -98,6 +100,7 @@ def reinforce(env, policy, horizon, *,
                 'Time',
                 'StepSize',
                 'Exploration',
+                'Entropy',
                 'Info']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
@@ -150,12 +153,17 @@ def reinforce(env, policy, horizon, *,
         log_row['UPerf'] = performance(batch, disc=1.)
         log_row['AvgHorizon'] = avg_horizon(batch)
         log_row['Exploration'] = policy.exploration().item()
+        log_row['Entropy'] = policy.entropy(0.).item()
     
         #Estimate policy gradient
-        if estimator == 'gpomdp':
+        if estimator == 'gpomdp' and entropy_coeff == 0:
             grad = gpomdp_estimator(batch, disc, policy, 
                                     baselinekind=baseline, 
                                     shallow=shallow)
+        elif estimator == 'gpomdp':
+            grad = egpomdp_estimator(batch, disc, policy, entropy_coeff,
+                                     baselinekind=baseline,
+                                     shallow=shallow)
         elif estimator == 'reinforce':
             grad = reinforce_estimator(batch, disc, policy, 
                                        baselinekind=baseline, 

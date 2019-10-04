@@ -134,7 +134,22 @@ class ShallowGaussianPolicy(ContinuousPolicy):
                            2)
         else:
             return self.loc_score(s,a)
+    
+    def entropy(self, s):
+        s = tu.complete_out(s, 3)
+        ent = torch.sum(torch.tensor(self.logstd)) + \
+                1./(2 * self.n_actions) * (1 + math.log(2 * math.pi))
+        return torch.zeros(s.shape[:-1]) + ent
+
+    def entropy_grad(self, s):
+        s = tu.complete_out(s, 3)
+        if self.learn_std:
+            return torch.cat((torch.ones(s.shape[:-1] + (self.n_actions,)), 
+                          torch.zeros(s.shape[:-1] + (self.n_states,))), -1)
+        else:
+            return torch.zeros(s.shape[:-1] + (self.n_states,))
             
+        
     def info(self):
         return {'PolicyDlass': self.__class__.__name__,
                 'LearnStd': self.learn_std,
@@ -179,18 +194,8 @@ if __name__ == '__main__':
     mu_init = 50 + torch.zeros(ds*da)
     for flag in [False, True]:
         p = ShallowGaussianPolicy(ds, da, None, None, mu_init, learn_std=flag, logstd_init=torch.zeros(da))
-        print(p.act(s))
-        print(p.num_params())
-        print(p.get_flat())
-        print(p.get_loc_params())
-        print(p.get_scale_params())  
-        print(p(s,a))
-        print('...')
-        p.set_loc_params((-50.,-20., 1., 1.))
-        p.set_scale_params((2.,-1.))
-        print(p.act(s))
-        print(p.get_flat())
-        print(p.log_pdf(s,a))
+        print(p.entropy(s))
+        print(p.entropy_grad(s))
         print()
         ####
         q = UniformPolicy(2, [-1., 0.], [2., 4.])

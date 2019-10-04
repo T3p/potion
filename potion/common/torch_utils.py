@@ -97,6 +97,7 @@ def tensormat(a, b):
     return torch.einsum('ijk,ij->ijk', (a,b))
 
 def complete_out(x, dim):
+    x = torch.tensor(x)
     while x.dim() < dim:
         x = x.unsqueeze(0)
     return x

@@ -32,6 +32,7 @@ parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
 parser.add_argument('--alpha', help='Step size', type=float, default=1e-1)
+parser.add_argument('--ent', help='Entropy bonus coefficient', type=float, default=0.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -96,6 +97,7 @@ reinforce(env, policy,
             batchsize = args.batchsize,
             iterations = args.iterations,
             disc = args.gamma,
+            entropy_coeff = args.ent,
             seed = args.seed,
             logger = logger,
             render = args.render,
