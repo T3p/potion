@@ -18,17 +18,19 @@ def oja(policy, batch, disc, horizon= None, env=None, iterations=None, step1=Non
         iterations = len(batch)
     if step1 == None:
         step1 = 1. / math.sqrt(iterations)
-    for _ in range(iterations):
-        grad = estimator(batch, disc, policy, baselinekind='peters', shallow=shallow)
+    grad = estimator(batch[1:len(batch)//2], disc, policy, baselinekind='peters', shallow=shallow)
+    for _ in range(iterations):    
         pert_params = params + step2 * eigvec
         policy.set_from_flat(pert_params)
         
         if online:
+            grad = estimator(batch, disc, policy, baselinekind='peters', shallow=shallow)
             pert_batch = generate_batch(env, policy, horizon, len(batch))
             pert_grad = estimator(pert_batch, disc, policy, baselinekind='peters', shallow=shallow)
         else:
-            iw = importance_weights(batch, policy, pert_params)
-            pert_grad = torch.mean(iw.unsqueeze(-1) * estimator(batch, disc, policy, baselinekind='peters', shallow=shallow, result='samples'), 0)
+            iw = importance_weights(batch[len(batch)//2:], policy, pert_params)
+            iw = torch.ones_like(iw)
+            pert_grad = torch.mean(iw.unsqueeze(-1) * estimator(batch[len(batch)//2:], disc, policy, baselinekind='peters', shallow=shallow, result='samples'), 0)
         policy.set_from_flat(params)
         hvp = (pert_grad - grad) / step2
         eigvec = eigvec + step1 * hvp

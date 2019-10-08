@@ -37,7 +37,8 @@ def mix_estimator(states, actions, disc_rewards, mask, policy, result='mean'):
     else:
         return torch.mean(samples, 0) #m
         
-def metagrad(batch, disc, policy, alpha, result='mean', grad_samples=None):
+def metagrad(batch, disc, policy, alpha, result='mean', grad_samples=None,
+                 no_first=False, no_second=False, no_third=False):
     sigma = torch.exp(policy.get_scale_params())
     
     if grad_samples is None:                
@@ -59,7 +60,7 @@ def metagrad(batch, disc, policy, alpha, result='mean', grad_samples=None):
         A = omega_grad #N
         B = 2 * alpha * sigma**2 * grad_norm #N
         C = alpha * sigma**2 * norm_grad #N
-        samples = A + B + C #N
+        samples = A * (1 - no_first) + B * (1 - no_second) + C * (1 - no_third) #N
         if result == 'samples':
             return samples
         else:

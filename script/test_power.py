@@ -21,7 +21,7 @@ env = gym.make('lqr1d-v0')
 std = 0.1
 disc = 0.9
 horizon = 20
-batchsize = 1000
+batchsize = 100
 points = 100
 max_feat = env.max_pos
 max_rew = env.Q * env.max_pos**2 + env.R * env.max_action**2
@@ -30,7 +30,7 @@ env.seed(seed)
 seed_all_agent(seed)
 pol = ShallowGaussianPolicy(1, 1, learn_std=False, logstd_init=np.log(std))
 
-steps = [1., 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
+steps = [0]#[1., 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
 _oja = np.zeros((len(steps), points))
 real = []
 params = np.linspace(-1., 0., points)

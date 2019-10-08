@@ -68,11 +68,13 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500):
 def load_all(name, nrows=200):
     return [pd.read_csv(file, index_col=False, nrows=nrows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
 
-def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, nrows=200, xkey=None):
+def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, nrows=200, xkey=None, xmax=None):
     for key in keys:
         plt.figure()
         if ymin is not None and ymax is not None:
             plt.ylim(ymin, ymax)
+        if xmax is not None:
+            plt.xlim(0, xmax)
         if logdir is not None:
             os.chdir(logdir)
         handles = []

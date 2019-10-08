@@ -29,7 +29,8 @@ def mepg(env, policy,
             logger = Logger(name='MEPG'),
             save_params = 50,
             log_params = True,
-            verbose = True):
+            verbose = True,
+            ablation = False):
     """
         MEPG algorithm
         Only for shallow Gaussian policy w/ scalar variance
@@ -110,7 +111,10 @@ def mepg(env, policy,
         
         #Estimate meta gradient
         omega_metagrad = metagrad(batch, disc, policy, alpha,
-                                  grad_samples=grad_samples)
+                                  grad_samples=grad_samples, 
+                                  no_first=(ablation==1),
+                                  no_second=(ablation==2), 
+                                  no_third=(ablation==3))
         
         #Update mean parameters
         upsilon = policy.get_loc_params()

@@ -28,6 +28,7 @@ parser.add_argument('--batchsize', help='Batch size', type=int, default=500)
 parser.add_argument('--iterations', help='Iterations', type=int, default=200)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
+parser.add_argument('--ablation', help='What MEPG term to remove (0 means none)', type=int, default=0)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -79,4 +80,5 @@ mepg(env, policy,
             seed = args.seed,
             logger = logger,
             render = args.render,
-            test_batchsize=test_batchsize)
+            test_batchsize=test_batchsize,
+            ablation = args.ablation)
