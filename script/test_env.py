@@ -14,8 +14,8 @@ from potion.actors.continuous_policies import ShallowGaussianPolicy
 import torch
 from potion.common.misc_utils import performance
 
-env = gym.make('Drone-v0')
-ds = 3
+env = gym.make('DoubleIntegrator-v0')
+ds = 2
 da = 1
 mu_init = torch.tensor([env.computeOptimalK()[0]])
 logstd_init = torch.log(torch.tensor(0.1))

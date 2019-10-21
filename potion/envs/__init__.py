@@ -26,6 +26,12 @@ register(
 )
 
 register(
+    id='DoubleIntegrator-v0',
+    entry_point='potion.envs.double_integrator:DoubleIntegrator'
+)
+
+
+register(
     id='mass-v0',
     entry_point='potion.envs.mass:mass'
 )

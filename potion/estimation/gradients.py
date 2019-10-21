@@ -152,15 +152,34 @@ def _shallow_gpomdp_estimator(batch, disc, policy, baselinekind='peters', result
         disc_rewards = discount(rewards, disc) #NxH
         scores = policy.score(states, actions) #NxHxM
         G = torch.cumsum(tensormat(scores, mask), 1) #NxHxm
+        n_k = torch.sum(mask, dim=0) #H
+        n_k[n_k==0.] = 1.
         
         if baselinekind == 'avg':
-            baseline = torch.mean(disc_rewards, 0).unsqueeze(1) #Hx1
+            baseline = (torch.sum(disc_rewards, 0) / n_k).unsqueeze(-1) #Hx1
         elif baselinekind == 'peters':
             baseline = torch.sum(tensormat(G ** 2, disc_rewards), 0) / \
                             torch.sum(G ** 2, 0) #Hxm
-        else:
+        elif baselinekind == 'peters2':
+            G2 = torch.cumsum(tensormat(scores ** 2, mask), 1) #NxHxm
+            baseline = torch.sum(tensormat(G ** 2, disc_rewards), 0) / \
+                            torch.sum(G2, 0) #Hxm
+        elif baselinekind == 'optimal':
+            g = tensormat(scores, mask) #NxHxm
+            vanilla = tensormat(G, disc_rewards) #NxHxm
+            term1 = torch.flip(torch.cumsum(torch.flip(vanilla, (1,)), 1), (1,)) #NxHxm (reverse cumsum)
+            m2 = torch.sum(g ** 2, dim=0, keepdim=True) / n_k.unsqueeze(0).unsqueeze(-1) #(N)xHxm
+            scores_on_m2 = g / m2 #NxHxm
+            scores_on_m2[g==0] = 0
+            shifted = torch.zeros_like(scores_on_m2) #NxHxm
+            shifted[:,:-1,:] = scores_on_m2[:,1:,:]
+            term2 = scores_on_m2 - shifted #NxHxm
+            baseline = torch.sum(term1 * term2, dim=0) / n_k.unsqueeze(-1) #Hxm
+        elif baselinekind == 'zero':
             baseline = torch.zeros(1,1) #1x1
-        baseline[baseline != baseline] = 0
+        else:
+            raise ValueError('Unknown baseline')
+        baseline[baseline != baseline] = 0 #removes non-real values
         values = disc_rewards.unsqueeze(2) - baseline.unsqueeze(0) #NxHxm
         
         _samples = torch.sum(tensormat(G * values, mask), 1) #Nxm

@@ -26,7 +26,7 @@ parser.add_argument('--baseline', help='baseline for policy gradient estimator (
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=500)
-parser.add_argument('--batchsize', help='Initial batch size', type=int, default=500)
+parser.add_argument('--batchsize', help='Initial batch size', type=int, default=200)
 parser.add_argument('--iterations', help='Iterations', type=int, default=200)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
 parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
