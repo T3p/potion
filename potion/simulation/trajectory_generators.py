@@ -47,7 +47,7 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             if action_filter is not None:
                 a = action_filter(a)
             #print(a)
-            if len(torch.squeeze(a).shape) <= 1:
+            if sum(torch.squeeze(a).shape) <= 1:
                 a = a.item()
                 if a - math.floor(a) == 0:
                     a = int(a)
