@@ -57,7 +57,7 @@ class DoubleIntegrator(LQ):
                                                           high=self.max_pos))
         else:
             self.state = np.array(state)
-        self.state[1] = 0.
+        self.state[1] = self.np_random.normal(0., 0.1)
 
         return self.get_state()
     

@@ -175,6 +175,13 @@ def _shallow_gpomdp_estimator(batch, disc, policy, baselinekind='peters', result
             shifted[:,:-1,:] = scores_on_m2[:,1:,:]
             term2 = scores_on_m2 - shifted #NxHxm
             baseline = torch.sum(term1 * term2, dim=0) / n_k.unsqueeze(-1) #Hxm
+        elif baselinekind == 'system':
+            A = torch.mean(torch.einsum('ijk,ihk->ijhk', (G, G)), 0).transpose(0,2) #mxHxH
+            vanilla = torch.sum(tensormat(G, disc_rewards), dim=1, keepdim=True) #Nx(H)xm
+            c = torch.mean(vanilla * G, 0).transpose(0,1).unsqueeze(-1) #Hxmx1
+            #print(scores[0,:,1], G[0,:,1])
+            x, _ = torch.solve(c, A) #mxHx1
+            baseline = x.squeeze(-1).transpose(0,1)
         elif baselinekind == 'zero':
             baseline = torch.zeros(1,1) #1x1
         else:

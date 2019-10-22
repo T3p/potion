@@ -101,7 +101,8 @@ def reinforce(env, policy, horizon, *,
                 'StepSize',
                 'Exploration',
                 'Entropy',
-                'Info']
+                'Info',
+                'SampleVar']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
@@ -157,22 +158,34 @@ def reinforce(env, policy, horizon, *,
     
         #Estimate policy gradient
         if estimator == 'gpomdp' and entropy_coeff == 0:
-            grad = gpomdp_estimator(batch, disc, policy, 
+            grad_samples = gpomdp_estimator(batch, disc, policy, 
                                     baselinekind=baseline, 
-                                    shallow=shallow)
+                                    shallow=shallow,
+                                    result='samples')
         elif estimator == 'gpomdp':
-            grad = egpomdp_estimator(batch, disc, policy, entropy_coeff,
+            grad_samples = egpomdp_estimator(batch, disc, policy, entropy_coeff,
                                      baselinekind=baseline,
-                                     shallow=shallow)
+                                     shallow=shallow,
+                                    result='samples')
         elif estimator == 'reinforce':
-            grad = reinforce_estimator(batch, disc, policy, 
+            grad_samples = reinforce_estimator(batch, disc, policy, 
                                        baselinekind=baseline, 
-                                       shallow=shallow)
+                                       shallow=shallow,
+                                    result='samples')
         else:
             raise ValueError('Invalid policy gradient estimator')
+        
+        grad = torch.mean(grad_samples, 0)
+        centered = grad_samples - grad.unsqueeze(0)
+        grad_cov = (batchsize/(batchsize - 1) * 
+                        torch.mean(torch.bmm(centered.unsqueeze(2), 
+                                             centered.unsqueeze(1)),0))
+        grad_var = torch.sum(torch.diag(grad_cov)).item() #for humans
+        
         if verbose > 1:
             print('Gradients: ', grad)
         log_row['GradNorm'] = torch.norm(grad).item()
+        log_row['SampleVar'] = grad_var
         
         #Select meta-parameters
         stepsize = stepper.next(grad)        

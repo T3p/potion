@@ -28,10 +28,10 @@ parser.add_argument('--env', help='Gym environment id', type=str, default='ContC
 parser.add_argument('--horizon', help='Task horizon', type=int, default=500)
 parser.add_argument('--batchsize', help='Initial batch size', type=int, default=200)
 parser.add_argument('--iterations', help='Iterations', type=int, default=200)
-parser.add_argument('--gamma', help='Discount factor', type=float, default=0.99)
-parser.add_argument('--sigmainit', help='Initial policy std', type=float, default=1.)
+parser.add_argument('--disc', help='Discount factor', type=float, default=0.99)
+parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
-parser.add_argument('--alpha', help='Step size', type=float, default=1e-1)
+parser.add_argument('--step', help='Step size', type=float, default=1e-1)
 parser.add_argument('--ent', help='Entropy bonus coefficient', type=float, default=0.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
@@ -65,7 +65,7 @@ else:
     m = sum(env.observation_space.shape)
     d = sum(env.action_space.shape)
     mu_init = torch.zeros(m*d)
-    logstd_init = torch.log(torch.zeros(d) + args.sigmainit)
+    logstd_init = torch.log(torch.zeros(d) + args.std_init)
     policy = ShallowGaussianPolicy(m, d, 
                                mu_init=mu_init, 
                                logstd_init=logstd_init, 
@@ -83,11 +83,11 @@ else:
     logger = Logger(directory='../logs', name = logname)
 
 if args.stepper == 'rmsprop':
-    stepper = RMSprop(alpha=args.alpha)
+    stepper = RMSprop()
 elif args.stepper == 'adam':
-    stepper = Adam(alpha=args.alpha)
+    stepper = Adam(alpha=args.step)
 else:
-    stepper = ConstantStepper(args.alpha)
+    stepper = ConstantStepper(args.step)
 
 
 # Run
@@ -96,7 +96,7 @@ reinforce(env, policy,
             stepper = stepper,
             batchsize = args.batchsize,
             iterations = args.iterations,
-            disc = args.gamma,
+            disc = args.disc,
             entropy_coeff = args.ent,
             seed = args.seed,
             logger = logger,
