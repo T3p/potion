@@ -46,13 +46,14 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             a = torch.tensor(a, dtype=torch.float).view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-            #print(a)
+            """
             if sum(torch.squeeze(a).shape) <= 1:
                 a = a.item()
                 if a - math.floor(a) == 0:
                     a = int(a)
             else:
                 a = a.numpy()
+            """
             next_s, r, done, info = env.step(a)
             if render:
                 try:
