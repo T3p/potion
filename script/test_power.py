@@ -30,8 +30,7 @@ env.seed(seed)
 seed_all_agent(seed)
 pol = ShallowGaussianPolicy(1, 1, learn_std=False, logstd_init=np.log(std))
 
-steps = [0]#[1., 1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
-_oja = np.zeros((len(steps), points))
+_oja = np.zeros(points)
 real = []
 params = np.linspace(-1., 0., points)
 for (j, param) in enumerate(params):
@@ -41,13 +40,11 @@ for (j, param) in enumerate(params):
     batch = generate_batch(env, pol, horizon, batchsize)
     grad = gpomdp_estimator(batch, disc, pol, shallow=True)
     
-    for (i, beta) in enumerate(steps):
-        _oja[i, j] = oja(pol, batch, disc, iterations=100)
-    real.append(abs(env._hess(param, std, disc, horizon=horizon)))
-    
 
-for i in range(len(steps)): 
-    plt.plot(params, _oja[i, :], label='oja %f' % steps[i])
+    _oja[j] = oja(pol, batch, disc, iterations=100)
+    real.append(abs(env._hess(param, std, disc, horizon=horizon)))
+
+plt.plot(params, _oja, label='oja')
 plt.plot(params, real, label='True')
 plt.legend()
 plt.show()
