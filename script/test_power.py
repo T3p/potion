@@ -6,7 +6,7 @@ Created on Fri Apr  5 14:22:11 2019
 @author: matteo
 """
 
-from potion.estimation.eigenvalues import power, oja
+from potion.estimation.eigenvalues import oja
 import gym
 import potion.envs
 from potion.actors.continuous_policies import ShallowGaussianPolicy
