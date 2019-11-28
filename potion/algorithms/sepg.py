@@ -10,7 +10,7 @@ from potion.common.misc_utils import performance, avg_horizon
 from potion.estimation.gradients import gpomdp_estimator
 from potion.estimation.metagradients import metagrad
 from potion.common.logger import Logger
-from potion.common.misc_utils import clip, seed_all_agent
+from potion.common.misc_utils import clip, seed_all_agent, mean_sum_info
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.meta.smoothing_constants import gauss_lip_const, std_lip_const
 from potion.meta.safety_requirements import MonotonicImprovement
@@ -35,6 +35,7 @@ def sepg(env, policy,
             action_filter = None,
             parallel = False,
             logger = Logger(name='SEPG'),
+            info_key = 'danger',
             save_params = 50,
             log_params = True,
             verbose = True):
@@ -67,7 +68,7 @@ def sepg(env, policy,
                 'StepSize', 'MetaStepSize', 'BatchSize', 'Exploration', 
                 'OmegaGrad', 'OmegaMetagrad', 'UpsilonGradNorm',
                 'UpsilonGradVar', 'UpsilonEps', 'OmegaGradVar', 'OmegaEps',
-                'Req', 'MinBatchSize', 'MaxReq']
+                'Req', 'MinBatchSize', 'MaxReq', 'Info']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if test_batchsize:
@@ -96,11 +97,12 @@ def sepg(env, policy,
                                         action_filter=action_filter,
                                         seed=seed,
                                         njobs=parallel,
-                                        deterministic=True)
+                                        deterministic=True,
+                                        key=info_key)
             log_row['DetPerf'] = performance(test_batch, disc)
         #Render behavior
         if render:
-            generate_batch(env, policy, horizon, 1, action_filter, render=True)
+            generate_batch(env, policy, horizon, 1, action_filter, render=True, key=info_key)
 
         #Set metaparameters
         omega = policy.get_scale_params()
@@ -110,7 +112,8 @@ def sepg(env, policy,
         batch = generate_batch(env, policy, horizon, batchsize, 
                                action_filter=action_filter, 
                                seed=seed, 
-                               n_jobs=parallel)
+                               n_jobs=parallel,
+                               key=info_key)
         perf = performance(batch, disc)
         H = avg_horizon(batch)
         
@@ -225,6 +228,7 @@ def sepg(env, policy,
         log_row['OmegaGradVar'] = upsilon_grad_var
         log_row['OmegaEps'] = upsilon_eps
         log_row['Req'] = req
+        log_row['Info'] = mean_sum_info(batch).item()
         print(min_batchsize)
         log_row['MinBatchSize'] = min_batchsize
         log_row['MaxReq'] = max_req.item()
@@ -321,7 +325,7 @@ def naive_sepg(env, policy,
                                         action_filter=action_filter,
                                         seed=seed,
                                         njobs=parallel,
-                                        deterministic=True)
+                                        deterministic=True,)
             log_row['DetPerf'] = performance(test_batch, disc)
         #Render behavior
         if render:
