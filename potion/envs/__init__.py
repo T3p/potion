@@ -15,6 +15,11 @@ register(
 )
 
 register(
+    id='SafeCartPole-v0',
+    entry_point='potion.envs.cartpole_safe:SafeCartPole'
+)
+
+register(
     id='CartPole1d-v0',
     entry_point='potion.envs.cartpole1d:CartPole1d'
 )
