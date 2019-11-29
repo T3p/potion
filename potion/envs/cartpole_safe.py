@@ -28,6 +28,7 @@ class SafeCartPole(gym.Env):
         self.polemass_length = (self.masspole * self.length)
         self.force_mag = 10.0
         self.tau = 0.02  # seconds between state updates
+        self.crash_penalty = -10.
 
         # Angle at which to fail the episode
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
@@ -80,7 +81,7 @@ class SafeCartPole(gym.Env):
         done = bool(done)
 
         if not done:
-            reward = 1.0 if not crashed else -100.
+            reward = 1.0 if not crashed else self.crash_penalty
         elif self.steps_beyond_done is None:
             # Pole just fell!
             self.steps_beyond_done = 0

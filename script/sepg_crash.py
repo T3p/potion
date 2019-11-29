@@ -48,11 +48,7 @@ parser.add_argument("--naive", help="Do not use metagradient",
                     action="store_true")
 parser.add_argument("--no-naive", help="Use metagradient",
                     action="store_false")
-parser.add_argument("--emprmax", help="Compute rmax from data",
-                    action="store_true")
-parser.add_argument("--no-emprmax", help="Use known rmax",
-                    action="store_false")
-parser.set_defaults(render=False, temp=False, test=False, naive=False, emprmax=False) 
+parser.set_defaults(render=False, temp=False, test=False, naive=False) 
 
 args = parser.parse_args()
 
@@ -108,4 +104,4 @@ algo(env, policy,
             logger = logger,
             render = args.render,
             test_batchsize=test_batchsize,
-            emp_rmax=args.emprmax)
+            emp_rmax=True)

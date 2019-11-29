@@ -49,6 +49,8 @@ def discount(rewards, disc):
 def returns(batch, gamma):
     return [torch.sum(discount(rewards,gamma)).item() 
                                     for (_, _, rewards, _, _) in batch]
+def max_reward(batch):
+    return max(torch.max(rewards).item() for (_, _, rewards, _, _) in batch)
 
 def mean_sum_info(batch):
     return torch.mean(torch.tensor([torch.sum(inf).item() 
