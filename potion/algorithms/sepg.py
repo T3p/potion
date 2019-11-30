@@ -10,7 +10,7 @@ from potion.common.misc_utils import performance, avg_horizon
 from potion.estimation.gradients import gpomdp_estimator
 from potion.estimation.metagradients import metagrad
 from potion.common.logger import Logger
-from potion.common.misc_utils import clip, seed_all_agent, mean_sum_info, max_reward
+from potion.common.misc_utils import clip, seed_all_agent, mean_sum_info, max_reward, max_feature
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.meta.smoothing_constants import gauss_lip_const, std_lip_const
 from potion.meta.safety_requirements import MonotonicImprovement
@@ -39,7 +39,7 @@ def sepg(env, policy,
             save_params = 50,
             log_params = True,
             verbose = True,
-            emp_rmax = False):
+            emp = False):
     """
         SEPG algorithm
         Only for shallow Gaussian policy w/ scalar variance
@@ -69,7 +69,7 @@ def sepg(env, policy,
                 'StepSize', 'MetaStepSize', 'BatchSize', 'Exploration', 
                 'OmegaGrad', 'OmegaMetagrad', 'UpsilonGradNorm',
                 'UpsilonGradVar', 'UpsilonEps', 'OmegaGradVar', 'OmegaEps',
-                'Req', 'MinBatchSize', 'MaxReq', 'Info', 'MaxRew']
+                'Req', 'MinBatchSize', 'MaxReq', 'Info', 'MaxRew', 'MaxFeat']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if test_batchsize:
@@ -118,8 +118,9 @@ def sepg(env, policy,
         perf = performance(batch, disc)
         H = avg_horizon(batch)
         
-        if emp_rmax:
+        if emp:
             max_rew = max_reward(batch)
+            max_feat = max_feature(batch)
         
         #Estimate policy gradient
         grad_samples = gpomdp_estimator(batch, disc, policy, 
@@ -237,6 +238,7 @@ def sepg(env, policy,
         log_row['MinBatchSize'] = min_batchsize
         log_row['MaxReq'] = max_req.item()
         log_row['MaxRew'] = max_rew
+        log_row['MaxFeat'] = max_feat
         params = policy.get_flat()
         if log_params:
             for i in range(policy.num_params()):

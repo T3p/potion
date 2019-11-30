@@ -104,4 +104,4 @@ algo(env, policy,
             logger = logger,
             render = args.render,
             test_batchsize=test_batchsize,
-            emp_rmax=True)
+            emp=True)

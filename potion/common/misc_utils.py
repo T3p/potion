@@ -50,7 +50,10 @@ def returns(batch, gamma):
     return [torch.sum(discount(rewards,gamma)).item() 
                                     for (_, _, rewards, _, _) in batch]
 def max_reward(batch):
-    return max(torch.max(rewards).item() for (_, _, rewards, _, _) in batch)
+    return max(torch.max(torch.abs(rewards)).item() for (_, _, rewards, _, _) in batch)
+
+def max_feature(batch):
+    return max(torch.max(torch.abs(states)).item() for (states, _, _, _, _) in batch)
 
 def mean_sum_info(batch):
     return torch.mean(torch.tensor([torch.sum(inf).item() 
