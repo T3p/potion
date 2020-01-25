@@ -10,6 +10,7 @@ Mappings from states (or state features) to an output of interest (e.g. mean act
 
 import torch.nn as nn
 import potion.common.torch_utils as tu
+import torch.nn.functional as F
 
 class LinearMapping(tu.FlatModule):
     def __init__(self, d_in, d_out, bias=False):
@@ -27,7 +28,36 @@ class LinearMapping(tu.FlatModule):
         
     def forward(self, x):
         return self.linear(x)
+
+class MLPMapping(tu.FlatModule):
+    def __init__(self, d_in, d_out, hidden_neurons, bias=False, activation=F.tanh):
+        """
+        Multi-layer perceptron
         
+        d_in: input dimension
+        d_out: output dimension
+        hidden_neurons: list with number of hidden neurons per layer
+        bias: whether to use a bias parameter (default: false)
+        """
+        super(MLPMapping, self).__init__()
+        self.d_in = d_in
+        self.d_out = d_out
+        self.activation = activation
+        
+        self.hidden_layers = []
+        input_size = self.d_in
+        for i, depth in enumerate(hidden_neurons):
+            layer = nn.Linear(input_size, depth, bias)
+            self.add_module("hidden"+str(i), layer)
+            self.hidden_layers.append(layer)
+            input_size = depth
+        self.last = nn.Linear(input_size, self.d_out, bias)
+        self.add_module("last", self.last)
+        
+    def forward(self, x):
+        for linear in self.hidden_layers:
+            x = self.activation(linear(x))
+        return self.last(x) #final linear mapping
     
 """
 Testing
