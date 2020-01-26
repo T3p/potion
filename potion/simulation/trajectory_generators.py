@@ -43,7 +43,9 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             s = np.array(s, dtype=np.float)
             s = torch.tensor(s, dtype=torch.float).view(-1)
             a = policy.act(s, deterministic)
-            a = torch.tensor(a, dtype=torch.float).view(-1)
+            if not torch.is_tensor(a):
+                a = torch.tensor(a)
+            a = a.view(-1)
             if action_filter is not None:
                 a = action_filter(a)
             """

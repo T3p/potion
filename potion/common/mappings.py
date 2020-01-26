@@ -30,7 +30,10 @@ class LinearMapping(tu.FlatModule):
         return self.linear(x)
 
 class MLPMapping(tu.FlatModule):
-    def __init__(self, d_in, d_out, hidden_neurons, bias=False, activation=torch.tanh):
+    def __init__(self, d_in, d_out, hidden_neurons, 
+                 bias=False, 
+                 activation=torch.tanh, 
+                 init=nn.init.xavier_uniform_):
         """
         Multi-layer perceptron
         
@@ -48,10 +51,12 @@ class MLPMapping(tu.FlatModule):
         input_size = self.d_in
         for i, depth in enumerate(hidden_neurons):
             layer = nn.Linear(input_size, depth, bias)
+            init(layer.weight)
             self.add_module("hidden"+str(i), layer)
             self.hidden_layers.append(layer)
             input_size = depth
         self.last = nn.Linear(input_size, self.d_out, bias)
+        init(self.last.weight)
         self.add_module("last", self.last)
         
     def forward(self, x):
