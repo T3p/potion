@@ -44,7 +44,7 @@ class ShallowGaussianPolicy(ContinuousPolicy):
         # Log of standard deviation
         if logstd_init is None:
             logstd_init = torch.zeros(self.n_actions)
-        else:
+        elif not torch.is_tensor(logstd_init):
             logstd_init = torch.tensor(logstd_init)
         if learn_std:
             self.logstd = nn.Parameter(logstd_init)
@@ -137,7 +137,7 @@ class ShallowGaussianPolicy(ContinuousPolicy):
     
     def entropy(self, s):
         s = tu.complete_out(s, 3)
-        ent = torch.sum(torch.tensor(self.logstd)) + \
+        ent = torch.sum(self.logstd) + \
                 1./(2 * self.n_actions) * (1 + math.log(2 * math.pi))
         return torch.zeros(s.shape[:-1]) + ent
 
@@ -172,7 +172,9 @@ class DeepGaussianPolicy(ContinuousPolicy):
                  feature_fun=None, 
                  squash_fun=None,
                  mu_init=None, logstd_init=None, 
-                 learn_std=True):
+                 learn_std=True,
+                 bias=False,
+                 activation=torch.tanh):
         super(DeepGaussianPolicy, self).__init__()
         self.n_states = n_states
         self.n_actions = n_actions
@@ -183,7 +185,7 @@ class DeepGaussianPolicy(ContinuousPolicy):
         self.logstd_init = logstd_init
         
         # Mean
-        self.mu = MLPMapping(n_states, n_actions, hidden_neurons)
+        self.mu = MLPMapping(n_states, n_actions, hidden_neurons, bias, activation)
         if mu_init is not None:
             self.mu.set_from_flat(mu_init)
         
@@ -309,7 +311,7 @@ if __name__ == '__main__':
     da = 2
     s = torch.ones(ds)
     a = 100 + torch.zeros(da)
-    """
+    
     mu_init = 50 + torch.zeros(ds*da)
     for flag in [False, True]:
         p = ShallowGaussianPolicy(ds, da, None, None, mu_init, learn_std=flag, logstd_init=torch.zeros(da))
@@ -322,6 +324,8 @@ if __name__ == '__main__':
         print(q.act(0, True))
         print(q.forward(0, torch.Tensor([-.4, 2.5])))
         print()
-    """
-    p = DeepGaussianPolicy(ds, da, [2]) 
-    print(p.num_loc_params())
+        
+    dp = DeepGaussianPolicy(ds, da, [4, 2])
+    print(dp.num_loc_params())
+    print(dp.act(a))
+    

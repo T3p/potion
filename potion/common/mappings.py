@@ -8,9 +8,9 @@ Created on Tue Dec 18 11:44:00 2018
 Mappings from states (or state features) to an output of interest (e.g. mean action)
 """
 
+import torch
 import torch.nn as nn
 import potion.common.torch_utils as tu
-import torch.nn.functional as F
 
 class LinearMapping(tu.FlatModule):
     def __init__(self, d_in, d_out, bias=False):
@@ -30,7 +30,7 @@ class LinearMapping(tu.FlatModule):
         return self.linear(x)
 
 class MLPMapping(tu.FlatModule):
-    def __init__(self, d_in, d_out, hidden_neurons, bias=False, activation=F.tanh):
+    def __init__(self, d_in, d_out, hidden_neurons, bias=False, activation=torch.tanh):
         """
         Multi-layer perceptron
         
