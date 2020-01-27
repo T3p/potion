@@ -65,7 +65,7 @@ else:
     m = sum(env.observation_space.shape)
     d = sum(env.action_space.shape)
     logstd_init = torch.log(torch.zeros(d) + args.std_init)
-    #"""
+    """
     policy = ShallowSquashedPolicy(m, d,
                                scale = 10.,
                                mu_init=torch.zeros(m*d),
@@ -73,7 +73,7 @@ else:
                                learn_std=args.learnstd)
     shallow = True
     """
-    policy = DeepSquashedPolicy(m, d, [2, 4],
+    policy = DeepSquashedPolicy(m, d, [],
                            scale = 10.,
                            logstd_init=logstd_init, 
                            learn_std=args.learnstd)
