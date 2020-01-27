@@ -109,6 +109,14 @@ def complete_in(x, dim):
         x = x.unsqueeze(-1)
     return x
 
+def atanh(x):
+    return 0.5 * (torch.log(1 + x) - torch.log(1 - x))
+
+def maybe_tensor(x):
+    if not torch.is_tensor(x):
+        x = torch.tensor(x)
+    return x
+
 """Testing"""
 if __name__ == '__main__':
     from potion.common.mappings import LinearMapping
@@ -117,5 +125,6 @@ if __name__ == '__main__':
     y = F(x)
     print(y)
     print(jacobian(F,y))
+    print(atanh(torch.tanh(torch.tensor([0.5, -0.5]))))
     #y.backward(torch.ones(3))
     #print(x.grad)

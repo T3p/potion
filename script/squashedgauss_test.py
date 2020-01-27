@@ -8,7 +8,7 @@ Created on Wed Jan 16 14:47:33 2019
 import torch
 import gym
 import potion.envs
-from potion.actors.continuous_policies import ShallowGaussianPolicy, DeepGaussianPolicy
+from potion.actors.continuous_policies import ShallowSquashedPolicy, DeepSquashedPolicy
 from potion.actors.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
 from potion.algorithms.reinforce import reinforce
@@ -65,11 +65,21 @@ else:
     m = sum(env.observation_space.shape)
     d = sum(env.action_space.shape)
     logstd_init = torch.log(torch.zeros(d) + args.std_init)
-    policy = SquashedGaussianPolicy(m, d,
-                               #hidden_neurons = [8,4,2],
+    #"""
+    policy = ShallowSquashedPolicy(m, d,
+                               scale = 10.,
+                               mu_init=torch.zeros(m*d),
                                logstd_init=logstd_init, 
                                learn_std=args.learnstd)
-
+    shallow = True
+    """
+    policy = DeepSquashedPolicy(m, d, [2, 4],
+                           scale = 10.,
+                           logstd_init=logstd_init, 
+                           learn_std=args.learnstd)
+    shallow = False
+    #"""
+    
 test_batchsize = args.batchsize if args.test else 0
 
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1]
@@ -100,8 +110,8 @@ reinforce(env, policy,
             seed = args.seed,
             logger = logger,
             render = args.render,
-            shallow = False,
+            shallow = shallow,
             estimator = args.estimator,
             baseline = args.baseline,
             test_batchsize=test_batchsize,
-            log_params=False)
+            log_params=True)
