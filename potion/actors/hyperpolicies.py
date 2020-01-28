@@ -33,6 +33,9 @@ class Hyperpolicy(tu.FlatModule):
 
             def set_params(self, val):
                 self.policy_module.set_params(val)
+            
+            def info(self):
+                return self.policy_module.info()
         
         with torch.no_grad():
             self.lower_policy = _PolicyWrapper(lower_policy)
@@ -52,11 +55,11 @@ class GaussianHyperpolicy(Hyperpolicy):
         self.logstd_init = torch.zeros(self.num_lower_params) if logstd_init is None else tu.maybe_tensor(logstd_init)
         self.learn_std = learn_std
         
-        self.mu = nn.Parameter(self.mu_init)
         if self.learn_std:
             self.logstd = nn.Parameter(self.logstd_init)
         else:
             self.logstd = autograd.Variable(self.logstd_init)
+        self.mu = nn.Parameter(self.mu_init)
             
         # Normal(0,1)
         self._pdf = Normal(torch.zeros_like(self.mu), 
@@ -77,9 +80,16 @@ class GaussianHyperpolicy(Hyperpolicy):
         with torch.no_grad():
             return self.get_flat()
     
-    def resample(self, update=True):
+    def get_lower_params(self):
         with torch.no_grad():
-            lower_params = self.mu + self._pdf.sample() * torch.exp(self.logstd)
+            return self.lower_policy.get_params()
+    
+    def resample(self, update=True, deterministic=False):
+        with torch.no_grad():
+            if deterministic:
+                lower_params = self.mu
+            else:
+                lower_params = self.mu + self._pdf.sample() * torch.exp(self.logstd)
             
             if update:
                 self.lower_policy.set_params(lower_params)
@@ -110,6 +120,21 @@ class GaussianHyperpolicy(Hyperpolicy):
                                1)
             else:
                 return self.loc_score(lower_params)
+    
+    def fisher(self):
+        with torch.no_grad():
+            fisher_mu = torch.exp(-2*self.logstd)
+            if not self.learn_std:
+                return fisher_mu
+            else:
+                fisher_logstd = torch.zeros_like(fisher_mu) + 2
+                return torch.cat((fisher_logstd, fisher_mu))
+    def info(self):
+        hyperpolicy_info = {'HyperPolicyClass': self.__class__.__name__,
+                'LearnStd': self.learn_std,
+                'MuInit': self.mu_init,
+                'LogstdInit': self.logstd_init}
+        return {**hyperpolicy_info, **self.lower_policy.info()}
 
 """
 Testing
@@ -146,3 +171,6 @@ if __name__ == '__main__':
     print(hpol.loc_score(torch.stack((theta, theta+0.1),0)))
     print(hpol.scale_score(torch.stack((theta, theta+0.1),0)))
     print(hpol.score(theta))
+    print()
+    
+    print(hpol.fisher())

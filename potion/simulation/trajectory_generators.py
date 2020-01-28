@@ -48,14 +48,7 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             a = a.view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-            """
-            if sum(torch.squeeze(a).shape) <= 1:
-                a = a.item()
-                if a - math.floor(a) == 0:
-                    a = int(a)
-            else:
-                a = a.numpy()
-            """
+
             next_s, r, done, info = env.step(a)
             if render:
                 try:
@@ -74,6 +67,7 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
         
         yield states, actions, rewards, mask, infos
         n += 1
+
 
 def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=None, seed=None, deterministic=False, key=None):
         ds = sum(env.observation_space.shape)
@@ -112,7 +106,31 @@ def parallel_episode_generator(env, policy, horizon=float('inf'), action_filter=
             s = next_s
             t += 1
         return states, actions, rewards, mask, infos
-
+    
+def light_episode_generator(env, policy, horizon=float('inf'), disc=1., action_filter=None, key=None):
+        s = env.reset()
+        done = False
+        t = 0
+        ret = 0.
+        uret = 0.
+        info_sum = 0.
+        while not done and t < horizon:
+            s = np.array(s, dtype=np.float)
+            s = torch.tensor(s, dtype=torch.float).view(-1)
+            a = policy.act(s)
+            a = torch.tensor(a, dtype=torch.float).view(-1)
+            if action_filter is not None:
+                a = action_filter(a)
+            next_s, r, done, info = env.step(a.numpy())
+            ret += disc**t * r
+            uret += r
+            if key is not None and key in info:
+                info_sum += info[key]
+            
+            s = next_s
+            t += 1
+        return ret, uret, t, info_sum
+    
 def generate_batch(env, policy, horizon, episodes, action_filter=None, render=False, n_jobs=False, seed=None, deterministic=False, key=None):
     """Batch: list of (features, actions, rewards, mask) tuples"""
     if not n_jobs:
@@ -124,6 +142,20 @@ def generate_batch(env, policy, horizon, episodes, action_filter=None, render=Fa
         batch = Parallel(n_jobs=n_jobs)(delayed(parallel_episode_generator)(env, policy, horizon, action_filter, seed=seed*10000+i, deterministic=deterministic, key=key) for i in range(episodes))
     return batch
 
+
+def evaluate_hyperpolicy(env, hyperpolicy, horizon, disc, episodes, resample=True, action_filter=None, render=False, n_jobs=False, seed=None, key=None):
+    if not n_jobs:
+        gen = sequential_hyperpolicy_evaluator(env, hyperpolicy, horizon, disc, episodes, resample,
+                                 action_filter, render, key)
+        batch = [ep for ep in gen]
+    else:
+        if seed is None:
+            seed = random.randint(0,999999)
+        batch = Parallel(n_jobs=n_jobs)(delayed(parallel_hyperpolicy_evaluator)(env, hyperpolicy, horizon, disc, episodes, resample,
+                                 action_filter, render, seed*10000+i, key) for i in range(episodes))
+    return batch
+
+    
 """Testing"""
 if __name__ == '__main__':
     from potion.actors.continuous_policies import SimpleGaussianPolicy as Gaussian
