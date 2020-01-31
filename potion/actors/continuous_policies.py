@@ -39,7 +39,10 @@ class ShallowGaussianPolicy(ContinuousPolicy):
         self.logstd_init = logstd_init
         
         # Mean
-        self.mu = LinearMapping(n_states, n_actions)
+        if feature_fun is None:
+            self.mu = LinearMapping(n_states, n_actions)
+        else:
+            self.mu = LinearMapping(len(feature_fun(torch.ones(n_states))), n_actions)
         if mu_init is not None:
             self.mu.set_from_flat(mu_init)
         

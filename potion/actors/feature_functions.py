@@ -40,3 +40,15 @@ def stack_fun(n_a):
         return feat
     
     return stack
+
+def gauss(x, c, sigma):
+    """
+    isotropic
+    """
+    return torch.exp(0.5 * torch.norm(x - c)**2 / sigma**2).unsqueeze(-1)
+
+def rbf_fun(centers, sigmas):
+    def rbf(s):
+        return torch.cat([gauss(s, c, sigma) for (c, sigma) in zip(centers, sigmas)])
+    
+    return rbf

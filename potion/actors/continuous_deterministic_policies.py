@@ -33,7 +33,11 @@ class ShallowDeterministicPolicy(ContinuousDeterministicPolicy):
         self.squash_grads = squash_grads
         
         # Mean
-        self.linear = LinearMapping(n_states, n_actions, bias)
+        if feature_fun is None:
+            self.linear = LinearMapping(n_states, n_actions, bias)
+        else:
+            self.linear = LinearMapping(len(feature_fun(torch.ones(n_states))), n_actions, bias)
+
         if param_init is not None:
             self.linear.set_from_flat(param_init)
           
@@ -176,7 +180,7 @@ if __name__ == '__main__':
     print()
     
     #test deep policy
-    dp = DeepDeterministicPolicy(ds, da, [4,2], feat, squash, 
+    dp = DeepDeterministicPolicy(ds, da, [4, 2], feat, squash, 
                                  param_init=None, 
                                  bias=use_bias, 
                                  squash_grads=squash_grads)
