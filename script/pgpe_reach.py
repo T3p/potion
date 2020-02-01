@@ -8,7 +8,7 @@ Created on Wed Jan 16 14:47:33 2019
 import torch
 import gym
 import potion.envs
-from potion.actors.continuous_deterministic_policies import ShallowDeterministicPolicy
+from potion.actors.continuous_deterministic_policies import ShallowDeterministicPolicy, DeepDeterministicPolicy
 from potion.actors.hyperpolicies import GaussianHyperpolicy
 from potion.common.logger import Logger
 from potion.algorithms.pgpe import pgpe
@@ -57,7 +57,11 @@ parser.add_argument("--tanh", help="Apply tanh to action",
                     action="store_true")
 parser.add_argument("--no-tanh", help="Apply tanh to action",
                     action="store_false")
-parser.set_defaults(render=False, temp=False, learnstd=True, natural=False, bias=False, tanh=False) 
+parser.add_argument("--neural", help="Apply tanh to action",
+                    action="store_true")
+parser.add_argument("--no-neural", help="Apply tanh to action",
+                    action="store_false")
+parser.set_defaults(render=False, temp=False, learnstd=True, natural=False, bias=False, tanh=False, neural=False) 
 
 args = parser.parse_args()
 
@@ -70,9 +74,12 @@ env.sigma_noise = 0
 m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
 squash = None
-if args.tanh:
-    squash = torch.tanh
-policy = ShallowDeterministicPolicy(m, d, squash_fun=squash)
+if not args.neural:
+    if args.tanh:
+        squash = torch.tanh
+    policy = ShallowDeterministicPolicy(m, d, squash_fun=squash)
+else:
+    policy = DeepDeterministicPolicy(m, d, [4])
 mu_init = torch.zeros(policy.num_params())
 logstd_init = torch.log(torch.zeros(policy.num_params()) + args.std_init)
 hyperpolicy = GaussianHyperpolicy(policy, 
