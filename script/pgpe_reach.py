@@ -53,7 +53,11 @@ parser.add_argument("--bias", help="Use bias parameter",
                     action="store_true")
 parser.add_argument("--no-bias", help="Use bias parameter",
                     action="store_false")
-parser.set_defaults(render=False, temp=False, learnstd=True, natural=False, bias=False) 
+parser.add_argument("--tanh", help="Apply tanh to action",
+                    action="store_true")
+parser.add_argument("--no-tanh", help="Apply tanh to action",
+                    action="store_false")
+parser.set_defaults(render=False, temp=False, learnstd=True, natural=False, bias=False, tanh=False) 
 
 args = parser.parse_args()
 
@@ -65,7 +69,10 @@ env.sigma_noise = 0
 
 m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
-policy = ShallowDeterministicPolicy(m, d)
+squash = None
+if args.tanh:
+    squash = torch.tanh
+policy = ShallowDeterministicPolicy(m, d, squash_fun=squash)
 mu_init = torch.zeros(policy.num_params())
 logstd_init = torch.log(torch.zeros(policy.num_params()) + args.std_init)
 hyperpolicy = GaussianHyperpolicy(policy, 
