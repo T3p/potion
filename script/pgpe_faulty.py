@@ -77,15 +77,7 @@ squash = None
 if not args.neural:
     if args.tanh:
         squash = torch.tanh
-    param_init = torch.tensor([-1.5469e+00, -2.0167e+00, -7.6784e-01, -7.9975e-01, -2.0564e+00,
-        -3.2041e-01, -1.9130e-01, -7.9075e-01, -4.7737e-01, -9.9748e-01,
-        -4.1719e-01, -6.2246e-01,  9.2992e-01, -9.7951e-01, -1.6872e-01,
-        -4.4438e-02, -6.2452e-01, -3.1517e-01,  1.1200e-01,  3.8586e-02,
-         4.2222e+00,  1.0748e-01,  6.8834e-03,  1.2165e-01,  1.1850e-02,
-        -1.2723e-01, -4.6684e-02,  1.3817e-02,  2.9296e-01,  1.1796e-01,
-        -1.4662e+01,  1.1247e+00, -8.5989e-02, -1.7306e-01, -5.6538e-04,
-        -3.1667e-01])
-    policy = ShallowDeterministicPolicy(m, d, squash_fun=squash, param_init=param_init)
+    policy = ShallowDeterministicPolicy(m, d, squash_fun=squash)
 else:
     policy = DeepDeterministicPolicy(m, d, [4])
 mu_init = torch.zeros(policy.num_params())
@@ -95,6 +87,14 @@ hyperpolicy = GaussianHyperpolicy(policy,
                            mu_init=mu_init,
                            logstd_init=logstd_init,
                            bias=args.bias)
+hyperpolicy.set_from_flat(torch.tensor([-1.5469e+00, -2.0167e+00, -7.6784e-01, -7.9975e-01, -2.0564e+00,
+    -3.2041e-01, -1.9130e-01, -7.9075e-01, -4.7737e-01, -9.9748e-01,
+    -4.1719e-01, -6.2246e-01,  9.2992e-01, -9.7951e-01, -1.6872e-01,
+    -4.4438e-02, -6.2452e-01, -3.1517e-01,  1.1200e-01,  3.8586e-02,
+     4.2222e+00,  1.0748e-01,  6.8834e-03,  1.2165e-01,  1.1850e-02,
+    -1.2723e-01, -4.6684e-02,  1.3817e-02,  2.9296e-01,  1.1796e-01,
+    -1.4662e+01,  1.1247e+00, -8.5989e-02, -1.7306e-01, -5.6538e-04,
+    -3.1667e-01]))
 
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1]
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
