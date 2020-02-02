@@ -54,7 +54,8 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
                 try:
                     env.render()
                 except:
-                    pass
+                    print(s, a, r, done, info)
+                    print()
             states[t] = s
             actions[t] = a
             rewards[t] = r
