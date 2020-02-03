@@ -16,6 +16,7 @@ import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
 from gym.spaces.discrete import Discrete
+import safety_envs
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -24,7 +25,7 @@ parser.add_argument('--name', help='Experiment name', type=str, default='PGPE')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/sugiyama/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=500)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=100)
 parser.add_argument('--batchsize', help='Initial batch size', type=int, default=100)
 parser.add_argument('--iterations', help='Iterations', type=int, default=500)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.99)
@@ -99,6 +100,6 @@ pgpe(env, hyperpolicy,
             seed = args.seed,
             logger = logger,
             render = args.render,
-            test_batchsize = 10,
+            test_batchsize = False,
             baseline = args.baseline,
             log_params=True)
