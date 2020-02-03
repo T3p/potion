@@ -17,6 +17,7 @@ import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
 from gym.spaces.discrete import Discrete
 import safety_envs
+import numpy as np
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -63,8 +64,23 @@ env.seed(args.seed)
 
 m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
-policy = ShallowDeterministicPolicy(m, d)
+
+feat = None
+if 'Minigolf' in args.env:
+    def feat(s):
+        sigma = 4.
+        centers = [4., 8., 12., 16.]
+        res = [np.exp(-1 / (2 * sigma ** 2) * (s - c) ** 2) for c in centers]
+        cat_dim = len(s.shape)
+        res = torch.cat(res, cat_dim - 1)
+        return res
+    
+policy = ShallowDeterministicPolicy(m, d, feature_fun=feat)
 mu_init = torch.zeros(policy.num_params())
+if 'Minigolf' in args.env:
+    mu_init = torch.ones(policy.num_params())
+elif 'DoubleIntegrator' in args.env:
+    mu_init = torch.ones(policy.num_params()) * -0.3
 logstd_init = torch.log(torch.zeros(policy.num_params()) + args.std_init)
 hyperpolicy = GaussianHyperpolicy(policy, 
                            learn_std=True,
