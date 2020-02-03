@@ -30,11 +30,12 @@ register(
     entry_point='potion.envs.lq:LQ'
 )
 
+"""
 register(
     id='DoubleIntegrator-v0',
     entry_point='potion.envs.double_integrator:DoubleIntegrator'
 )
-
+"""
 
 register(
     id='mass-v0',
@@ -52,10 +53,12 @@ register(
     entry_point='potion.envs.drone_crash:DroneCrash'
 )
 
+"""
 register(
     id='MiniGolf-v0',
     entry_point='potion.envs.minigolf:MiniGolf'
 )
+"""
 
 register(
     id='GridWorld-v0',
