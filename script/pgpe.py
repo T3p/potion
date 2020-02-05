@@ -81,12 +81,20 @@ if 'Minigolf' in args.env:
     mu_init = torch.ones(policy.num_params())
 elif 'DoubleIntegrator' in args.env:
     mu_init = torch.ones(policy.num_params()) * -0.3
+elif 'Reach' in args.env:
+    mu_init = torch.tensor([0.10787985473871231, 0.02179303579032421, 4.300711154937744, 0.10839951038360596,
+                  0.017089104279875755, 0.1119314506649971, 0.018646063283085823, -0.17877089977264404,
+                  -0.03759196400642395, -0.004248579498380423, 0.48613205552101135, 0.10498402267694473,
+                  -12.068914413452148, 1.0702580213546753, -0.04661020636558533, -0.22232159972190857,
+                  0.0361342579126358, -0.39843615889549255])
 logstd_init = torch.log(torch.zeros(policy.num_params()) + args.std_init)
 hyperpolicy = GaussianHyperpolicy(policy, 
                            learn_std=True,
                            mu_init=mu_init,
                            logstd_init=logstd_init,
                            bias=args.bias)
+
+    
 
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1]
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
