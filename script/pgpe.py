@@ -53,7 +53,7 @@ parser.add_argument("--bias", help="Use bias parameter",
                     action="store_true")
 parser.add_argument("--no-bias", help="Use bias parameter",
                     action="store_false")
-parser.set_defaults(render=False, temp=False, learnstd=True, natural=False, bias=False) 
+parser.set_defaults(render=False, temp=False, learnstd=True, natural=True, bias=False) 
 
 args = parser.parse_args()
 
@@ -88,7 +88,7 @@ if 'Minigolf' in args.env:
 elif 'DoubleIntegrator' in args.env:
     mu_init = torch.ones(policy.num_params()) * -0.3
 elif 'Reach' in args.env:
-    mu_init = torch.tensor(optimal[9:])
+    mu_init = torch.tensor(optimal)
 logstd_init = torch.log(torch.zeros(policy.num_params()) + args.std_init)
 hyperpolicy = GaussianHyperpolicy(policy, 
                            learn_std=True,
