@@ -72,6 +72,23 @@ class ShallowDeterministicPolicy(ContinuousDeterministicPolicy):
 
     def set_params(self, val):
         self.linear.set_from_flat(val)
+    
+    def feat(self, s):
+        with torch.no_grad():
+            if self.feature_fun is not None:
+                x = self.feature_fun(s)
+            else:
+                x = s
+            return x
+    
+    def score(self, s, a):
+        with torch.no_grad():
+            if self.feature_fun is not None:
+                x = self.feature_fun(s)
+            else:
+                x = s
+            
+            return torch.mv(torch.stack([x]*len(a), 1), a)
         
     def info(self):
         return {'PolicyClass': self.__class__.__name__,
