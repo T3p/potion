@@ -39,15 +39,15 @@ def moments(dfs):
     cdf = pd.concat(dfs, sort=True).groupby(level=0)
     return cdf.mean(), cdf.std().fillna(0)
     
-def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, resamples=10000):
+def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, resamples=10000, mult=1.):
     n_runs = len(dfs)
     mean_df, std_df = moments(dfs)
-    mean = mean_df[key]
-    std = std_df[key]
+    mean = mean_df[key] * mult
+    std = std_df[key] * mult
     xx = range(len(mean)) if xkey is None else mean_df[xkey]
     line, = plt.plot(xx, mean, label=name)
     if bootstrap:
-        data = np.array([df[key] for df in dfs])
+        data = np.array([df[key] * mult for df in dfs])
         interval = bootstrap_ci(data, conf, resamples)
     else:
         with warnings.catch_warnings():
@@ -58,12 +58,12 @@ def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, res
     print('%s: %f +- %f' % (name, np.mean(mean), np.mean(std)/n_runs))
     return line
 
-def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=None, bootstrap=False, resamples=10000):
+def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=None, bootstrap=False, resamples=10000, mult=1.):
     dfs = load_all(env + '_' + name, rows)
     n_runs = len(dfs)
     mean_df, std_df = moments(dfs)
-    mean = mean_df[key].values
-    std = std_df[key].values + 1e-24
+    mean = mean_df[key].values * mult
+    std = std_df[key].values * mult + 1e-24
     if bootstrap:
         data = np.array([df[key] for df in dfs])
         interval = bootstrap_ci(data, conf, resamples)     
@@ -83,7 +83,7 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=
 def load_all(name, rows=200):
     return [pd.read_csv(file, index_col=False, nrows=rows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
 
-def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, rows=200, xkey=None, xmax=None, bootstrap=False, resamples=10000):
+def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, rows=200, xkey=None, xmax=None, bootstrap=False, resamples=10000, mult=1.):
     for key in keys:
         plt.figure()
         if ymin is not None and ymax is not None:
@@ -98,6 +98,6 @@ def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, y
             if separate:
                 handles+=(plot_all(dfs, key, name, xkey=xkey))
             else:
-                handles.append(plot_ci(dfs, key, conf, name, xkey=xkey, bootstrap=bootstrap, resamples=resamples))
+                handles.append(plot_ci(dfs, key, conf, name, xkey=xkey, bootstrap=bootstrap, resamples=resamples, mult=mult))
         plt.legend(handles=handles)
         plt.show()
