@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Fri Jul 19 13:39:53 2019
-
-@author: matteo
-"""
 
 import gym
 from gym import spaces
