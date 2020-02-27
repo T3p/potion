@@ -49,6 +49,7 @@ args = parser.parse_args()
 #Prepare
 env = gym.make(args.env)
 env.seed(args.seed)
+env.sigma_noise = 0.
 
 m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
