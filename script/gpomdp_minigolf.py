@@ -28,7 +28,7 @@ parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='MiniGolf-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
 parser.add_argument('--batchsize', help='Initial batch size', type=int, default=500)
-parser.add_argument('--iterations', help='Iterations', type=int, default=500)
+parser.add_argument('--iterations', help='Iterations', type=int, default=1000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.95)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=0.1)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
@@ -58,7 +58,6 @@ args = parser.parse_args()
 
 env = gym.make(args.env)
 env.seed(args.seed)
-env.sigma_noise = 0.
 
 m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
