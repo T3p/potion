@@ -45,10 +45,23 @@ def gauss(x, c, sigma):
     """
     isotropic
     """
-    return torch.exp(0.5 * torch.norm(x - c)**2 / sigma**2).unsqueeze(-1)
+    return torch.exp(-0.5 * torch.norm(x - c, dim=-1)**2 / sigma**2).unsqueeze(-1)
 
 def rbf_fun(centers, sigmas):
     def rbf(s):
-        return torch.cat([gauss(s, c, sigma) for (c, sigma) in zip(centers, sigmas)])
+        return torch.cat([gauss(s, c, sigma) for (c, sigma) in zip(centers, sigmas)], dim=-1)
     
     return rbf
+
+def poly_fun(order, bias=True, normalization=1.):
+    powers = range(order + 1)
+    if not bias:
+        powers = powers[1:]
+    
+    def poly(s):
+        if s.shape[-1] == 1:
+            return torch.cat([(s / normalization)**i for i in powers], dim=-1)
+        else:
+            raise NotImplementedError
+    
+    return poly

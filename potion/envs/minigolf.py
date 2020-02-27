@@ -22,9 +22,6 @@ class MiniGolf(gym.Env):
     }
 
     def __init__(self):
-        self.horizon = 20
-        self.gamma = 0.99
-
         self.min_pos = 0.0
         self.max_pos = 20.0
         self.min_action = 1e-5
@@ -63,21 +60,10 @@ class MiniGolf(gym.Env):
             noise = self.np_random.randn() * self.sigma_noise
         u = action * self.putter_length * (1 + noise)
 
-        v_min = np.sqrt(10 / 7 * self.friction * 9.81 * self.state)
-        v_max = np.sqrt((2 * self.hole_size - self.ball_radius) ** 2 * (9.81 / (2 * self.ball_radius)) + v_min ** 2)
-
         deceleration = 5 / 7 * self.friction * 9.81
 
         t = u / deceleration
         xn = self.state - u * t + 0.5 * deceleration * t ** 2
-
-        # reward = 0
-        # done = True
-        # if u < v_min:
-        #     reward = -1
-        #     done = False
-        # elif u > v_max:
-        #     reward = -100
 
         reward = 0
         done = True
@@ -89,7 +75,7 @@ class MiniGolf(gym.Env):
 
         self.state = xn
 
-        return self.get_state(), float(reward), done, {'state': self.get_state(), 'action': action}
+        return self.get_state(), float(reward), done, {'state': self.get_state(), 'action': action, 'danger': float(self.state) < -4}
 
     # Custom param for transfer
 
@@ -188,24 +174,6 @@ class MiniGolf(gym.Env):
         pdf = norm.pdf(noise) * (1 - mask)  # set to zero impossible transitions
 
         return pdf[:, :, 0]
-
-    def reward(self, state, action, next_state):
-        deceleration = 5 / 7 * self.friction * 9.81
-
-        u = np.sqrt(2 * deceleration * (state - next_state))
-
-        v_min = np.sqrt(10 / 7 * self.friction * 9.81 * state)
-        v_max = np.sqrt((2 * self.hole_size - self.ball_radius) ** 2 * (9.81 / (2 * self.ball_radius)) + v_min ** 2)
-
-        reward = 0
-        done = True
-        if u < v_min:
-            reward = -1
-            done = False
-        elif u > v_max:
-            reward = -100
-
-        return reward, done
 
     def stepDenoisedCurrent_old(self, state, action):
         """
