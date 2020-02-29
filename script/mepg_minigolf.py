@@ -26,11 +26,11 @@ parser.add_argument('--alpha', help='Step size', type=float, default=0.01)
 parser.add_argument('--eta', help='Meta step size', type=float, default=0.01)
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
 parser.add_argument('--batchsize', help='Batch size', type=int, default=100)
-parser.add_argument('--iterations', help='Iterations', type=int, default=5000)
+parser.add_argument('--iterations', help='Iterations', type=int, default=10000)
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.95)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=0.1)
 parser.add_argument('--ablation', help='What MEPG term to remove (0 means none)', type=int, default=0)
-parser.add_argument('--env_noise', help='Environment noise', type=float, default=0.3)
+parser.add_argument('--env_noise', help='Environment noise', type=float, default=0.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",

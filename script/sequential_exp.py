@@ -17,7 +17,8 @@ args = parser.parse_args()
 
 screen = su.Screen(args.name, create=True)
 
-seeds = [951, 160, 178, 117, 125]
+seeds = [785, 670, 866, 690, 253]
+#seeds = [599, 940, 969, 574, 735]
 
 commands = [args.command + ' --seed %d' % seed + ' --name %s' % args.name for seed in seeds[:args.nseeds]]
 
