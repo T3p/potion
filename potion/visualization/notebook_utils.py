@@ -81,9 +81,12 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=
 
 
 def load_all(name, rows=200):
-    return [pd.read_csv(file, index_col=False, nrows=rows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
+    dfs = [pd.read_csv(file, index_col=False, nrows=rows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
+    for df in dfs:
+        df['CumInfo'] = np.cumsum(df['Info'])
+    return dfs
 
-def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, rows=200, xkey=None, xmax=None, bootstrap=False, resamples=10000, mult=None):
+def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, rows=200, xkey=None, xmax=None, bootstrap=False, resamples=10000, mult=None, roll=1.):
     for key in keys:
         plt.figure()
         if ymin is not None and ymax is not None:
@@ -93,10 +96,13 @@ def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, y
         if logdir is not None:
             os.chdir(logdir)
         handles = []
+        if type(roll) is int:
+            roll = [roll]*len(names)
         if mult is None:
             mult = [1.] * len(names)
         for i, name in enumerate(names):
             dfs = load_all(env + '_' + name, rows=rows)
+            dfs = [dfs[j].rolling(roll[i]).mean() for j in range(len(dfs))]
             if separate:
                 handles+=(plot_all(dfs, key, name, xkey=xkey))
             else:

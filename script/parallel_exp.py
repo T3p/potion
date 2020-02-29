@@ -15,7 +15,7 @@ parser.add_argument('--name', help='Name', type=str, default='hello')
 parser.add_argument('--nseeds', help='Number of seeds', type=int, default=10)
 args = parser.parse_args()
 
-seeds = [406, 118, 851, 27, 49, 719, 533, 173, 653, 309]
+seeds = [785, 670, 866, 690, 253, 599, 940, 969, 574, 735]
 
 for seed in seeds[:args.nseeds]:    
     screen = su.Screen(args.name + '_' + str(seed), create=True)

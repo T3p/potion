@@ -13,7 +13,7 @@ from potion.common.logger import Logger
 from potion.algorithms.sepg import sepg, naive_sepg
 import argparse
 import re
-from potion.meta.safety_requirements import MonotonicImprovement, Budget, FixedThreshold
+from potion.meta.safety_requirements import MonotonicImprovement, Budget, FixedThreshold, FixedImprovement
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance
 from potion.actors.feature_functions import rbf_fun
@@ -30,7 +30,7 @@ parser.add_argument('--max_feat', help='Max state feature', type=float, default=
 parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
 parser.add_argument('--batchsize', help='Batch size', type=int, default=100)
 parser.add_argument('--iterations', help='Iterations', type=int, default=10000)
-parser.add_argument('--safety', help='Safety creterion', type=str, default='-7')
+parser.add_argument('--safety', help='Safety creterion', type=str, default='-1')
 parser.add_argument('--gamma', help='Discount factor', type=float, default=0.95)
 parser.add_argument('--delta', help='Confidence parameter', type=float, default=1.)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=0.1)
@@ -83,7 +83,7 @@ elif args.safety == 'budget':
     perf = performance(batch, args.gamma)
     safety_req = Budget(initial_perf = perf)
 else:
-    safety_req = FixedThreshold(threshold = float(args.safety))
+    safety_req = FixedImprovement(improvement = float(args.safety))
 
 env.seed(args.seed)
 
