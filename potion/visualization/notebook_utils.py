@@ -76,6 +76,7 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=
         high = high[:rows]
     xx = range(1,len(mean)+1) if xkey is None else mean_df[xkey]
     plotdf = pd.DataFrame({("it" if xkey is None else xkey): xx, "mean" : mean, "low" : low, "high": high})
+    plotdf = plotdf.iloc[0:-1:10]
     plotdf.to_csv(path + '/' + env.lower() + '_' + name.lower() + '_' + key.lower() + '.csv', index=False, header=False)
 
 
@@ -87,8 +88,9 @@ def load_all(name, rows=200):
     return dfs
 
 def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, rows=200, xkey=None, xmax=None, bootstrap=False, resamples=10000, mult=None, roll=1.):
+    figures = []
     for key in keys:
-        plt.figure()
+        figures.append(plt.figure())
         if ymin is not None and ymax is not None:
             plt.ylim(ymin, ymax)
         if xmax is not None:
@@ -109,3 +111,4 @@ def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, y
                 handles.append(plot_ci(dfs, key, conf, name, xkey=xkey, bootstrap=bootstrap, resamples=resamples, mult=mult[i]))
         plt.legend(handles=handles)
         plt.show()
+    return figures
