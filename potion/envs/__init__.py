@@ -15,6 +15,11 @@ register(
 )
 
 register(
+    id='lqr1d-v0',
+    entry_point='potion.envs.lqr1d:lqr1d'
+)
+
+register(
     id='LQ-v0',
     entry_point='potion.envs.lq:LQ'
 )

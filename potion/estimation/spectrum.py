@@ -7,7 +7,7 @@ Created on Tue Mar  3 17:23:58 2020
 """
 import torch
 from potion.estimation.gradients import gpomdp_estimator
-from potion.estimation.importance_sampling import importance_weights
+from potion.estimation.offpolicy_gradients import off_gpomdp_estimator
 
 """
 Largest (smallest if reversed) eigenvalue of Hessian from an SFO
@@ -23,7 +23,7 @@ def oja(x, sfo, iterations=1000, step=1e-2, perturbation=1e-2, base_grad=None, r
         w = w / torch.norm(w) 
     
         #Initialize largest eigenvalue
-        sigma = 0
+        sigma = torch.zeros(1)
         #Pre-compute unperturbed gradient for efficiency
         if base_grad is None:
             base_grad = sfo(x)
@@ -32,7 +32,9 @@ def oja(x, sfo, iterations=1000, step=1e-2, perturbation=1e-2, base_grad=None, r
             #Matrix-vector product
             mvp = (sfo(x + perturbation * w) - base_grad) / perturbation
             #Update largest eigenvalue
-            sigma = (1 - step) * sigma + step * torch.dot(w, mvp)
+            sigma_new = (1 - step) * sigma + step * torch.dot(w, mvp)
+            err = torch.abs(sigma_new - sigma) / torch.abs(sigma)
+            sigma = sigma_new
             #Update corresponding eigenvector
             if reverse:
                 w = w - step * mvp
@@ -40,6 +42,7 @@ def oja(x, sfo, iterations=1000, step=1e-2, perturbation=1e-2, base_grad=None, r
                 w = w + step * mvp
             w = w / torch.norm(w)
         
+        print(err.item())
         return sigma, w
 
 """
@@ -55,28 +58,26 @@ def ojapg(policy, batch, disc,
                      iterations=1000, 
                      step=1e-2, 
                      perturbation=1e-2, 
-                     estimator=gpomdp_estimator, 
-                     use_baseline=True, 
+                     estimator='gpomdp', 
+                     baseline='peters', 
                      shallow=True, 
                      verbose=False):
-    current_params = policy.get_flat()
     
-    base_grad = estimator(batch, disc, policy, 
-                          baselinekind='peters' if use_baseline else 'zero', 
+    if estimator != 'gpomdp':
+        raise NotImplementedError
+    
+    base_grad = gpomdp_estimator(batch, disc, policy, 
+                          baselinekind=baseline, 
                           shallow=shallow)
     
     
     def sfo(pert_params):
-        iws = importance_weights(batch, policy, pert_params)
-        policy.set_from_flat(pert_params)
-        pg_samples = estimator(batch, disc, policy, 
-                               baselinekind='peters' if use_baseline else 'zero', 
-                               shallow=shallow, 
-                               result='samples')
-        policy.set_from_flat(current_params)
-        return torch.mean(iws.unsqueeze(-1) * pg_samples, 0)
+        return off_gpomdp_estimator(batch, disc, policy, 
+                               target_params = pert_params,
+                               baselinekind=baseline, 
+                               shallow=shallow)
     
-    return spectral_norm(current_params, sfo, iterations, step, perturbation,
+    return spectral_norm(policy.get_flat(), sfo, iterations, step, perturbation,
                          base_grad=base_grad)
 
 
