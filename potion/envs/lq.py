@@ -52,7 +52,7 @@ class LQ(gym.Env):
         self.state = xn.ravel()
         self.timestep += 1
         
-        return self.get_state(), -np.asscalar(cost), self.timestep >= self.horizon, {}
+        return self.get_state(), -np.asscalar(cost), self.timestep >= self.horizon, {'danger':0}
 
     def reset(self, state=None):
         self.timestep = 0
