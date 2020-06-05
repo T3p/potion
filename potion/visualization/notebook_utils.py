@@ -83,8 +83,8 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=
 
 def load_all(name, rows=200):
     dfs = [pd.read_csv(file, index_col=False, nrows=rows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
-    for df in dfs:
-        df['CumInfo'] = np.cumsum(df['Info'])
+    #for df in dfs:
+    #    df['CumInfo'] = np.cumsum(df['Info'])
     return dfs
 
 def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, rows=200, xkey=None, xmax=None, bootstrap=False, resamples=10000, mult=None, roll=1.):
@@ -98,8 +98,8 @@ def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, y
         if logdir is not None:
             os.chdir(logdir)
         handles = []
-        if type(roll) is int:
-            roll = [roll]*len(names)
+        if type(roll) is int or type(roll) is float:
+            roll = [int(roll)]*len(names)
         if mult is None:
             mult = [1.] * len(names)
         for i, name in enumerate(names):

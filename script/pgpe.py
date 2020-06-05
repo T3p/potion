@@ -90,8 +90,9 @@ elif 'DoubleIntegrator' in args.env:
 elif 'Reach' in args.env:
     mu_init = torch.tensor(optimal)
 logstd_init = torch.log(torch.zeros(policy.num_params()) + args.std_init)
+print(args.learnstd)
 hyperpolicy = GaussianHyperpolicy(policy, 
-                           learn_std=True,
+                           learn_std=False,
                            mu_init=mu_init,
                            logstd_init=logstd_init,
                            bias=args.bias)
