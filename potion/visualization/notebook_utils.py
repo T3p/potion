@@ -76,7 +76,7 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=
         high = high[:rows]
     xx = range(1,len(mean)+1) if xkey is None else mean_df[xkey]
     plotdf = pd.DataFrame({("it" if xkey is None else xkey): xx, "mean" : mean, "low" : low, "high": high})
-    plotdf = plotdf.iloc[0:-1:10]
+    plotdf = plotdf.iloc[0:-1:1]
     plotdf.to_csv(path + '/' + env.lower() + '_' + name.lower() + '_' + key.lower() + '.csv', index=False, header=False)
 
 
