@@ -112,7 +112,7 @@ def pgpe(env, hyperpolicy, horizon, *,
                 'GradNorm', 
                 'Time',
                 'StepSize',
-                'Info']
+                'Info', 'Car', 'TotEps']
     if test_batchsize:
         log_keys += ['TestPerf']
     if log_params:
@@ -124,6 +124,8 @@ def pgpe(env, hyperpolicy, horizon, *,
     
     #Learning loop
     it = 0
+    car = 0
+    tot_eps = 0
     while(it < iterations):
         #Begin iteration
         start = time.time()
@@ -154,6 +156,10 @@ def pgpe(env, hyperpolicy, horizon, *,
         
         policy_params = torch.stack(policy_params, 0)
         rets = torch.tensor(rets, dtype=torch.float)
+        car += torch.sum(rets).item()
+        tot_eps += batchsize
+        log_row['TotEps'] = tot_eps
+        log_row['Car'] = car / tot_eps
         log_row['Perf'] = torch.mean(rets).item()
         log_row['UPerf'] = torch.mean(torch.tensor(urets, dtype=torch.float)).item()
         log_row['Info'] = torch.mean(torch.tensor(info_sums, dtype=torch.float)).item()
