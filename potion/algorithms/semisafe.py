@@ -11,27 +11,23 @@ from potion.common.misc_utils import (performance, avg_horizon, mean_sum_info,
 from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
 import torch
-from potion.estimation.eigenvalues import oja
 import time
 import scipy.stats as sts
 from scipy.sparse.linalg import eigsh
 import math
 
-def semisafepg(env, policy, horizon, *,
-                   curv_oracle,
-                    conf = 0.05,
+def semisafepg(env, policy, horizon, lip_const, *,
+                    conf = 0.2,
                     min_batchsize = 32,
-                    max_batchsize = 5000,
+                    max_batchsize = 10000,
                     iterations = float('inf'),
                     max_samples = 1e6,
                     disc = 0.9,
-                    forget = 0.1,
                     action_filter = None,
                     estimator = 'gpomdp',
                     baseline = 'peters',
                     logger = Logger(name='SSPG'),
                     shallow = True,
-                    fast = False,
                     meta_conf = 0.05,
                     seed = None,
                     test_batchsize = False,
@@ -108,9 +104,6 @@ def semisafepg(env, policy, horizon, *,
                    'Seed': seed,
                    'MinBatchSize': min_batchsize,
                    'MaxBatchSize': max_batchsize,
-                   'ForgetParam': forget,
-                   'Fast': fast,
-                   'CurvatureOracle' : curv_oracle
                    }
     logger.write_info({**algo_info, **policy.info()})
     log_keys = ['Perf', 
@@ -121,7 +114,6 @@ def semisafepg(env, policy, horizon, *,
                 'Time',
                 'StepSize',
                 'BatchSize',
-                'LipConst',
                 'ErrBound',
                 'SampleVar',
                 'Info',
@@ -147,7 +139,6 @@ def semisafepg(env, policy, horizon, *,
     tot_samples = 0
     optimal_batchsize = min_batchsize
     min_safe_batchsize = min_batchsize
-    _conf = conf
     _estimator = (reinforce_estimator 
                   if estimator=='reinforce' else gpomdp_estimator)
     old_lip_const = 0.
@@ -182,7 +173,7 @@ def semisafepg(env, policy, horizon, *,
                            render=True)
     
         #Collect trajectories according to target batch size
-        target_batchsize = min_safe_batchsize if fast else optimal_batchsize
+        target_batchsize = optimal_batchsize
         batch = generate_batch(env, policy, horizon, 
                                 episodes=max(min_batchsize, 
                                              min(max_batchsize, 
@@ -218,7 +209,7 @@ def semisafepg(env, policy, horizon, *,
                                              centered.unsqueeze(1)),0))
             grad_var = torch.sum(torch.diag(grad_cov)).item() #for humans
             max_eigv = eigsh(grad_cov.numpy(), 1)[0][0]
-            quant = sts.f.ppf(1 - _conf, dfn, batchsize - dfn)
+            quant = sts.f.ppf(1 - conf, dfn, batchsize - dfn)
             eps = math.sqrt(max_eigv * dfn * quant)
             
             #Optimal batch size
@@ -226,8 +217,7 @@ def semisafepg(env, policy, horizon, *,
                                    (torch.norm(grad)**2) + dfn).item()
             min_safe_batchsize = torch.ceil(eps**2 / 
                                             torch.norm(grad)**2 + dfn).item()
-            target_batchsize = (min_safe_batchsize if fast 
-                                else optimal_batchsize)
+            target_batchsize = optimal_batchsize
             if verbose and optimal_batchsize < max_batchsize:
                 print('Collected %d / %d trajectories' 
                       % (batchsize, target_batchsize))
@@ -238,7 +228,6 @@ def semisafepg(env, policy, horizon, *,
             #Adjust confidence before collecting more data for the same update
             if batchsize >= max_batchsize:
                 break
-            #_conf /= 2
         
         if verbose:
             print('Optimal batch size: %d' 
@@ -306,33 +295,15 @@ def semisafepg(env, policy, horizon, *,
             if verbose:
                 print(separator)
             
-            #Adjust confidence before collecting new data for the same update
-            _conf /= 2
-            
             #Skip to next iteration (current trajectories are discarded)
             it += 1
             continue
         
-        #Reset confidence for next update
-        _conf = conf
-        
-        #Estimate gradient Lipschitz constant with (off-policy) Oja algorithm
-        if curv_oracle:
-            lip_const = abs(env._hess(params, std, disc)).item()
-        else:
-            lip_const = oja(policy, batch, disc, iterations=100).item()
-        
-        #Update "global" lipschitz constant
-        if it > 0:
-            lip_const = (1 - forget) * max(lip_const, old_lip_const) + forget * lip_const
-        old_lip_const = lip_const
-        log_row['LipConst'] = lip_const
         
         #Select step size
         stepsize = 1. / lip_const * (1 - eps / (torch.norm(grad) 
                                         * math.sqrt(batchsize - dfn)).item())
-        if fast:
-            stepsize *= 2
+
         log_row['StepSize'] = stepsize
                 
         #Update policy parameters
