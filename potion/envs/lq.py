@@ -15,8 +15,8 @@ class LQ(gym.Env):
     }
 
     def __init__(self):
-        self.ds = 2
-        self.da = 2
+        self.ds = 1
+        self.da = 1
         self.horizon = 20
         self.gamma = 0.9
         self.sigma_controller = 0.1 * np.ones(self.da)

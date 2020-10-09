@@ -132,7 +132,6 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
     safety = 1.
     optimal_batchsize = min_batchsize
     min_safe_batchsize = min_batchsize
-    _conf = conf
     _estimator = (reinforce_estimator if estimator=='reinforce' 
                   else gpomdp_estimator)
     updated = False
@@ -208,10 +207,9 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
                 print('Collected %d / %d trajectories' % 
                       (batchsize, min(max_batchsize, min_safe_batchsize)))
             
-            #Adjust confidence before collecting more data for the same update
+            #Collecting more data for the same update?
             if batchsize >= max_batchsize:
                 break
-            _conf /= 2
         
         if verbose:
             print('Optimal batch size: %d' % optimal_batchsize 
@@ -266,16 +264,10 @@ def safepg(env, policy, horizon, lip_const, var_bound, *,
             logger.write_row(log_row, it)
             if verbose:
                 print(separator)
-            
-            #Adjust confidence before collecting new data for the same update
-            _conf /= 2
-            
+
             #Skip to next iteration (current trajectories are discarded)
             it += 1
             continue
-        
-        #Reset confidence for next update
-        _conf = conf
         
         #Select step size
         if curv_oracle:
