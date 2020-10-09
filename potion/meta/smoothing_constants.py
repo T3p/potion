@@ -13,6 +13,14 @@ def gauss_smooth_const(max_feat, std):
     xi = max_feat**2 / std**2
     return psi, kappa, xi
 
+def gauss_smooth2_const(max_feat, std):
+    c1 = 2 * max_feat / (math.sqrt(2 * math.pi) * std)
+    c2 = c3 = max_feat**2 / std**2
+    c4 = 4 * max_feat**3 / (math.sqrt(2 * math.pi) * std**3)
+    c5 = c4 / 2
+    c6 = 0
+    return c1, c2, c3, c4, c5, c6
+
 def std_smooth_const():
     psi = 4 / math.sqrt(2 * math.pi * math.e)
     kappa = 2
@@ -28,6 +36,11 @@ def gibbs_smooth_const(max_feat, temp):
 def gauss_lip_const(max_feat, max_rew, disc, std):
     lip = 2 * max_feat**2 * max_rew / (std* (1 - disc))**2 * (
             1 + 2 * disc / (math.pi * (1 - disc)))
+    return lip
+
+def gauss_lip2_const(max_feat, max_rew, disc, std):
+    lip = 2 * max_feat**3 * max_rew / (std**3 * (1 - disc)**2 * math.sqrt(2 * math.pi)) * (
+            12 * disc / (1 - disc) * (1 + disc / (math.pi * (1 - disc)) + 5))
     return lip
 
 def std_lip_const(max_rew, disc):

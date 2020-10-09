@@ -210,7 +210,7 @@ if __name__ == '__main__':
     env = lqr1d()
     gamma = 0.9
     horizon = 20
-    std = 0.1
+    std = 1
     theta_star = env._optimal_param(gamma)
     print('theta^* = ', theta_star)
     print('J^* = ', env._performance(theta_star,std, gamma, horizon=horizon))
