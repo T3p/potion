@@ -27,31 +27,31 @@ parser.add_argument('--name', help='Experiment name', type=str,
 parser.add_argument('--estimator', help='PG estimator (reinforce/gpomdp)', 
                     type=str, default='gpomdp')
 parser.add_argument('--bound', help='Statistical inequality', 
-                    type=str, default='chebyshev')
+                    type=str, default='bernstein')
 parser.add_argument('--baseline', help='control variate (avg/peters/zero)', 
                     type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, 
-                    default='LQG1D-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
+                    default='LQ-v0')
+parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
-                    default=3e7)
+                    default=1e7)
 parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, 
                     default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=50000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--conf', help='Confidence', type=float, default=0.95)
+parser.add_argument('--conf', help='Confidence', type=float, default=0.2)
 parser.add_argument('--std_init', help='Initial policy std', type=float,
                     default=1.)
 parser.add_argument('--max_feat', help='Maximum state feature', type=float,
-                    default=2.)
+                    default=1.)
 parser.add_argument('--max_rew', help='Maximum reward', type=float,
-                    default=4.)
+                    default=2.)
 parser.add_argument('--action_vol', help='Volume of action space', type=float,
-                    default=4.)
+                    default=2.)
 parser.add_argument('--max_action', help='Radius of action space', 
-                    type=float, default=2.)
+                    type=float, default=1.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",

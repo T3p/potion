@@ -30,9 +30,9 @@ parser.add_argument('--baseline', help='control variate (avg/peters/zero)',
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, 
                     default='LQ-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=20)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
-                    default=1e6)
+                    default=1e7)
 parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, 
                     default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
@@ -42,9 +42,9 @@ parser.add_argument('--conf', help='Confidence', type=float, default=0.2)
 parser.add_argument('--std_init', help='Initial policy std', type=float, 
                     default=1.)
 parser.add_argument('--max_feat', help='Maximum state feature', type=float, 
-                    default=4.)
+                    default=1.)
 parser.add_argument('--max_rew', help='Maximum reward', type=float, 
-                    default=4.)
+                    default=2.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",

@@ -17,16 +17,16 @@ class LQ(gym.Env):
     def __init__(self):
         self.ds = 1
         self.da = 1
-        self.horizon = 20
+        self.horizon = 10
         self.gamma = 0.9
-        self.sigma_controller = 0.1 * np.ones(self.da)
-        self.max_pos = 4.0 * np.ones(self.ds)
-        self.max_action = 4.0 * np.ones(self.da)
+        self.sigma_controller = 1 * np.ones(self.da)
+        self.max_pos = 1.0 * np.ones(self.ds)
+        self.max_action = 1.0 * np.ones(self.da)
         self.sigma_noise = 0 * np.eye(self.ds)
         self.A = np.eye(self.ds)
         self.B = np.eye(self.ds, self.da)
-        self.Q = 0.9 * np.eye(self.ds)
-        self.R = 0.9 * np.eye(self.da)
+        self.Q = 1 * np.eye(self.ds)
+        self.R = 1 * np.eye(self.da)
 
         #Gym attributes
         self.viewer = None
