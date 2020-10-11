@@ -58,7 +58,7 @@ def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, res
     print('%s: %f +- %f' % (name, np.mean(mean), np.mean(std)/n_runs))
     return line
 
-def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=None, bootstrap=False, resamples=10000, mult=1.):
+def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=None, bootstrap=False, resamples=10000, mult=1., step=1):
     dfs = load_all(env + '_' + name, rows)
     n_runs = len(dfs)
     mean_df, std_df = moments(dfs)
@@ -75,8 +75,16 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=
         low = low[:rows]
         high = high[:rows]
     xx = range(1,len(mean)+1) if xkey is None else mean_df[xkey]
+    
+    for i in range(len(mean)):
+        if not np.isfinite(low[i]):
+            low[i] = mean[i]
+        if not np.isfinite(high[i]):
+            high[i] = mean[i]
+    
     plotdf = pd.DataFrame({("it" if xkey is None else xkey): xx, "mean" : mean, "low" : low, "high": high})
-    plotdf = plotdf.iloc[0:-1:1]
+    plotdf = plotdf.iloc[0:-1:step]
+    print(len(plotdf))
     plotdf.to_csv(path + '/' + env.lower() + '_' + name.lower() + '_' + key.lower() + '.csv', index=False, header=False)
 
 

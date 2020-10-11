@@ -7,27 +7,35 @@ import numpy as np
 import math
 import time
 
-class mass(LQ):
+class drone(LQ):
     def __init__(self):
-        self.ds = 2
+        
+        #max feat: 1
+        #max rew: 2.5
+        #max action: 4
+        #action volume: 8
+        
+        self.ds = 3
         self.da = 1
-        self.horizon = 10
-        self.gamma = 0.9
-        self.sigma_controller = 0.1 * np.ones(self.da)
-        self.max_pos = np.array([1., 1.])
-        self.max_action = 1.0 * np.ones(self.da)
+        self.horizon = 20
+        self.gamma = 0.95
+        self.sigma_controller = 1. * np.ones(self.da)
+        self.max_pos = np.array([1., 1., 1.])
+        self.max_action = 4 * np.ones(self.da)
         self.sigma_noise = 0 * np.eye(self.ds)
         self.tau = 0.1
-        self.mass = 0.1
-        self.attr = 0.
+        self.mass = 0.2
+        self.grav = 9.8
         
-        self.A = np.array([[1., self.tau],
-                           [0., 1.]])
+        self.A = np.array([[1., self.tau, 0],
+                           [0., 1.,       -self.tau/(self.mass * self.grav)],
+                           [0,  0,        1]])
         
-        self.B = np.array([[0.         ],
-                           [self.tau/self.mass]])
+        self.B = np.array([[0.],
+                           [self.tau/self.mass],
+                           [0]])
         
-        self.Q = np.diag([0.8, 0.1])
+        self.Q = np.diag([0.7, 0.2, 0])
         self.R = 0.1 * np.eye(1) 
 
         #Gym attributes
@@ -100,7 +108,7 @@ class mass(LQ):
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
 if __name__ == '__main__':
-    env = mass()
+    env = drone()
     theta_star = env.computeOptimalK()
     print('theta^* = ', theta_star)
     print('J^* = ', env.computeJ(theta_star,env.sigma_controller))

@@ -30,6 +30,11 @@ register(
 )
 
 register(
+    id='drone-v0',
+    entry_point='potion.envs.drone:drone'
+)
+
+register(
     id='ContCartPole-v0',
     entry_point='potion.envs.cartpole:ContCartPole'
 )
