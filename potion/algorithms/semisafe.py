@@ -151,7 +151,10 @@ def semisafepg(env, policy, horizon, lip_const, *,
         if verbose:
             print('\n* Iteration %d *' % it)
         params = policy.get_flat()
-        std = torch.exp(policy.get_scale_params())
+        try:
+            std = torch.exp(policy.get_scale_params())
+        except:
+            pass
         
         #Test the corresponding deterministic policy
         if test_batchsize:
@@ -263,7 +266,7 @@ def semisafepg(env, policy, horizon, lip_const, *,
         except:
             log_row['OracleLipConst'] = -1  
         log_row['SampleVar'] = grad_var
-        log_row['UScore'] = torch.norm(grad).item() / math.sqrt(grad_var)
+        #log_row['UScore'] = torch.norm(grad).item() / math.sqrt(grad_var)
         log_row['Safety'] = safety
         log_row['ErrBound'] = eps
         log_row['Perf'] = performance(batch, disc)

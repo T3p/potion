@@ -13,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 class GridWorld(gym.Env):
     def __init__(self):
-        self.height = 5
-        self.width = 5
+        self.height = 3
+        self.width = 3
         self.start = [(0,0)]
-        self.absorbing = {(self.height - 1, 0): 1.}
-        self.goals = {(self.height - 1, 0): 1.}
+        self.absorbing = {(2,1), (2,2)}
+        self.goals = {(1,2): -1., (2,1): 1, (2,2):5}
         
         self.n_actions = 4
         self.n_states = self.height * self.width
@@ -76,6 +76,8 @@ class GridWorld(gym.Env):
                     print('Y', end='')
                 elif (i,j) in self.active_goals and self.active_goals[(i,j)]>0:
                     print('*', end='')
+                elif (i,j) in self.active_goals:
+                    print('x', end='')
                 else:
                     print('_', end='')
             print()

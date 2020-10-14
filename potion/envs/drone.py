@@ -28,7 +28,7 @@ class drone(LQ):
         self.grav = 9.8
         
         self.A = np.array([[1., self.tau, 0],
-                           [0., 1.,       -self.tau/(self.mass * self.grav)],
+                           [0., 1.,       -self.tau * self.grav],
                            [0,  0,        1]])
         
         self.B = np.array([[0.],
@@ -109,6 +109,6 @@ class drone(LQ):
 
 if __name__ == '__main__':
     env = drone()
-    theta_star = env.computeOptimalK()
+    theta_star = np.array([[-0.95,-0.58, 0.08]])#env.computeOptimalK()
     print('theta^* = ', theta_star)
     print('J^* = ', env.computeJ(theta_star,env.sigma_controller))

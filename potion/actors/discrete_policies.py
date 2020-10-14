@@ -111,6 +111,10 @@ class ShallowGibbsPolicy(DiscretePolicy):
             
     def exploration(self):
         return torch.tensor(self.temp)
+    
+    #STUB!!
+    def entropy(self, s):
+        return torch.ones(1)
         
     def info(self):
         return {'PolicyClass': self.__class__.__name__,

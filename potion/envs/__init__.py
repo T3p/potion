@@ -35,6 +35,11 @@ register(
 )
 
 register(
+    id='crash-v0',
+    entry_point='potion.envs.crash:crash'
+)
+
+register(
     id='ContCartPole-v0',
     entry_point='potion.envs.cartpole:ContCartPole'
 )

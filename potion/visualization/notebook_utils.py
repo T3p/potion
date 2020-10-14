@@ -44,7 +44,12 @@ def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, res
     mean_df, std_df = moments(dfs)
     mean = mean_df[key] * mult
     std = std_df[key] * mult
-    xx = range(len(mean)) if xkey is None else mean_df[xkey]
+    if xkey is None:
+        xx = range(len(mean))
+    elif xkey in mean_df:
+        xx = mean_df[xkey]
+    else:
+        xx = np.array(range(len(mean))) * 100
     line, = plt.plot(xx, mean, label=name)
     if bootstrap:
         data = np.array([df[key] * mult for df in dfs])
@@ -74,7 +79,12 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=
         mean = mean[:rows]
         low = low[:rows]
         high = high[:rows]
-    xx = range(1,len(mean)+1) if xkey is None else mean_df[xkey]
+    if xkey is None:
+        xx = range(len(mean))
+    elif xkey in mean_df:
+        xx = mean_df[xkey]
+    else:
+        xx = np.array(range(len(mean))) * 100
     
     for i in range(len(mean)):
         if not np.isfinite(low[i]):

@@ -14,8 +14,9 @@ from potion.algorithms.semisafe import semisafepg
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
-from potion.meta.smoothing_constants import gauss_smooth_const, gauss_lip_const
-
+from potion.meta.smoothing_constants import gauss_lip_const, gibbs_lip_const
+from potion.actors.discrete_policies import ShallowGibbsPolicy
+from gym.spaces.discrete import Discrete
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class
@@ -73,14 +74,21 @@ else:
     env = gym.make(args.env)
 env.seed(args.seed)
 
-m = sum(env.observation_space.shape)
-d = sum(env.action_space.shape)
-mu_init = torch.zeros(m)
-logstd_init = torch.log(torch.zeros(1) + args.std_init)
-policy = ShallowGaussianPolicy(m, d, 
-                               mu_init=mu_init, 
-                               logstd_init=logstd_init, 
-                               learn_std=args.learnstd)
+if type(env.action_space) is Discrete:
+    policy = ShallowGibbsPolicy(env, 
+                                temp=args.std_init)
+    lip_const = gibbs_lip_const(args.max_feat, args.max_rew, args.disc, args.std_init)
+else:
+    m = sum(env.observation_space.shape)
+    d = sum(env.action_space.shape)
+    mu_init = torch.zeros(m)
+    logstd_init = torch.log(torch.zeros(1) + args.std_init)
+    policy = ShallowGaussianPolicy(m, d, 
+                                   mu_init=mu_init, 
+                                   logstd_init=logstd_init, 
+                                   learn_std=args.learnstd)
+    lip_const = gauss_lip_const(args.max_feat, args.max_rew, args.disc, 
+                                args.std_init)
 
 test_batchsize = args.min_batchsize if args.test else 0
 
@@ -94,9 +102,7 @@ else:
     logger = Logger(directory='../logs', name = logname)
 
 #Constants
-_, kappa, _ = gauss_smooth_const(args.max_feat, args.std_init)
-lip_const = gauss_lip_const(args.max_feat, args.max_rew, args.disc, 
-                            args.std_init)
+
 
 # Run
 semisafepg(env, policy,
