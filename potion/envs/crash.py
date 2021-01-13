@@ -7,7 +7,7 @@ import numpy as np
 import math
 import time
 
-class drone(LQ):
+class crash(LQ):
     def __init__(self):
         
         #max feat: 1
@@ -28,7 +28,7 @@ class drone(LQ):
         self.grav = 9.8
         
         self.A = np.array([[1., self.tau, 0],
-                           [0., 1.,       self.tau * self.grav],
+                           [0., 1.,       -self.tau/(self.mass * self.grav)],
                            [0,  0,        1]])
         
         self.B = np.array([[0.],
@@ -54,13 +54,31 @@ class drone(LQ):
     def reset(self, state=None):
         self.timestep = 0
         if state is None:
-            self.state = np.array(self.np_random.uniform(low=-self.max_pos,
+            self.state = np.array(self.np_random.uniform(low=self.max_pos/4,
                                                           high=self.max_pos))
         else:
             self.state = np.array(state)
-        self.state[-1] = -1.
+        # self.state[1] = 0.
 
         return self.get_state()
+    
+    def step(self, action, render=False):
+        u = np.clip(np.ravel(np.atleast_1d(action)), -self.max_action, self.max_action)
+        noise = np.dot(self.sigma_noise, self.np_random.randn(self.ds))
+        xn = np.clip(np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise, -self.max_pos, self.max_pos)
+        cost = np.dot(self.state,
+                      np.dot(self.Q, self.state)) + \
+            np.dot(u, np.dot(self.R, u))
+        
+        crash = xn[0] <= self.max_pos[0]/8
+        if crash: cost = np.array([3.])
+
+        self.state = xn.ravel()
+        self.timestep += 1
+        
+        end = self.timestep >= self.horizon or crash
+        
+        return self.get_state(), -np.asscalar(cost), end, {'danger':int(crash)}
     
     def render(self, mode='human', close=False):
         if close:
@@ -108,7 +126,7 @@ class drone(LQ):
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
 if __name__ == '__main__':
-    env = drone()
+    env = crash()
     theta_star = env.computeOptimalK()
     print('theta^* = ', theta_star)
     print('J^* = ', env.computeJ(theta_star,env.sigma_controller))

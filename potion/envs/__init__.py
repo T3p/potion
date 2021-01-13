@@ -50,6 +50,11 @@ register(
 )
 
 register(
+    id='Corridor-v0',
+    entry_point='potion.envs.corridor:Corridor'
+)
+
+register(
     id='MiniGolf-v0',
     entry_point='potion.envs.minigolf:MiniGolf'
 )

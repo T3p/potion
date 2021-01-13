@@ -9,20 +9,27 @@ import math
 from numbers import Number
 
 class LQ(gym.Env):
+    """
+    Gym environment implementing an LQR problem
+
+    s_{t+1} = A s_t + B a_t + noise
+    r_{t+1} = - s_t^T Q s_t - a_t^T R a_t
+
+    Run script to compute optimal policy parameters
+    """ 
     metadata = {
         'render.modes': ['human', 'rgb_array'],
         'video.frames_per_second': 30
     }
 
     def __init__(self):
-        self.ds = 1
-        self.da = 1
-        self.horizon = 10
-        self.gamma = 0.9
-        self.sigma_controller = 1 * np.ones(self.da)
-        self.max_pos = 1.0 * np.ones(self.ds)
-        self.max_action = 1.0 * np.ones(self.da)
-        self.sigma_noise = 0 * np.eye(self.ds)
+        self.ds = 1 #state dimension
+        self.da = 1 #action dimension
+        self.horizon = 10 #task horizon (reset is not automatic!)
+        self.gamma = 0.9 #discount factor
+        self.max_pos = 1.0 * np.ones(self.ds) #max state for clipping
+        self.max_action = 1.0 * np.ones(self.da) #max action for clipping 
+        self.sigma_noise = 0 * np.eye(self.ds) #std dev of environment noise
         self.A = np.eye(self.ds)
         self.B = np.eye(self.ds, self.da)
         self.Q = 1 * np.eye(self.ds)
@@ -52,9 +59,12 @@ class LQ(gym.Env):
         self.state = xn.ravel()
         self.timestep += 1
         
-        return self.get_state(), -np.asscalar(cost), self.timestep >= self.horizon, {'danger':0}
+        return self.get_state(), -np.asscalar(cost), self.timestep >= self.horizon, {'danger':0} #done after fixed horizon (manual reset)
 
     def reset(self, state=None):
+        """
+        By default, uniform initialization 
+        """
         self.timestep = 0
         if state is None:
             self.state = np.array(self.np_random.uniform(low=-self.max_pos,
@@ -129,7 +139,7 @@ class LQ(gym.Env):
         This function computes the Riccati equation associated to the LQG
         problem.
         Args:
-            K (matrix): the matrix associated to the linear controller K * x
+            K (matrix): the matrix associated to the linear controller a = K s
 
         Returns:
             P (matrix): the Riccati Matrix
@@ -163,7 +173,7 @@ class LQ(gym.Env):
     def computeOptimalK(self):
         """
         This function computes the optimal linear controller associated to the
-        LQG problem (u = K * x).
+        LQG problem (a = K * s).
 
         Returns:
             K (matrix): the optimal controller
@@ -184,7 +194,7 @@ class LQ(gym.Env):
     def computeJ(self, K, Sigma, n_random_x0=10000):
         """
         This function computes the discounted reward associated to the provided
-        linear controller (u = Kx + \epsilon, \epsilon \sim N(0,\Sigma)).
+        linear controller (a = K s + \epsilon, \epsilon \sim N(0,\Sigma)).
         Args:
             K (matrix): the controller matrix
             Sigma (matrix): covariance matrix of the zero-mean noise added to
@@ -208,9 +218,11 @@ class LQ(gym.Env):
         temp = np.trace(temp) if np.ndim(temp) > 1 else temp
         W =  (1 / (1 - self.gamma)) * temp
 
+        #Closed-form expectation in the scalar case:
         if np.size(K)==1:
             return min(0,np.asscalar(-self.max_pos**2*P/3 - W))
 
+        #Monte Carlo estimation for higher dimensions
         J = 0.0
         for i in range(n_random_x0):
             self.reset()
@@ -221,6 +233,11 @@ class LQ(gym.Env):
         return min(0,J)
 
     def grad_K(self, K, Sigma):
+        """
+        Policy gradient (wrt K) of Gaussian linear policy with mean K s
+        and covariance Sigma.
+        Scalar case only
+        """
         I = np.eye(self.Q.shape[0], self.Q.shape[1])
         if not np.array_equal(self.A, I) or not np.array_equal(self.B, I):
             raise NotImplementedError
@@ -234,6 +251,9 @@ class LQ(gym.Env):
         return np.asscalar(- dePdeK*(self.max_pos**2/3 + self.gamma*sigma/(1 - self.gamma)))
 
     def grad_Sigma(self, K, Sigma=None):
+        """
+        Policy gradient wrt (adaptive) covariance Sigma
+        """
         I = np.eye(self.Q.shape[0], self.Q.shape[1])
         if not np.array_equal(self.A, I) or not np.array_equal(self.B, I):
             raise NotImplementedError
@@ -245,6 +265,9 @@ class LQ(gym.Env):
         return np.asscalar(-(self.R + self.gamma*P)/(1 - self.gamma))
 
     def grad_mixed(self, K, Sigma=None):
+        """
+        Mixed-derivative policy gradient for K and Sigma
+        """
         I = np.eye(self.Q.shape[0], self.Q.shape[1])
         if not np.array_equal(self.A, I) or not np.array_equal(self.B, I):
             raise NotImplementedError
@@ -304,8 +327,12 @@ class LQ(gym.Env):
 
 
 if __name__ == '__main__':
-
+    """
+    Compute optimal parameters K for Gaussian policy with mean Ks
+    and covariance matrix sigma_controller (1 by default)
+    """
     env = LQ()
+    sigma_controller = 1 * np.ones(env.da)
     theta_star = env.computeOptimalK()
     print('theta^* = ', theta_star)
-    print('J^* = ', env.computeJ(theta_star,env.sigma_controller))
+    print('J^* = ', env.computeJ(theta_star,sigma_controller))

@@ -7,6 +7,7 @@ Created on Wed Jan 16 14:47:33 2019
 """
 import torch
 import gym
+import gym_puddle
 import potion.envs
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.actors.discrete_policies import ShallowGibbsPolicy

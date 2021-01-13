@@ -11,15 +11,15 @@ import math
 
 logger = logging.getLogger(__name__)
 
-class GridWorld(gym.Env):
+class Corridor(gym.Env):
     def __init__(self):
-        self.height = 2
-        self.width = 3
+        self.height = 1
+        self.width = 5
         self.start = [(0,0)]
-        self.absorbing = {(1,2)}
-        self.goals = {(1,0): 1., (1,2): 2, (1,1):-1, (0,1):-1}
+        self.absorbing = {(0,5)}
+        self.goals = {(0,4): 1, (0,3):-0.5, (0,2):3}
         
-        self.n_actions = 4
+        self.n_actions = 2
         self.n_states = self.height * self.width
         self.action_space = gym.spaces.Discrete(self.n_actions)
         self.observation_space = gym.spaces.Discrete(self.n_states)
@@ -35,13 +35,13 @@ class GridWorld(gym.Env):
         r = self.state[0]
         c = self.state[1]
         if action == 0:
-            s = [r + 1, c]
+            s = [r, c+1]
         elif action == 1:
-            s = [r, c + 1]
+            s = [r, c]
         elif action == 2:
-            s = [r - 1, c]
+            s = [r-1, c]
         else:
-            s = [r, c - 1]
+            s = [r+1, c]
         
         #Borders
         if s[0] < 0:
