@@ -39,10 +39,10 @@ def gpomdp_estimator(batch, disc, policy, baselinekind='avg', result='mean',
     
     disc_rewards = discount(rewards, disc) #NxH
     logps = policy.log_pdf(states, actions) * mask #NxH
-    cum_logps = torch.cumsum(logps, 1) #NxH
+    cm_logps = torch.cumsum(logps, 1) #NxH
     
     if baselinekind == 'peters':
-        jac = jacobian(policy, cum_logps.view(-1)).reshape((N,H,m)) #NxHxm   
+        jac = jacobian(policy, cm_logps.view(-1)).reshape((N,H,m)) #NxHxm   
         b_num = torch.sum(tensormat(jac**2, 
                                     disc_rewards), 0) #Hxm
         b_den = torch.sum(jac**2, 0) #Hxm
@@ -57,7 +57,7 @@ def gpomdp_estimator(batch, disc, policy, baselinekind='avg', result='mean',
             baseline = torch.zeros(1) #1
         values = (disc_rewards - baseline) * mask #NxH
         
-        _samples = torch.stack([tu.flat_gradients(policy, cum_logps[i,:], 
+        _samples = torch.stack([tu.flat_gradients(policy, cm_logps[i,:], 
                                               values[i,:])
                                        for i in range(N)], 0) #Nxm
     if result == 'samples':
@@ -248,7 +248,7 @@ def _shallow_reinforce_estimator(batch, disc, policy, baselinekind='peters', res
         else:
             return torch.mean(_samples, 0) #m
 
-def _incr_shallow_gpomdp_estimator(traj, disc, policy, baselinekind='peters', result='mean', cum_1 = 0., cum_2 = 0., cum_3 = 0., tot_trajs = 1):
+def _incr_shallow_gpomdp_estimator(traj, disc, policy, baselinekind='peters', result='mean', cm_1 = 0., cm_2 = 0., cm_3 = 0., tot_trajs = 1):
     with torch.no_grad():
         states, actions, rewards, mask, _ = traj #Hxm, Hxd, H, H
     
@@ -256,13 +256,13 @@ def _incr_shallow_gpomdp_estimator(traj, disc, policy, baselinekind='peters', re
         scores = policy.score(states, actions).squeeze() #Hxm
         G = torch.cumsum(scores * mask.unsqueeze(1), 0) #Hxm
         if baselinekind == 'avg':
-            baseline = incr_mean(cum_2, disc_rewards, tot_trajs) #H
+            baseline = incr_mean(cm_2, disc_rewards, tot_trajs) #H
             res_2 = baseline
             res_3 = 0.
             values = (disc_rewards - baseline).unsqueeze(1)
         elif baselinekind == 'peters':
-            num = incr_mean(cum_2, G**2 * disc_rewards.unsqueeze(1), tot_trajs) #Hxm
-            den = incr_mean(cum_3, G**2, tot_trajs) #Hxm
+            num = incr_mean(cm_2, G**2 * disc_rewards.unsqueeze(1), tot_trajs) #Hxm
+            den = incr_mean(cm_3, G**2, tot_trajs) #Hxm
             baseline = num / den #Hxm
             res_2 = num
             res_3 = den
@@ -277,7 +277,7 @@ def _incr_shallow_gpomdp_estimator(traj, disc, policy, baselinekind='peters', re
         if result == 'samples':
             return _sample, res_2, res_3
         else:
-            return incr_mean(cum_1, _sample, tot_trajs), res_2, res_3
+            return incr_mean(cm_1, _sample, tot_trajs), res_2, res_3
         
 """Testing"""
 if __name__ == '__main__':
@@ -303,14 +303,14 @@ if __name__ == '__main__':
     #print('GPOMDP (peters)', o)
     #print()
     
-    print('Cum version')
-    cum_1 = cum_2 = cum_3 = 0.
+    print('Cumulative version')
+    cm_1 = cm_2 = cm_3 = 0.
     i = 0
     for t in batch:
         i+=1
-        cum_1, cum_2, cum3 = _incr_shallow_gpomdp_estimator(t, disc, pol, 'peters', 'mean', cum_1, cum_2, cum_3, i)
-        #print(cum_1, cum_2, cum_3)
-    o = cum_1
+        cm_1, cm_2, cm3 = _incr_shallow_gpomdp_estimator(t, disc, pol, 'peters', 'mean', cm_1, cm_2, cm_3, i)
+        #print(cm_1, cm_2, cm_3)
+    o = cm_1
     print(o)
     print()
     
