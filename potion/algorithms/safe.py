@@ -9,6 +9,7 @@ from potion.common.misc_utils import (performance, avg_horizon, mean_sum_info,
                                       clip, seed_all_agent, returns, separator)
 from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
+from potion.estimation.jackknife import jackknife
 import scipy.stats as sts
 import torch
 import time
@@ -336,7 +337,7 @@ def safe_step_strict(env, policy, disc, horizon, lip_const, var_bound,
         seed_all_agent(seed)
     
     #Prepare logger
-    algo_info = {'Algorithm': 'SafeStepExact',
+    algo_info = {'Algorithm': 'SafeStepStrict',
                    'Env': str(env), 
                    'Horizon': horizon,
                    'Discount': disc,
@@ -469,7 +470,179 @@ def safe_step_strict(env, policy, disc, horizon, lip_const, var_bound,
     #Cleanup
     logger.close()
     
+def safe_step(env, policy, disc, horizon, lip_const,
+                    batchsize = 100,
+                    conf = 0.2,
+                    iterations = float('inf'),
+                    max_samples = 1e7,
+                    action_filter = None,
+                    logger = Logger(name='SafeStep'),
+                    estimator = 'gpomdp',
+                    baseline = 'peters',
+                    shallow = True,
+                    seed = None,
+                    save_params = 10000,
+                    log_params = True,
+                    log_grad = False,
+                    parallel = False,
+                    render = False,
+                    info_key = None,
+                    verbose = 1):
+    """
+    Strict version of Safe PG algorithm with adaptive step size from 
+    "Smoothing Policies and Safe Policy Gradients" (Algorithm 3)
+    """
+    #Defaults
+    if action_filter is None:
+        action_filter = clip(env)
+    if baseline != 'zero':
+        assert batchsize > 2
+    
+    #Seed agent
+    if seed is not None:
+        seed_all_agent(seed)
+    
+    #Prepare logger
+    algo_info = {'Algorithm': 'SafeStep',
+                   'Env': str(env), 
+                   'Horizon': horizon,
+                   'Discount': disc,
+                   'Seed': seed,
+                   }
+    logger.write_info({**algo_info, **policy.info()})
+    log_keys = ['Perf', 
+                'UPerf', 
+                'AvgHorizon', 
+                'StepSize',
+                'BatchSize',
+                'GradNorm', 
+                'Time',
+                'TotSamples',
+                'Threshold',
+                'VarBound']
+    if log_params:
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
+    if log_grad:
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+    if info_key is not None:
+        log_keys.append(info_key)
+    log_row = dict.fromkeys(log_keys)
+    logger.open(log_row.keys())
+    
+    #Initializations
+    _estimator = (reinforce_estimator if estimator=='reinforce' 
+                  else gpomdp_estimator)
+    it = 0
+    tot_samples = 0
+    updates = 0
+    
+    #Learning loop
+    while(it < iterations and tot_samples < max_samples):
+        start = time.time()
+        if verbose:
+            print('\n* Iteration %d *' % it)
+        params = policy.get_flat()
+        
+        #Render the agent's behavior
+        if render and it % render==0:
+            generate_batch(env, policy, horizon,
+                           episodes=1,
+                           action_filter=action_filter, 
+                           render=True)
 
+        #Collect trajectories
+        batch = generate_batch(env, policy, horizon, 
+                                episodes=batchsize, 
+                                action_filter=action_filter,
+                                n_jobs=parallel,
+                                key=info_key)
+
+        #Estimate policy gradient
+        grad_samples = _estimator(batch, disc, policy, 
+                                    baselinekind=baseline, 
+                                    shallow=shallow,
+                                    result='samples')
+        grad = torch.mean(grad_samples, dim=0)
+        grad_norm = torch.norm(grad)
+        
+        #Estimate variance
+        var_estimator = lambda samples: torch.std(samples, dim=0, 
+                                                  unbiased=True)**2
+        jack_mean, jack_var = jackknife(var_estimator, grad_samples)
+        quantile = sts.t.ppf(1 - conf/2, batchsize)
+        var_bound = jack_mean + torch.sqrt(jack_var) * quantile
+        
+        #Update long-term quantities
+        tot_samples += batchsize
+        
+    
+        #Safety test
+        threshold = torch.ceil(2 * var_bound / (conf * grad_norm**2))
+                       
+        #Log
+        log_row['BatchSize'] = batchsize
+        log_row['VarBound'] = var_bound.item()
+        log_row['LipConst'] = lip_const
+        log_row['Threshold'] = threshold.item()
+        log_row['Perf'] = performance(batch, disc)
+        log_row['Info'] = mean_sum_info(batch).item()
+        log_row['UPerf'] = performance(batch, disc=1.)
+        log_row['AvgHorizon'] = avg_horizon(batch)
+        log_row['GradNorm'] = grad_norm.item()
+        log_row['TotSamples'] = tot_samples
+        if log_params:
+            for i in range(policy.num_params()):
+                log_row['param%d' % i] = params[i].item()
+        if log_grad:
+            for i in range(policy.num_params()):
+                log_row['grad%d' % i] = grad[i].item()
+                
+        #Safety test
+        if batchsize < threshold:
+            #Log
+            log_row['StepSize'] = 0.
+            log_row['Time'] = time.time() - start
+            if verbose:
+                print(separator)
+            logger.write_row(log_row, it)
+            if verbose:
+                print(separator)
+            #Terminate
+            if verbose:
+                print ('Not safe! Need at least %d samples' 
+                       % int(threshold.item()))
+                break
+        
+        #Select step size
+        stepsize = (1. - math.sqrt(2 * var_bound / (conf * batchsize)) 
+                    / grad_norm) / lip_const
+        log_row['StepSize'] = stepsize.item()
+                
+        #Update policy parameters
+        new_params = params + stepsize * grad
+        policy.set_from_flat(new_params)
+        
+        #Save parameters
+        if save_params and it % save_params == 0:
+            logger.save_params(params, it)
+        
+        #Log
+        log_row['Time'] = time.time() - start
+        if verbose:
+            print(separator)
+        logger.write_row(log_row, it)
+        if verbose:
+            print(separator)
+        
+        #Prepare next iteration
+        it += 1
+    
+    #Save final parameters
+    if save_params:
+        logger.save_params(params, it)
+    
+    #Cleanup
+    logger.close()
 
 def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
                     conf = 0.2,
