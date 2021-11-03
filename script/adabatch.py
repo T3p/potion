@@ -10,7 +10,7 @@ import gym
 import potion.envs
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.common.logger import Logger
-from potion.algorithms.safe import adabatch
+from potion.algorithms.safe import legacy_adabatch
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
@@ -41,7 +41,7 @@ parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int,
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=50000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--conf', help='Confidence', type=float, default=0.2)
+parser.add_argument('--conf', help='Confidence', type=float, default=0.05)
 parser.add_argument('--std_init', help='Initial policy std', type=float,
                     default=1.)
 parser.add_argument('--max_feat', help='Maximum state feature', type=float,
@@ -121,7 +121,7 @@ else:
                                   args.std_init, estimator=args.estimator)
 
 # Run
-adabatch(env, policy,
+legacy_adabatch(env, policy,
             pen_coeff = pen_coeff,
             bound = args.bound,
             var_bound = var_bound,
