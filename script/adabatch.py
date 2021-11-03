@@ -39,7 +39,7 @@ parser.add_argument('--max_samples', help='Maximum total samples', type=int,
 parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int, 
                     default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
-                    default=50000)
+                    default=100000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
 parser.add_argument('--conf', help='Confidence', type=float, default=0.05)
 parser.add_argument('--std_init', help='Initial policy std', type=float,
