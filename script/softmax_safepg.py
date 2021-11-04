@@ -44,7 +44,7 @@ parser.add_argument('--std_init', help='Initial policy std', type=float,
 parser.add_argument('--max_feat', help='Maximum state feature', type=float, 
                     default=1.)
 parser.add_argument('--max_rew', help='Maximum reward', type=float, 
-                    default=2.)
+                    default=1.)
 parser.add_argument("--fast", help="speed up",
                     action="store_true")
 parser.add_argument("--no-fast", help="Do not speed up",
