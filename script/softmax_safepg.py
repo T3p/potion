@@ -89,6 +89,7 @@ else:
 #Constants
 lip_const = gibbs_lip_const(args.max_feat, args.max_rew, args.disc, 
                             1.)
+print(lip_const)
 score_bound = args.max_feat
 err_bound = hoeffding_bounded_score(args.max_rew, score_bound, args.disc, args.horizon, 
                             dim=16, estimator=args.estimator)

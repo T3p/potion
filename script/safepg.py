@@ -91,6 +91,7 @@ else:
 #Constants
 lip_const = gauss_lip_const(args.max_feat, args.max_rew, args.disc, 
                             args.std_init)
+print(lip_const)
 score_sg = args.max_feat / args.std_init
 err_bound = hoeffding_sg_score(args.max_rew, score_sg, args.disc, args.horizon, 
                             m, args.estimator)
