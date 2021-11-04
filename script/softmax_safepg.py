@@ -108,4 +108,6 @@ spg(env, policy, args.horizon, lip_const, err_bound,
             render = args.render,
             shallow = True,
             estimator = args.estimator,
-            baseline = args.baseline)
+            baseline = args.baseline,
+            log_params=False,
+            save_params=False)

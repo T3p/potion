@@ -110,4 +110,5 @@ reinforce(env, policy,
             estimator = args.estimator,
             baseline = args.baseline,
             test_batchsize=test_batchsize,
-            log_params=True)
+            log_params=False,
+            save_params=False)
