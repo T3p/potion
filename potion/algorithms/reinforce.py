@@ -97,6 +97,7 @@ def reinforce(env, policy, horizon, *,
                 'UPerf', 
                 'AvgHorizon', 
                 'StepSize', 
+                'BatchSize',
                 'GradNorm', 
                 'Time',
                 'StepSize',
@@ -199,6 +200,7 @@ def reinforce(env, policy, horizon, *,
         if not torch.is_tensor(stepsize):
             stepsize = torch.tensor(stepsize)
         log_row['StepSize'] = torch.norm(stepsize).item()
+        log_row['BatchSize'] = batchsize
         
         #Update policy parameters
         new_params = params + stepsize * grad

@@ -16,6 +16,7 @@ import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
 from gym.spaces.discrete import Discrete
+from potion.meta.smoothing_constants import gibbs_lip_const
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -82,12 +83,16 @@ if args.temp:
 else:
     logger = Logger(directory='../logs', name = logname)
 
+
+step = 1. / gibbs_lip_const(1., 1., args.disc, 
+                            1.)
+
 if args.stepper == 'rmsprop':
     stepper = RMSprop()
 elif args.stepper == 'adam':
-    stepper = Adam(alpha=args.step)
+    stepper = Adam(alpha=step)
 else:
-    stepper = ConstantStepper(args.step)
+    stepper = ConstantStepper(step)
 
 
 # Run
