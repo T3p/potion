@@ -154,11 +154,10 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
             batchsize = len(batch)
             
             #Estimate policy gradient
-            grad_samples = _estimator(batch, disc, policy, 
+            grad = _estimator(batch, disc, policy, 
                                         baselinekind=baseline, 
                                         shallow=shallow,
                                         result='mean')
-            grad = torch.mean(grad_samples, 0)
             
             #Optimal batch size
             delta_i = delta / (i * (i + 1))
