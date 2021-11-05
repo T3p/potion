@@ -34,6 +34,7 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
                     log_grad = False,
                     parallel = False,
                     render = False,
+                    oracle = None,
                     verbose = 1):
     """
     Safe PG algorithm with adaptive batch size from 
@@ -111,6 +112,8 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
                 'StepSize',
                 'BatchSize',
                 'TotSamples']
+    if oracle is not None:
+        log_keys += ['Oracle']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
@@ -189,6 +192,8 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
         log_row['GradNorm'] = torch.norm(grad).item()
         log_row['BatchSize'] = batchsize
         log_row['TotSamples'] = tot_samples
+        if oracle is not None:
+            log_row['Oracle'] = oracle(params.numpy())
         if log_params:
             for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
@@ -431,7 +436,7 @@ def safe_step(env, policy, disc, horizon, lip_const,
                     verbose = 1):
     """
     Strict version of Safe PG algorithm with adaptive step size from 
-    "Smoothing Policies and Safe Policy Gradients" (Algorithm 3)
+    "Smoothing Policies and Safe Policy Gradients"
     """
     #Defaults
     if action_filter is None:
@@ -819,10 +824,10 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
 
 
 def legacy_adabatch(env, policy, horizon, pen_coeff, *,
-                    bound = 'chebyshev',
+                    bound = 'bernstein',
                     var_bound = None,
                     grad_range = None,
-                    conf = 0.2,
+                    fail_prob = 0.05,
                     min_batchsize = 32,
                     max_batchsize = 10000,
                     iterations = float('inf'),
@@ -837,6 +842,7 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
                     seed = None,
                     test_batchsize = False,
                     info_key = 'danger',
+                    oracle = None,
                     save_params = 10000,
                     log_params = True,
                     log_grad = False,
@@ -911,8 +917,7 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
                    'Env': str(env), 
                    'Horizon': horizon,
                    'Discount': disc,
-                   'Confidence': conf,
-                   'ConfidenceParam': conf,
+                   'FailProb': fail_prob,
                    'Seed': seed,
                    'MinBatchSize': min_batchsize,
                    'MaxBatchSize': max_batchsize,
@@ -936,6 +941,8 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
                 'Safety',
                 'Err',
                 'GradInfNorm']
+    if oracle is not None:
+        log_keys += ['Oracle']
     if log_params:
         log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
@@ -946,7 +953,7 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
     logger.open(log_row.keys())
     
     #Initializations
-    it = 0
+    it = 1
     tot_samples = 0
     safety = 1.
     optimal_batchsize = min_batchsize
@@ -965,6 +972,7 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
         if verbose:
             print('\n* Iteration %d *' % it)
         params = policy.get_flat()
+        delta = fail_prob / (it * (it + 1))
         
         #Test the corresponding deterministic policy
         if test_batchsize:
@@ -1021,15 +1029,15 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
           
         #Compute estimation error
         if bound == 'chebyshev':
-            eps = math.sqrt(var_bound / conf)
+            eps = math.sqrt(var_bound / delta)
         elif bound == 'student':
-            quant = sts.t.ppf(1 - conf, batchsize) 
+            quant = sts.t.ppf(1 - delta, batchsize) 
             eps = quant * math.sqrt(grad_var)
         elif bound == 'hoeffding':
-            eps = grad_range * math.sqrt(math.log(2. / conf) / 2)
+            eps = grad_range * math.sqrt(math.log(2. / delta) / 2)
         elif bound == 'bernstein':
-            eps = math.sqrt(2 * grad_var * math.log(3. / conf))
-            eps2 = 3 * grad_range * math.log(3. / conf)
+            eps = math.sqrt(2 * grad_var * math.log(3. / delta))
+            eps2 = 3 * grad_range * math.log(3. / delta)
         
         #Compute optimal batch size
         if bound in ['chebyshev', 'student', 'hoeffding']:
@@ -1094,6 +1102,8 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
         log_row['GradInfNorm'] = grad_infnorm.item()
         log_row['BatchSize'] = batchsize
         log_row['TotSamples'] = tot_samples
+        if oracle is not None:
+            log_row['Oracle'] = oracle(params.numpy())
         if log_params:
             for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()

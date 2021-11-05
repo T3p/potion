@@ -116,7 +116,7 @@ def reinforce(env, policy, horizon, *,
     logger.open(log_row.keys())
     
     #Learning loop
-    it = 0
+    it = 1
     while(it < iterations):
         #Begin iteration
         start = time.time()

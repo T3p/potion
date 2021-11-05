@@ -8,14 +8,15 @@ Created on Wed Jan 16 14:47:33 2019
 import torch
 import gym
 import potion.envs
-from potion.actors.continuous_policies import ShallowGaussianPolicy
+from potion.actors.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
 from potion.algorithms.safe import spg
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
-from potion.meta.smoothing_constants import gauss_lip_const
-from potion.meta.error_bounds import hoeffding_sg_score
+from potion.meta.smoothing_constants import gibbs_lip_const
+from potion.meta.error_bounds import hoeffding_bounded_score
+
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class
@@ -28,22 +29,22 @@ parser.add_argument('--baseline', help='control variate (avg/peters/zero)',
                     type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, 
-                    default='LQ-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
+                    default='GridWorld-v0')
+parser.add_argument('--horizon', help='Task horizon', type=int, default=2)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
                     default=1e7)
 parser.add_argument('--mini_batchsize', help='(Minimum) batch size', type=int, 
                     default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=100000)
-parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
+parser.add_argument('--disc', help='Discount factor', type=float, default=0.5)
 parser.add_argument('--conf', help='Confidence', type=float, default=0.95)
 parser.add_argument('--std_init', help='Initial policy std', type=float, 
                     default=1.)
 parser.add_argument('--max_feat', help='Maximum state feature', type=float, 
                     default=1.)
 parser.add_argument('--max_rew', help='Maximum reward', type=float, 
-                    default=2.)
+                    default=1.)
 parser.add_argument("--fast", help="speed up",
                     action="store_true")
 parser.add_argument("--no-fast", help="Do not speed up",
@@ -73,10 +74,8 @@ m = sum(env.observation_space.shape)
 d = sum(env.action_space.shape)
 mu_init = torch.zeros(m)
 logstd_init = torch.log(torch.zeros(1) + args.std_init)
-policy = ShallowGaussianPolicy(m, d, 
-                               mu_init=mu_init, 
-                               logstd_init=logstd_init, 
-                               learn_std=False)
+policy = ShallowGibbsPolicy(env, 
+                            temp=1.)
 
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1]
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
@@ -88,12 +87,12 @@ else:
     logger = Logger(directory='../logs', name = logname, modes=['human', 'csv'])
 
 #Constants
-lip_const = gauss_lip_const(args.max_feat, args.max_rew, args.disc, 
-                            args.std_init)
+lip_const = gibbs_lip_const(args.max_feat, args.max_rew, args.disc, 
+                            1.)
 print(lip_const)
-score_sg = args.max_feat / args.std_init
-err_bound = hoeffding_sg_score(args.max_rew, score_sg, args.disc, args.horizon, 
-                            m, args.estimator)
+score_bound = args.max_feat
+err_bound = hoeffding_bounded_score(args.max_rew, score_bound, args.disc, args.horizon, 
+                            dim=16, estimator=args.estimator)
 
 
 # Run
@@ -110,4 +109,5 @@ spg(env, policy, args.horizon, lip_const, err_bound,
             shallow = True,
             estimator = args.estimator,
             baseline = args.baseline,
-            oracle = lambda x: env.computeJ(x, args.std_init))
+            log_params=False,
+            save_params=False)

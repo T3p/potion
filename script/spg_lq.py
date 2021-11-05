@@ -110,4 +110,5 @@ spg(env, policy, args.horizon, lip_const, err_bound,
             shallow = True,
             estimator = args.estimator,
             baseline = args.baseline,
-            oracle = lambda x: env.computeJ(x, args.std_init))
+            oracle = lambda x: env.computeJ(x, args.std_init),
+            save_params=False)

@@ -15,9 +15,9 @@ parser.add_argument('--name', help='Name', type=str, default='hello')
 parser.add_argument('--nseeds', help='Number of seeds', type=int, default=5)
 args = parser.parse_args()
 
-seeds = [7426, 7604, 6313, 8837, 7288]
+seeds = [7479, 8255, 4810, 8877, 2802]
 
 for seed in seeds[:args.nseeds]:    
     screen = su.Screen(args.name + '_' + str(seed), create=True)
-    commands = [args.command + ' --seed %d' % seed + ' --name %s' % args.name]
+    commands = [args.command + ' --seed %d' % seed]# + ' --name %s' % args.name]
     screen.send_commands(commands)

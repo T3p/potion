@@ -41,7 +41,7 @@ parser.add_argument('--min_batchsize', help='(Minimum) batch size', type=int,
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=100000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--conf', help='Confidence', type=float, default=0.05)
+parser.add_argument('--conf', help='Confidence', type=float, default=0.95)
 parser.add_argument('--std_init', help='Initial policy std', type=float,
                     default=1.)
 parser.add_argument('--max_feat', help='Maximum state feature', type=float,
@@ -131,7 +131,7 @@ legacy_adabatch(env, policy,
             max_batchsize = args.max_batchsize,
             max_samples = args.max_samples,
             disc = args.disc,
-            conf = args.conf,
+            fail_prob = 1. - args.conf,
             seed = args.seed,
             logger = logger,
             render = args.render,
