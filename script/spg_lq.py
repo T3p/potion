@@ -56,7 +56,7 @@ parser.add_argument("--temp", help="Save logs in temp folder",
                     action="store_true")
 parser.add_argument("--no-temp", help="Save logs in logs folder",
                     action="store_false")
-parser.set_defaults(fast=True, render=False, temp=False) 
+parser.set_defaults(fast=False, render=False, temp=False) 
 
 args = parser.parse_args()
 
