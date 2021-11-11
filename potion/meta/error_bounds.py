@@ -14,9 +14,9 @@ def hoeffding_bounded_score(max_rew, score_bound, disc, horizon, dim,
         time_factor = (1 - disc**horizon - horizon * (disc**horizon - 
                         disc**(horizon + 1))) / (1 - disc)**2
     
-    def _err_bound(fail_prob, batch_size):
-        return max_rew * score_bound * time_factor * math.sqrt(2 * dim * 
-               math.log(2 * dim / fail_prob))
+    def _err_bound(fail_prob, dummy):
+        return 2 * max_rew * score_bound * time_factor * math.sqrt(2 * dim * 
+               math.log(6 / fail_prob))
     
     return _err_bound
 
@@ -28,10 +28,9 @@ def hoeffding_sg_score(max_rew, score_sg, disc, horizon, dim,
         time_factor = (1 - disc**horizon - horizon * (disc**horizon - 
                         disc**(horizon + 1))) / (1 - disc)**2
     
-    def _err_bound(fail_prob, batch_size):
-        return max_rew * score_sg * time_factor * math.sqrt(4 * dim * 
-               math.log(2 * dim * batch_size * horizon / fail_prob) * 
-               math.log(2 * dim / fail_prob))
+    def _err_bound(fail_prob, dummy):
+        return 4 * max_rew * score_sg * time_factor * math.sqrt(14 * dim * 
+               math.log(6 / fail_prob))
     
     return _err_bound
 
