@@ -32,7 +32,7 @@ parser.add_argument('--env', help='Gym environment id', type=str,
                     default='GridWorld-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=2)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
-                    default=2e7)
+                    default=1e7)
 parser.add_argument('--mini_batchsize', help='(Minimum) batch size', type=int, 
                     default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
