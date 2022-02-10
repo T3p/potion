@@ -70,15 +70,10 @@ class ShallowGaussianPolicy(ContinuousPolicy):
             
         logp = -((a - self.mu(x)) ** 2) / (2 * sigma ** 2) - \
             log_sigma  - .5 * math.log(2 * math.pi)
-        return torch.sum(logp, 2)
+        return torch.sum(logp, -1)
     
     def forward(self, s, a):
-        if self.feature_fun is not None:
-            x = self.feature_fun(s)
-        else:
-            x = s
-        
-        return torch.exp(self.log_pdf(x, a))
+        return torch.exp(self.log_pdf(s, a))
     
     def act(self, s, deterministic=False):
         with torch.no_grad():
@@ -230,15 +225,10 @@ class DeepGaussianPolicy(ContinuousPolicy):
             x = s
         logp = -((a - self.mu(x)) ** 2) / (2 * sigma ** 2) - \
             log_sigma  - .5 * math.log(2 * math.pi)
-        return torch.sum(logp, 2)
+        return torch.sum(logp, -1)
     
     def forward(self, s, a):
-        if self.feature_fun is not None:
-            x = self.feature_fun(s)
-        else:
-            x = s
-        
-        return torch.exp(self.log_pdf(x, a))
+        return torch.exp(self.log_pdf(s, a))
     
     def act(self, s, deterministic=False):
         with torch.no_grad():
@@ -386,12 +376,7 @@ class ShallowSquashedPolicy(ContinuousPolicy):
         return torch.sum(logp, -1)
     
     def forward(self, s, a):
-        if self.feature_fun is not None:
-            x = self.feature_fun(s)
-        else:
-            x = s
-            
-        return torch.exp(self.log_pdf(x, a))
+        return torch.exp(self.log_pdf(s, a))
     
     def act(self, s, deterministic=False):
         with torch.no_grad():
@@ -571,12 +556,7 @@ class DeepSquashedPolicy(ContinuousPolicy):
         return torch.sum(logp, -1)
     
     def forward(self, s, a):
-        if self.feature_fun is not None:
-            x = self.feature_fun(s)
-        else:
-            x = s
-        
-        return torch.exp(self.log_pdf(x, a))
+        return torch.exp(self.log_pdf(s, a))
     
     def act(self, s, deterministic=False):
         with torch.no_grad():
