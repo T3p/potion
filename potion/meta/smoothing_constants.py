@@ -4,6 +4,8 @@
 Created on Tue Mar 12 14:09:49 2019
 
 @author: matteo
+
+[1] Yuan, Rui, Robert M. Gower, and Alessandro Lazaric. "A general sample complexity analysis of vanilla policy gradient." arXiv preprint arXiv:2107.11433 (2021).
 """
 import math
 
@@ -34,8 +36,12 @@ def gibbs_smooth_const(max_feat, temp):
     return psi, kappa, xi
 
 def gauss_lip_const(max_feat, max_rew, disc, std):
+    """
     lip = 2 * max_feat**2 * max_rew / (std* (1 - disc))**2 * (
             1 + 2 * disc / (math.pi * (1 - disc)))
+    """
+    #Improved version from [1]
+    lip = 2 * max_feat**2 / (std * (1 - disc))**2
     return lip
 
 def gauss_lip2_const(max_feat, max_rew, disc, std):
@@ -49,8 +55,12 @@ def std_lip_const(max_rew, disc):
     return lip
 
 def gibbs_lip_const(max_feat, max_rew, disc, temp):
+    """
     lip = 2 * max_feat**2 * max_rew / (temp * (1 - disc))**2 * (
             3 + 4 * disc / (1 - disc))
+    """
+    #Improved version from [1]
+    lip = 6 * max_feat**2 / (temp * (1 - disc)**2)
     return lip
 
 def pirotta_coeff(max_feat, max_rew, disc, std, action_vol):
