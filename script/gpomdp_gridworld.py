@@ -26,10 +26,10 @@ parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gp
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='GridWorld-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=2)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
 parser.add_argument('--batchsize', help='Initial batch size', type=int, default=100)
-parser.add_argument('--iterations', help='Iterations', type=int, default=100000)
-parser.add_argument('--disc', help='Discount factor', type=float, default=0.5)
+parser.add_argument('--iterations', help='Iterations', type=int, default=100*1000)
+parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
 parser.add_argument('--step', help='Step size', type=float, default=1.)
@@ -84,8 +84,7 @@ else:
     logger = Logger(directory='../logs', name = logname)
 
 
-step = 1. / gibbs_lip_const(1., 1., args.disc, 
-                            1.)
+step = 1. / gibbs_lip_const(1., 1., args.disc, 1.)
 
 if args.stepper == 'rmsprop':
     stepper = RMSprop()
