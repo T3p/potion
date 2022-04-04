@@ -24,6 +24,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 
 parser.add_argument('--name', help='Experiment name', type=str, 
                     default='AdaBatch')
+parser.add_argument('--storage', help='root of log directories', type=str, default='..')
 parser.add_argument('--estimator', help='PG estimator (reinforce/gpomdp)', 
                     type=str, default='gpomdp')
 parser.add_argument('--bound', help='Statistical inequality', 
@@ -97,9 +98,10 @@ envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
 logname = envname + '_' + args.name + '_' + str(args.seed)
 
 if args.temp:
-    logger = Logger(directory='../temp', name = logname)
+    logger = Logger(directory= args.storage + '/temp', name = logname, modes=['human', 'csv'])
 else:
-    logger = Logger(directory='../logs', name = logname)
+    logger = Logger(directory=args.storage + '/logs', name = logname, modes=['human', 'csv'])
+
 
 #Constants
 _, kappa, _ = gauss_smooth_const(args.max_feat, args.std_init)
