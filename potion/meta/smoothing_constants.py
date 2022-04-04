@@ -42,6 +42,7 @@ def gauss_lip_const(max_feat, max_rew, disc, std):
     """
     #Improved version from [1]
     lip = 2 * max_feat**2 / (std * (1 - disc))**2
+    #"""
     return lip
 
 def gauss_lip2_const(max_feat, max_rew, disc, std):
