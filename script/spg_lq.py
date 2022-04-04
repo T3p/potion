@@ -22,6 +22,7 @@ parser = argparse.ArgumentParser(formatter_class
                                  =argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument('--name', help='Experiment name', type=str, default='SPG')
+parser.add_argument('--storage', help='root of log directories', type=str, default='..')
 parser.add_argument('--estimator', help='PG estimator (reinforce/gpomdp)', 
                     type=str, default='gpomdp')
 parser.add_argument('--baseline', help='control variate (avg/peters/zero)', 
@@ -83,9 +84,9 @@ envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
 logname = envname + '_' + args.name + '_' + str(args.seed)
 
 if args.temp:
-    logger = Logger(directory='../temp', name = logname, modes=['human', 'csv'])
+    logger = Logger(directory= args.storage + '/temp', name = logname, modes=['human', 'csv'])
 else:
-    logger = Logger(directory='../logs', name = logname, modes=['human', 'csv'])
+    logger = Logger(directory=args.storage + '/logs', name = logname, modes=['human', 'csv'])
 
 #Constants
 lip_const = gauss_lip_const(args.max_feat, args.max_rew, args.disc, 
