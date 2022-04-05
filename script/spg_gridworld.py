@@ -23,6 +23,7 @@ parser = argparse.ArgumentParser(formatter_class
                                  =argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument('--name', help='Experiment name', type=str, default='SPG')
+parser.add_argument('--storage', help='root of log directories', type=str, default='..')
 parser.add_argument('--estimator', help='PG estimator (reinforce/gpomdp)', 
                     type=str, default='gpomdp')
 parser.add_argument('--baseline', help='control variate (avg/peters/zero)', 
@@ -30,15 +31,15 @@ parser.add_argument('--baseline', help='control variate (avg/peters/zero)',
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, 
                     default='GridWorld-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=2)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
                     default=1e7)
 parser.add_argument('--mini_batchsize', help='(Minimum) batch size', type=int, 
                     default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=100000)
-parser.add_argument('--disc', help='Discount factor', type=float, default=0.5)
-parser.add_argument('--conf', help='Confidence', type=float, default=0.95)
+parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
+parser.add_argument('--conf', help='Confidence', type=float, default=0.8)
 parser.add_argument('--std_init', help='Initial policy std', type=float, 
                     default=1.)
 parser.add_argument('--max_feat', help='Maximum state feature', type=float, 
@@ -82,9 +83,9 @@ envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
 logname = envname + '_' + args.name + '_' + str(args.seed)
 
 if args.temp:
-    logger = Logger(directory='../temp', name = logname, modes=['human', 'csv'])
+    logger = Logger(directory= args.storage + '/temp', name = logname, modes=['human', 'csv'])
 else:
-    logger = Logger(directory='../logs', name = logname, modes=['human', 'csv'])
+    logger = Logger(directory=args.storage + '/logs', name = logname, modes=['human', 'csv'])
 
 #Constants
 lip_const = gibbs_lip_const(args.max_feat, args.max_rew, args.disc, 
