@@ -46,3 +46,16 @@ def gauss_gradient_range(max_rew, max_feat, disc, horizon, max_action, std,
                 - (horizon + 1) * disc**horizon + 1) / (1 - disc)**2) 
                 / std**2)
     
+def emp_bernstein(max_rew, score_bound, disc, horizon, dim, 
+                            estimator='gpomdp'):
+    if estimator=='reinforce':
+        time_factor = horizon * (1 - disc**horizon) / (1 - disc)
+    elif estimator == 'gpomdp':
+        time_factor = (1 - disc**horizon - horizon * (disc**horizon - 
+                        disc**(horizon + 1))) / (1 - disc)**2
+    
+    def _err_bound(fail_prob, sample_var, batchsize):
+        return math.sqrt(2. * sample_var * math.log(2. / fail_prob) / batchsize) \
+            + 7. * time_factor * math.log(2. / fail_prob) / (3. * (batchsize - 1))
+    return _err_bound
+    
