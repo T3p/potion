@@ -261,6 +261,7 @@ def bernstein_spg(env, policy, horizon, lip_const, err_bound, *,
                     estimator = 'gpomdp',
                     baseline = 'peters',
                     warm_start = False,
+                    threshold = 0.,
                     logger = Logger(name='SPG'),
                     shallow = True,
                     seed = None,
@@ -414,12 +415,15 @@ def bernstein_spg(env, policy, horizon, lip_const, err_bound, *,
             delta_i = delta / (i * (i + 1))
             
             #Collecting more data for the same update?
-            unsafety = err_bound(delta_i, sample_var, batchsize) - torch.norm(grad).item()
-            if unsafety < 0:
+            eps = err_bound(delta_i, sample_var, batchsize)
+            gnorm = torch.norm(grad).item()
+            unsafety = eps - gnorm - threshold
+            if unsafety <= 0:
                 safe_flag = True
                 break
             elif verbose:
-                print("Samples: %d, Unsafety: %f, SampleVar: % f" % (batchsize,unsafety,sample_var))
+                print("Samples: %d, Unsafety: %f, SampleVar: % f, GradNorm: %f, Eps: %f" 
+                      % (batchsize,unsafety,sample_var,gnorm,eps))
 
         #Update long-term quantities
         tot_samples += batchsize
@@ -455,7 +459,7 @@ def bernstein_spg(env, policy, horizon, lip_const, err_bound, *,
         
         #Select step size
         if safe_flag==True:
-            stepsize = 1. / lip_const
+            stepsize = 2. / (lip_const * torch.norm(grad).item())
         else:
             if verbose:
                 print('Safe update would require more samples than maximum allowed')
