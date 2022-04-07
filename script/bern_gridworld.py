@@ -22,7 +22,7 @@ from potion.meta.error_bounds import emp_bernstein
 parser = argparse.ArgumentParser(formatter_class
                                  =argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--name', help='Experiment name', type=str, default='SPG')
+parser.add_argument('--name', help='Experiment name', type=str, default='EBSPG')
 parser.add_argument('--storage', help='root of log directories', type=str, default='..')
 parser.add_argument('--estimator', help='PG estimator (reinforce/gpomdp)', 
                     type=str, default='gpomdp')
