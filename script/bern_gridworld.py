@@ -10,7 +10,7 @@ import gym
 import potion.envs
 from potion.actors.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
-from potion.algorithms.safe import bernstein_spg
+from potion.algorithms.safe import relaxed_spg
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
@@ -22,7 +22,7 @@ from potion.meta.error_bounds import emp_bernstein
 parser = argparse.ArgumentParser(formatter_class
                                  =argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--name', help='Experiment name', type=str, default='EBSPG')
+parser.add_argument('--name', help='Experiment name', type=str, default='RSPG')
 parser.add_argument('--storage', help='root of log directories', type=str, default='..')
 parser.add_argument('--estimator', help='PG estimator (reinforce/gpomdp)', 
                     type=str, default='gpomdp')
@@ -93,7 +93,9 @@ err_bound = emp_bernstein(args.max_rew, score_bound, args.disc, args.horizon,
 
 
 # Run
-bernstein_spg(env, policy, args.horizon, lip_const, err_bound,
+relaxed_spg(env, policy, args.horizon, lip_const, err_bound,
+            empirical = True,
+            threshold = 0.,
             fail_prob = 1. - args.conf,
             mini_batchsize = args.mini_batchsize,
             max_batchsize = args.max_batchsize,

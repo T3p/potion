@@ -55,7 +55,7 @@ def emp_bernstein(max_rew, score_bound, disc, horizon, dim,
                         disc**(horizon + 1))) / (1 - disc)**2
     
     def _err_bound(fail_prob, sample_var, batchsize):
-        return math.sqrt(2. * sample_var * math.log(2. / fail_prob) / batchsize) \
-            + 7. * time_factor * math.log(2. / fail_prob) / (3. * (batchsize - 1))
+        return math.sqrt(8. * dim * sample_var * math.log(12. / fail_prob) / batchsize) \
+            + 14. * dim * score_bound * time_factor * math.log(6. / fail_prob) / (3. * (batchsize - 1))
     return _err_bound
     

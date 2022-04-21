@@ -10,7 +10,7 @@ import gym
 import potion.envs
 from potion.actors.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
-from potion.algorithms.safe import bernstein_spg
+from potion.algorithms.safe import relaxed_spg
 import argparse
 import re
 from potion.common.rllab_utils import rllab_env_from_name, Rllab2GymWrapper
@@ -31,11 +31,11 @@ parser.add_argument('--baseline', help='control variate (avg/peters/zero)',
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, 
                     default='CartPole-v1')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=100)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
                     default=1e7)
 parser.add_argument('--mini_batchsize', help='(Minimum) batch size', type=int, 
-                    default=100)
+                    default=10)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=100000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
@@ -93,7 +93,8 @@ err_bound = emp_bernstein(args.max_rew, score_bound, args.disc, args.horizon,
 
 
 # Run
-bernstein_spg(env, policy, args.horizon, lip_const, err_bound,
+relaxed_spg(env, policy, args.horizon, lip_const, err_bound,
+            empirical = True,
             fail_prob = 1. - args.conf,
             mini_batchsize = args.mini_batchsize,
             max_batchsize = args.max_batchsize,
@@ -107,4 +108,4 @@ bernstein_spg(env, policy, args.horizon, lip_const, err_bound,
             baseline = args.baseline,
             log_params=False,
             save_params=False,
-            threshold=6.)
+            threshold=.1)

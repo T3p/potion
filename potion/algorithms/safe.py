@@ -250,7 +250,9 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
     #Cleanup
     logger.close()
 
-def bernstein_spg(env, policy, horizon, lip_const, err_bound, *,
+def relaxed_spg(env, policy, horizon, lip_const, err_bound, *,
+                    empirical = False,    
+                    threshold = 0.,
                     fail_prob = 0.05,
                     mini_batchsize = 10,
                     max_batchsize = 10000,
@@ -261,8 +263,7 @@ def bernstein_spg(env, policy, horizon, lip_const, err_bound, *,
                     estimator = 'gpomdp',
                     baseline = 'peters',
                     warm_start = False,
-                    threshold = 0.,
-                    logger = Logger(name='SPG'),
+                    logger = Logger(name='RSPG'),
                     shallow = True,
                     seed = None,
                     save_params = 1000,
@@ -408,16 +409,18 @@ def bernstein_spg(env, policy, horizon, lip_const, err_bound, *,
                                         baselinekind=baseline, 
                                         shallow=shallow,
                                         result='samples')
-            grad = torch.mean(grad_samples, 0)
-            sample_var = torch.sum(torch.norm(grad_samples - grad, dim=-1)**2) / (batchsize - 1)
-            
+            grad = torch.mean(grad_samples, 0)            
             #Optimal batch size
             delta_i = delta / (i * (i + 1))
             
             #Collecting more data for the same update?
-            eps = err_bound(delta_i, sample_var, batchsize)
+            if empirical:
+                sample_var = torch.sum(torch.norm(grad_samples - grad, dim=-1)**2) / (batchsize - 1)
+                eps = err_bound(delta_i, sample_var, batchsize)
+            else:
+                eps = err_bound(delta_i, batchsize)
             gnorm = torch.norm(grad).item()
-            unsafety = eps - gnorm - threshold
+            unsafety = eps - 3. * gnorm / 4. - 2. * threshold * lip_const / gnorm
             if unsafety <= 0:
                 safe_flag = True
                 break
@@ -459,7 +462,7 @@ def bernstein_spg(env, policy, horizon, lip_const, err_bound, *,
         
         #Select step size
         if safe_flag==True:
-            stepsize = 2. / (lip_const * torch.norm(grad).item())
+            stepsize = 1 / (2 * lip_const)
         else:
             if verbose:
                 print('Safe update would require more samples than maximum allowed')
