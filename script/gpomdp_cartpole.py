@@ -22,15 +22,16 @@ from potion.meta.smoothing_constants import gibbs_lip_const
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 parser.add_argument('--name', help='Experiment name', type=str, default='GPOMDP')
+parser.add_argument('--storage', help='root of log directories', type=str, default='..')
 parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='CartPole-v1')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=200)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=100)
 parser.add_argument('--batchsize', help='Initial batch size', type=int, default=100)
-parser.add_argument('--iterations', help='Iterations', type=int, default=100000)
-parser.add_argument('--disc', help='Discount factor', type=float, default=0.99)
-parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
+parser.add_argument('--iterations', help='Iterations', type=int, default=10000)
+parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
+parser.add_argument('--tmp', help='(Initial) policy temperature', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
 parser.add_argument('--step', help='Step size', type=float, default=1.)
 parser.add_argument('--ent', help='Entropy bonus coefficient', type=float, default=0.)
@@ -79,9 +80,9 @@ envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
 logname = envname + '_' + args.name + '_' + str(args.seed)
 
 if args.temp:
-    logger = Logger(directory='../temp', name = logname)
+    logger = Logger(directory= args.storage + '/temp', name = logname, modes=['human', 'csv'])
 else:
-    logger = Logger(directory='../logs', name = logname)
+    logger = Logger(directory=args.storage + '/logs', name = logname, modes=['human', 'csv'])
 
 step = args.step
 step = 1. / gibbs_lip_const(1., 1., args.disc, 1.)
