@@ -93,9 +93,9 @@ err_bound = emp_bernstein(args.max_rew, score_bound, args.disc, args.horizon,
 
 
 # Run
-relaxed_spg(env, policy, args.horizon, lip_const, err_bound,
+relaxed_spg(env, policy, args.horizon, lip_const, err_bound, args.max_rew,
             empirical = True,
-            threshold = 0.,
+            degradation = 0.05,
             fail_prob = 1. - args.conf,
             mini_batchsize = args.mini_batchsize,
             max_batchsize = args.max_batchsize,

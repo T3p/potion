@@ -35,7 +35,7 @@ parser.add_argument('--horizon', help='Task horizon', type=int, default=100)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
                     default=1e7)
 parser.add_argument('--mini_batchsize', help='(Minimum) batch size', type=int, 
-                    default=10)
+                    default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 
                     default=100000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
@@ -93,7 +93,7 @@ err_bound = emp_bernstein(args.max_rew, score_bound, args.disc, args.horizon,
 
 
 # Run
-relaxed_spg(env, policy, args.horizon, lip_const, err_bound,
+relaxed_spg(env, policy, args.horizon, lip_const, err_bound, args.max_rew,
             empirical = True,
             fail_prob = 1. - args.conf,
             mini_batchsize = args.mini_batchsize,
@@ -108,4 +108,4 @@ relaxed_spg(env, policy, args.horizon, lip_const, err_bound,
             baseline = args.baseline,
             log_params=False,
             save_params=False,
-            threshold=.1)
+            degradation=0.05)

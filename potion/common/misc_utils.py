@@ -62,6 +62,30 @@ def mean_sum_info(batch):
 def performance(batch, disc):
     return torch.mean(torch.tensor(returns(batch, disc))).item()
 
+def performance_lcb(batch, disc, max_rew, delta, horizon=None):
+    n = len(batch)
+    if horizon is not None:
+        time_factor = (1 - disc**horizon) / (1 - disc)
+    else:
+        time_factor = 1. / (1 - disc)
+    std, mean = torch.std_mean(torch.tensor(returns(batch, disc)), 
+                               unbiased=True)
+    lcb = mean.item() - std.item() * np.sqrt(2 * np.log(2 / delta) / n) - (7 * max_rew * 
+            time_factor * np.log(2 / delta) / (3 * (n - 1)))
+    return lcb
+
+def performance_ucb(batch, disc, max_rew, delta, horizon=None):
+    n = len(batch)
+    if horizon is not None:
+        time_factor = (1 - disc**horizon) / (1 - disc)
+    else:
+        time_factor = 1. / (1 - disc)
+    std, mean = torch.std_mean(torch.tensor(returns(batch, disc)), 
+                               unbiased=True)
+    ucb = mean.item() + std.item() * np.sqrt(2 * np.log(2 / delta) / n) + (7 * max_rew * 
+            time_factor * np.log(2 / delta) / (3 * (n - 1)))
+    return ucb
+
 def avg_horizon(batch):
     return torch.mean(torch.tensor([torch.sum(mask)
                        for (_, _, _, mask, _) in batch], dtype=torch.float)).item()

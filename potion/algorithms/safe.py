@@ -6,7 +6,8 @@ Policy Gradient algorithms with monotonic improvement guarantees
 
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import (performance, avg_horizon, mean_sum_info, 
-                                      clip, seed_all_agent, returns, separator)
+                                      clip, seed_all_agent, returns, separator,
+                                      performance_lcb, performance_ucb)
 from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
 from potion.estimation.jackknife import jackknife
@@ -14,6 +15,7 @@ import scipy.stats as sts
 import torch
 import time
 import math
+import numpy as np
 
 def spg(env, policy, horizon, lip_const, err_bound, *,
                     fail_prob = 0.05,
@@ -250,9 +252,9 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
     #Cleanup
     logger.close()
 
-def relaxed_spg(env, policy, horizon, lip_const, err_bound, *,
+def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
                     empirical = False,    
-                    threshold = 0.,
+                    degradation = 0.,
                     fail_prob = 0.05,
                     mini_batchsize = 10,
                     max_batchsize = 10000,
@@ -348,7 +350,8 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, *,
                 'Time',
                 'StepSize',
                 'BatchSize',
-                'TotSamples']
+                'TotSamples',
+                'Target']
     if oracle is not None:
         log_keys += ['Oracle']
     if log_params:
@@ -361,6 +364,7 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, *,
     #Initializations
     it = 1
     tot_samples = 0
+    _opt_perf = -np.infty
     _estimator = (reinforce_estimator if estimator=='reinforce' 
                   else gpomdp_estimator)
     
@@ -411,7 +415,17 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, *,
                                         result='samples')
             grad = torch.mean(grad_samples, 0)            
             #Optimal batch size
-            delta_i = delta / (i * (i + 1))
+            delta_i = delta / (3 * i * (i + 1))
+            
+            #(Over) estimate best performance so far
+            opt_perf = max(_opt_perf, performance_ucb(batch, disc, max_rew, 
+                                                     delta_i, horizon))
+            
+            #(Under) estimate current performance
+            pess_perf = performance_lcb(batch, disc, max_rew, delta_i, horizon)
+            threshold = pess_perf - (1-degradation)*opt_perf
+            if threshold < 0:
+                threshold = 0
             
             #Collecting more data for the same update?
             if empirical:
@@ -420,19 +434,22 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, *,
             else:
                 eps = err_bound(delta_i, batchsize)
             gnorm = torch.norm(grad).item()
-            unsafety = eps - 3. * gnorm / 4. - 2. * threshold * lip_const / gnorm
+            #unsafety = eps - 3. * gnorm / 4. - 2. * threshold * lip_const / gnorm
+            unsafety = eps - gnorm / 2. - threshold * lip_const / gnorm
+            if verbose:
+                print("Samples: %d, PessPerf: %f, TargetPerf: %f, Threshold: %f, Unsafety: %f, SampleVar: % f, GradNorm: %f, Eps: %f" 
+                      % (batchsize,pess_perf,(1-degradation)*opt_perf,threshold,unsafety,sample_var,gnorm,eps))
             if unsafety <= 0:
                 safe_flag = True
                 break
-            elif verbose:
-                print("Samples: %d, Unsafety: %f, SampleVar: % f, GradNorm: %f, Eps: %f" 
-                      % (batchsize,unsafety,sample_var,gnorm,eps))
-
+        
         #Update long-term quantities
+        _opt_perf = max(_opt_perf, opt_perf)
         tot_samples += batchsize
         
         #Log
         log_row['Perf'] = performance(batch, disc)
+        log_row['Target'] = (1-degradation)*opt_perf
         log_row['UPerf'] = performance(batch, disc=1.)
         log_row['AvgHorizon'] = avg_horizon(batch)
         log_row['GradNorm'] = torch.norm(grad).item()
@@ -462,7 +479,8 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, *,
         
         #Select step size
         if safe_flag==True:
-            stepsize = 1 / (2 * lip_const)
+            #stepsize = 1. / (2 * lip_const)
+            stepsize = 1. / lip_const
         else:
             if verbose:
                 print('Safe update would require more samples than maximum allowed')
