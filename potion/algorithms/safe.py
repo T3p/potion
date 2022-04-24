@@ -435,13 +435,13 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
                 sample_var = torch.sum(torch.norm(grad_samples - grad, dim=-1)**2) / (batchsize - 1)
                 eps = err_bound(delta_i, sample_var, batchsize)
             else:
-                eps = err_bound(delta_i, batchsize)
+                eps = err_bound(delta_i, None) / np.sqrt(batchsize)
             gnorm = torch.norm(grad).item()
             #unsafety = eps - 3. * gnorm / 4. - 2. * threshold * lip_const / gnorm
             unsafety = eps - gnorm / 2. - threshold * lip_const / gnorm
             if verbose:
-                print("Samples: %d, PessPerf: %f, TargetPerf: %f, Threshold: %f, Unsafety: %f, SampleVar: % f, GradNorm: %f, Eps: %f" 
-                      % (batchsize,pess_perf,(1-degradation)*opt_perf,threshold,unsafety,sample_var,gnorm,eps))
+                print("Samples: %d, PessPerf: %f, TargetPerf: %f, Threshold: %f, Unsafety: %f, GradNorm: %f, Eps: %f" 
+                      % (batchsize,pess_perf,(1-degradation)*opt_perf,threshold,unsafety,gnorm,eps))
             if unsafety <= 0:
                 safe_flag = True
                 break
