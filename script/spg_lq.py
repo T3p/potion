@@ -32,7 +32,7 @@ parser.add_argument('--env', help='Gym environment id', type=str,
                     default='LQ-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
 parser.add_argument('--max_samples', help='Maximum total samples', type=int, 
-                    default=2e6)
+                    default=1e7)
 parser.add_argument('--mini_batchsize', help='(Minimum) batch size', type=int, 
                     default=100)
 parser.add_argument('--max_batchsize', help='Maximum batch size', type=int, 

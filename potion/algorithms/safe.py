@@ -83,9 +83,10 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
     verbose: level of verbosity on standard output
     """
     #Defaults
+    """
     if action_filter is None:
         action_filter = clip(env)
-    
+    """
     #Seed agent
     if seed is not None:
         seed_all_agent(seed)
@@ -320,8 +321,10 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
     verbose: level of verbosity on standard output
     """
     #Defaults
+    """
     if action_filter is None:
         action_filter = clip(env)
+    """
     
     #Seed agent
     if seed is not None:
@@ -535,8 +538,10 @@ def safe_step_strict(env, policy, disc, horizon, lip_const, var_bound,
     "Smoothing Policies and Safe Policy Gradients" (Algorithm 2)
     """
     #Defaults
+    """
     if action_filter is None:
         action_filter = clip(env)
+    """
     if baseline != 'zero':
         assert batchsize > 2
     
@@ -700,8 +705,10 @@ def safe_step(env, policy, disc, horizon, lip_const,
     "Smoothing Policies and Safe Policy Gradients"
     """
     #Defaults
+    """
     if action_filter is None:
         action_filter = clip(env)
+    """
     if baseline != 'zero':
         assert batchsize > 2
     
@@ -915,8 +922,10 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
     verbose: level of verbosity on standard output
     """
     #Defaults
+    """
     if action_filter is None:
         action_filter = clip(env)
+    """
     
     #Seed agent
     if seed is not None:
@@ -1161,8 +1170,10 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
     verbose: level of verbosity
     """
     #Defaults
+    """
     if action_filter is None:
         action_filter = clip(env)
+    """
     if bound == 'chebyshev' and var_bound is None:
         raise NotImplementedError
     empirical_range = (grad_range is None)
