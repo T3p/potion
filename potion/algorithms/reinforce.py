@@ -73,9 +73,10 @@ def reinforce(env, policy, horizon, *,
     verbose: level of verbosity (0: only logs; 1: normal; 2: maximum)
     """
     #Defaults
+    """
     if action_filter is None:
         action_filter = clip(env)
-    
+    """
     #Seed agent
     if seed is not None:
         seed_all_agent(seed)

@@ -48,8 +48,10 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             a = a.view(-1)
             if action_filter is not None:
                 a = action_filter(a)
-
-            next_s, r, done, info = env.step(a.numpy().item())
+            _a = a.numpy()
+            if len(a)==1:
+                _a = _a.item()
+            next_s, r, done, info = env.step(_a)
             if render:
                 try:
                     env.render()

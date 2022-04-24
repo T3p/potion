@@ -26,13 +26,13 @@ parser.add_argument('--storage', help='root of log directories', type=str, defau
 parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-parser.add_argument('--env', help='Gym environment id', type=str, default='CartPole-v1')
+parser.add_argument('--env', help='Gym environment id', type=str, default='HalfCheetah-v2')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=100)
 parser.add_argument('--batchsize', help='Initial batch size', type=int, default=100)
 parser.add_argument('--iterations', help='Iterations', type=int, default=10000)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
-parser.add_argument('--tmp', help='(Initial) policy temperature', type=float, default=1.)
-parser.add_argument('--stepper', help='Step size rule', type=str, default='safe')
+parser.add_argument('--std', help='(Initial) policy std', type=float, default=1.)
+parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
 parser.add_argument('--step', help='Step size', type=float, default=1.)
 parser.add_argument('--ent', help='Entropy bonus coefficient', type=float, default=0.)
 parser.add_argument("--render", help="Render an episode",
@@ -67,7 +67,7 @@ else:
     m = sum(env.observation_space.shape)
     d = sum(env.action_space.shape)
     mu_init = torch.zeros(m*d)
-    logstd_init = torch.log(torch.zeros(d) + args.std_init)
+    logstd_init = torch.log(torch.zeros(d) + args.std)
     policy = ShallowGaussianPolicy(m, d, 
                                mu_init=mu_init, 
                                logstd_init=logstd_init, 
@@ -84,14 +84,15 @@ if args.temp:
 else:
     logger = Logger(directory=args.storage + '/logs', name = logname, modes=['human', 'csv'])
 
+step = args.step
+step = 1. / gibbs_lip_const(1., 1., args.disc, 1.)
+
 if args.stepper == 'rmsprop':
     stepper = RMSprop()
 elif args.stepper == 'adam':
-    stepper = Adam(alpha=args.step)
-elif args.stepper == 'safe':
-   stepper = ConstantStepper(1. / gibbs_lip_const(1., 1., args.disc, 1.))
+    stepper = Adam(alpha=step)
 else:
-   stepper = ConstantStepper(args.step)
+    stepper = ConstantStepper(step)
 
 
 # Run
