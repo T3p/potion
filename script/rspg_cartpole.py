@@ -78,7 +78,7 @@ policy = ShallowGibbsPolicy(env,
 
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1]
 envname = re.sub(r'[^a-zA-Z]', "", args.env)[:-1].lower()
-logname = envname + '_' + args.name + '_' + str(args.seed)
+logname = envname + '_' + args.name + str(args.degradation)[-1] + '_' + str(args.seed)
 
 if args.temp:
     logger = Logger(directory= args.storage + '/temp', name = logname, modes=['human', 'csv'])
