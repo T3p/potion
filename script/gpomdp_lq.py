@@ -90,6 +90,7 @@ elif args.stepper == 'adam':
     stepper = Adam(alpha=args.step)
 elif args.stepper == 'safe':
    stepper = ConstantStepper(1. / gauss_lip_const(1., 1., args.disc, args.std_init))
+   print(gauss_lip_const(1., 1., args.disc, args.std_init))
 else:
    stepper = ConstantStepper(args.step)
 
