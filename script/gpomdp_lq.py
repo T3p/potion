@@ -8,6 +8,7 @@ Created on Wed Jan 16 14:47:33 2019
 import torch
 import gym
 import potion.envs
+import numpy as np
 from potion.meta.smoothing_constants import gauss_lip_const
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.actors.discrete_policies import ShallowGibbsPolicy
@@ -62,7 +63,8 @@ env.seed(args.seed)
 
 if type(env.action_space) is Discrete:
     policy = ShallowGibbsPolicy(env, 
-                                temp=1.)
+                                temp=1.,
+                                feature_fun=lambda x: np.clip(x, -1., 1.))
 else:
     m = sum(env.observation_space.shape)
     d = sum(env.action_space.shape)

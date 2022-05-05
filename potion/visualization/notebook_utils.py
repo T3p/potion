@@ -13,6 +13,10 @@ import math
 import os
 import glob
 import warnings
+import potion.envs
+import gym
+
+env = gym.make("LQ-v0")
 
 small_eps = 1e-6
 
@@ -39,10 +43,17 @@ def moments(dfs):
     cdf = pd.concat(dfs, sort=True).groupby(level=0)
     return cdf.mean(), cdf.std().fillna(0)
     
-def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, resamples=10000, mult=1.):
+def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, resamples=10000, mult=1., stds=1.):
     n_runs = len(dfs)
     mean_df, std_df = moments(dfs)
+    
+    if "TotSamples" in mean_df:
+        for i in range(1,len(mean_df["TotSamples"])):
+            mean_df.at[i, "TotSamples"] = max(mean_df["TotSamples"][i-1], mean_df["TotSamples"][i])
+    
     mean = mean_df[key] * mult
+
+    
     std = std_df[key] * mult
     if xkey is None:
         xx = range(len(mean))
@@ -51,7 +62,9 @@ def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, res
     else:
         xx = np.array(range(len(mean))) * 100
     line, = plt.plot(xx, mean, label=name)
-    if bootstrap:
+    if conf==None:
+        interval = (mean - std * stds, mean + std * stds)
+    elif bootstrap:
         data = np.array([df[key] * mult for df in dfs])
         interval = bootstrap_ci(data, conf, resamples)
     else:
@@ -60,16 +73,21 @@ def plot_ci(dfs, key='Perf', conf=0.95, name='', xkey=None, bootstrap=False, res
             interval = sts.t.interval(conf, n_runs-1,loc=mean,scale=std/math.sqrt(n_runs))
         
     plt.fill_between(xx, interval[0], interval[1], alpha=0.3)
-    print('%s: %f +- %f' % (name, np.mean(mean), np.mean(std)/n_runs))
+    print('%s: %f +- %f' % (name, np.mean(mean), np.mean(std)))
     return line
 
-def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=None, bootstrap=False, resamples=10000, mult=1., step=1):
+def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=None, bootstrap=False, resamples=10000, mult=1., step=1, stds=1.):
     dfs = load_all(env + '_' + name, rows)
     n_runs = len(dfs)
     mean_df, std_df = moments(dfs)
+    if "TotSamples" in mean_df:
+        for i in range(1,len(mean_df["TotSamples"])):
+            mean_df.at[i, "TotSamples"] = max(mean_df["TotSamples"][i-1], mean_df["TotSamples"][i])
     mean = mean_df[key].values * mult
     std = std_df[key].values * mult + 1e-24
-    if bootstrap:
+    if conf==None:
+        interval = (mean - std*stds, mean + std*stds)
+    elif bootstrap:
         data = np.array([df[key] * mult for df in dfs])
         interval = bootstrap_ci(data, conf, resamples)     
     else:
@@ -101,11 +119,14 @@ def save_csv(env, name, key, conf=0.95, path='.', rows=200, batchsize=500, xkey=
 
 def load_all(name, rows=200):
     dfs = [pd.read_csv(file, index_col=False, nrows=rows) for file in glob.glob("*.csv") if file.startswith(name + '_')]
-    #for df in dfs:
-    #    df['CumInfo'] = np.cumsum(df['Info'])
+    for df in dfs:
+        if 'Oracle' not in df and 'param0' in df and 'param1' not in df:
+            df['Oracle'] = np.zeros(len(df['param0']))
+            for i in range(len(df['param0'])):
+                df.at[i,'Oracle'] = env.computeJ(df['param0'][i], 1.)
     return dfs
 
-def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, rows=200, xkey=None, xmax=None, bootstrap=False, resamples=10000, mult=None, roll=1.):
+def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, ymin=None, ymax=None, rows=200, xkey=None, xmax=None, bootstrap=False, resamples=10000, mult=None, roll=1., stds=1.):
     figures = []
     for key in keys:
         figures.append(plt.figure())
@@ -126,7 +147,7 @@ def compare(env, names, keys=['Perf'], conf=0.95, logdir=None, separate=False, y
             if separate:
                 handles+=(plot_all(dfs, key, name, xkey=xkey))
             else:
-                handles.append(plot_ci(dfs, key, conf, name, xkey=xkey, bootstrap=bootstrap, resamples=resamples, mult=mult[i]))
+                handles.append(plot_ci(dfs, key, conf, name, xkey=xkey, bootstrap=bootstrap, resamples=resamples, mult=mult[i], stds=stds))
         plt.legend(handles=handles)
         plt.show()
     return figures
