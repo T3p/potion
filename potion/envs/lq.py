@@ -27,7 +27,7 @@ class LQ(gym.Env):
         self.da = 1 #action dimension
         self.horizon = 10 #task horizon (reset is not automatic!)
         self.gamma = 0.9 #discount factor
-        self.max_pos = np.inf * np.ones(self.ds) #max state for clipping
+        self.max_pos = 100 * np.ones(self.ds) #max state for clipping
         self.max_action = np.inf * np.ones(self.da) #max action for clipping 
         self.sigma_noise = 0 * np.eye(self.ds) #std dev of environment noise
         self.A = np.eye(self.ds)
@@ -67,8 +67,8 @@ class LQ(gym.Env):
         """
         self.timestep = 0
         if state is None:
-            self.state = np.array(self.np_random.uniform(low=-1.,#self.max_pos,
-                                                          high=1.))#self.max_pos))
+            self.state = np.array(self.np_random.uniform(low=-1.,
+                                                          high=1.))
         else:
             self.state = np.array(state)
 

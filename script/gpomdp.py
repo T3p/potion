@@ -31,7 +31,7 @@ parser.add_argument('--iterations', help='Iterations', type=int, default=100)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
-parser.add_argument('--step', help='Step size', type=float, default=0.1)
+parser.add_argument('--step', help='Step size', type=float, default=1e-3)
 parser.add_argument('--ent', help='Entropy bonus coefficient', type=float, default=0.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
