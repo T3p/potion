@@ -33,7 +33,8 @@ class MLPMapping(tu.FlatModule):
     def __init__(self, d_in, d_out, hidden_neurons, 
                  bias=False, 
                  activation=torch.tanh, 
-                 init=nn.init.xavier_uniform_):
+                 init=nn.init.xavier_uniform_,
+                 output_range=None):
         """
         Multi-layer perceptron
         
@@ -49,20 +50,36 @@ class MLPMapping(tu.FlatModule):
         
         self.hidden_layers = []
         input_size = self.d_in
-        for i, depth in enumerate(hidden_neurons):
-            layer = nn.Linear(input_size, depth, bias)
+        for i, width in enumerate(hidden_neurons):
+            layer = nn.Linear(input_size, width, bias)
             init(layer.weight)
             self.add_module("hidden"+str(i), layer)
             self.hidden_layers.append(layer)
-            input_size = depth
+            input_size = width
         self.last = nn.Linear(input_size, self.d_out, bias)
         init(self.last.weight)
         self.add_module("last", self.last)
+        #output layer
+        if output_range is None:
+            self.out = None
+        elif type(output_range)==float:
+            assert output_range > 0
+            self.out = lambda x: torch.tanh(x) * output_range #[-c, c]
+        elif type(output_range)==tuple:
+            assert len(output_range)==2
+            lower, upper = output_range
+            assert upper > lower
+            self.out = lambda x: (1 + torch.tanh(x)) * (upper - lower) / 2 + lower
+        else:
+            raise NotImplementedError("Supported ranges: float (-x, x) or tuple (lower, upper)")
         
     def forward(self, x):
         for linear in self.hidden_layers:
             x = self.activation(linear(x))
-        return self.last(x) #final linear mapping
+        if self.out is not None:
+            return self.out(self.last(x))
+        else:
+            return self.last(x)
     
 """
 Testing

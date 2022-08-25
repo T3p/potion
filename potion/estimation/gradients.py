@@ -314,7 +314,7 @@ if __name__ == '__main__':
     print(o)
     print()
     
-    """
+    
   
     o = gpomdp_estimator(batch, disc, pol, baselinekind='avg', 
                          shallow=True)
@@ -349,5 +349,4 @@ if __name__ == '__main__':
     print('Shallow REINFORCE (zero):', o)
     o = reinforce_estimator(batch, disc, pol, baselinekind='zero')
     print('REINFORCE (zero):', o)
-    #"""
     

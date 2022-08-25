@@ -8,29 +8,33 @@ Created on Wed Jan 16 14:47:33 2019
 import torch
 import gym
 import potion.envs
-from potion.actors.continuous_policies import ShallowGaussianPolicy
-from potion.actors.discrete_policies import ShallowGibbsPolicy
+from potion.actors.continuous_policies import DeepGaussianPolicy
 from potion.common.logger import Logger
 from potion.algorithms.reinforce import reinforce
+from potion.algorithms.variance_reduced import svrpg, srvrpg, stormpg, pagepg
 import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
 from gym.spaces.discrete import Discrete
+import numpy as np
+from functools import partial
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--name', help='Experiment name', type=str, default='GPOMDP')
+parser.add_argument('--name', help='Experiment name', type=str, default='DEEP_TEST')
 parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
-parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
+parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='avg')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-parser.add_argument('--env', help='Gym environment id', type=str, default='LQ-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
-parser.add_argument('--batchsize', help='Initial batch size', type=int, default=100)
-parser.add_argument('--iterations', help='Iterations', type=int, default=100)
-parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
+parser.add_argument('--env', help='Gym environment id', type=str, default='Swimmer-v3')
+parser.add_argument('--horizon', help='Task horizon', type=int, default=500)
+parser.add_argument('--batchsize', help='Initial batch size', type=int, default=10)
+parser.add_argument('--network', help='Neural network size as space-separated integers', type=str, default="32 32")
+parser.add_argument('--activation', help='Neural network activation function', type=str, default="tanh")
+parser.add_argument('--iterations', help='Iterations', type=int, default=200)
+parser.add_argument('--disc', help='Discount factor', type=float, default=0.995)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
-parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
+parser.add_argument('--stepper', help='Step size rule', type=str, default='adam')
 parser.add_argument('--step', help='Step size', type=float, default=1e-3)
 parser.add_argument('--ent', help='Entropy bonus coefficient', type=float, default=0.)
 parser.add_argument("--render", help="Render an episode",
@@ -49,7 +53,7 @@ parser.add_argument("--learnstd", help="Learn std",
                     action="store_true")
 parser.add_argument("--no-learnstd", help="Don't learn std",
                     action="store_false")
-parser.set_defaults(render=False, temp=False, learnstd=False, test=False) 
+parser.set_defaults(render=False, temp=False, learnstd=True, test=False) 
 
 args = parser.parse_args()
 
@@ -58,18 +62,28 @@ args = parser.parse_args()
 env = gym.make(args.env)
 env.seed(args.seed)
 
-if type(env.action_space) is Discrete:
-    policy = ShallowGibbsPolicy(env, 
-                                temp=1.)
+hidden_neurons = [int(x) for x in args.network.split(" ")] if args.network else []
+if args.activation=="tanh":
+    activation = torch.tanh
+elif args.activation=="relu":
+    activation = torch.relu
 else:
-    m = sum(env.observation_space.shape)
-    d = sum(env.action_space.shape)
-    mu_init = torch.zeros(m*d)
-    logstd_init = torch.log(torch.zeros(d) + args.std_init)
-    policy = ShallowGaussianPolicy(m, d, 
-                               mu_init=mu_init, 
-                               logstd_init=logstd_init, 
-                               learn_std=args.learnstd)
+    raise NotImplementedError("Only available activation functions are tanh and relu")
+    
+m = sum(env.observation_space.shape)
+d = sum(env.action_space.shape)
+mu_init = torch.zeros(m*d)
+logstd_init = torch.log(torch.zeros(d) + args.std_init)
+
+policy = DeepGaussianPolicy(m, d,
+                           hidden_neurons=hidden_neurons,
+                           activation=activation,
+                           state_preproc=None,
+                           mu_init=None, #random initialization 
+                           logstd_init=logstd_init, 
+                           learn_std=args.learnstd,
+                           action_range=1.,
+                           )#init=partial(torch.nn.init.constant_))
 
 test_batchsize = args.batchsize if args.test else 0
 
@@ -91,7 +105,9 @@ else:
 
 
 # Run
+"""
 reinforce(env, policy,
+            action_filter = None,#lambda a: np.array((a,)),
             horizon = args.horizon,
             stepper = stepper,
             batchsize = args.batchsize,
@@ -105,4 +121,20 @@ reinforce(env, policy,
             estimator = args.estimator,
             baseline = args.baseline,
             test_batchsize=test_batchsize,
-            log_params=True)
+            log_params=False)
+"""
+stormpg(env, policy,
+            action_filter = None,#lambda a: np.array((a,)),
+            horizon = args.horizon,
+            stepper = stepper,
+            iterations = args.iterations,
+            disc = args.disc,
+            seed = args.seed,
+            logger = logger,
+            render = args.render,
+            shallow = False,
+            estimator = args.estimator,
+            baseline = args.baseline,
+            test_batchsize=test_batchsize,
+            log_params=False)
+#"""

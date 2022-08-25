@@ -11,7 +11,7 @@ import potion.envs
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.actors.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
-from potion.algorithms.reinforce import reinforce
+from potion.algorithms.variance_reduced import svrpg
 import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
@@ -20,19 +20,20 @@ from gym.spaces.discrete import Discrete
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-parser.add_argument('--name', help='Experiment name', type=str, default='GPOMDP')
+parser.add_argument('--name', help='Experiment name', type=str, default='SVRPG')
 parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='LQ-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
-parser.add_argument('--batchsize', help='Initial batch size', type=int, default=100)
+parser.add_argument('--init_batchsize', help='Initial batch size', type=int, default=100)
+parser.add_argument('--mini_batchsize', help='Batch size for t>1', type=int, default=10)
+parser.add_argument('--epoch_length', help='Number of inner iterations', type=int, default=10)
 parser.add_argument('--iterations', help='Iterations', type=int, default=100)
 parser.add_argument('--disc', help='Discount factor', type=float, default=0.9)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
 parser.add_argument('--step', help='Step size', type=float, default=1e-3)
-parser.add_argument('--ent', help='Entropy bonus coefficient', type=float, default=0.)
 parser.add_argument("--render", help="Render an episode",
                     action="store_true")
 parser.add_argument("--no-render", help="Do not render any episode",
@@ -91,17 +92,18 @@ else:
 
 
 # Run
-reinforce(env, policy,
+svrpg(env, policy,
             horizon = args.horizon,
             stepper = stepper,
-            batchsize = args.batchsize,
+            init_batchsize = args.init_batchsize,
+            mini_batchsize = args.mini_batchsize,
+            epoch_length = args.epoch_length,
             iterations = args.iterations,
             disc = args.disc,
-            entropy_coeff = args.ent,
             seed = args.seed,
             logger = logger,
             render = args.render,
-            shallow = False,
+            shallow = True,
             estimator = args.estimator,
             baseline = args.baseline,
             test_batchsize=test_batchsize,

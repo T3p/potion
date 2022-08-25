@@ -189,7 +189,7 @@ def reinforce(env, policy, horizon, *,
             grad_var = torch.sum(torch.diag(grad_cov)).item() #for humans
         else:
             grad = grad_samples
-        
+                    
         if verbose > 1:
             print('Gradients: ', grad)
         log_row['GradNorm'] = torch.norm(grad).item()

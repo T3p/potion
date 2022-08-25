@@ -82,7 +82,9 @@ class Adam:
         self.v = self.beta2 * self.v + (1 - self.beta2) * grad**2
         m_hat = self.m / (1 - self.beta1**self.t)
         v_hat = self.v / (1 - self.beta2**self.t)
-        return self.alpha / (torch.sqrt(v_hat) + self.epsilon) * m_hat
+        step = self.alpha / (torch.sqrt(v_hat) + self.epsilon) * m_hat / grad #division by grad needed since adam does not compute a step but an update vector!
+        step[step != step] = 0. #where grad is zero we can safely set the step to zero
+        return step
     
     def reset(self):
         self.m = 0
