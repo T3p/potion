@@ -282,7 +282,7 @@ class DeepGaussianPolicy(ContinuousPolicy):
             
         
     def info(self):
-        return {'PolicyDlass': self.__class__.__name__,
+        return {'PolicyClass': self.__class__.__name__,
                 'LearnStd': self.learn_std,
                 'StateDim': self.n_states,
                 'ActionDim': self.n_actions,

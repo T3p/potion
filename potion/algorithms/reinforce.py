@@ -159,7 +159,7 @@ def reinforce(env, policy, horizon, *,
         log_row['AvgHorizon'] = avg_horizon(batch)
         log_row['Exploration'] = policy.exploration().item()
         log_row['Entropy'] = policy.entropy(0.).item()
-    
+            
         #Estimate policy gradient
         result = 'samples' if estimate_var else 'mean'
         if estimator == 'gpomdp' and entropy_coeff == 0:
@@ -195,7 +195,8 @@ def reinforce(env, policy, horizon, *,
         log_row['GradNorm'] = torch.norm(grad).item()
         if estimate_var:
             log_row['SampleVar'] = grad_var
-        
+            
+                
         #Select meta-parameters
         stepsize = stepper.next(grad)
         if not torch.is_tensor(stepsize):
