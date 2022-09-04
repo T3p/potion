@@ -56,13 +56,13 @@ def off_gpomdp_estimator(batch, disc, policy, target_params,
         
         if baselinekind == 'peters':
             jac = jacobian(policy, cm_logps.view(-1)).reshape((N,H,m)) #NxHxm   
-            b_num = torch.sum(tensormat((jac * torch.exp(log_iws - stabilizers).unsqueeze(1))**2, 
+            b_num = torch.sum(tensormat((jac * torch.exp(log_iws - stabilizers).unsqueeze(-1))**2, 
                                         disc_rewards), 0) #Hxm
-            b_den = torch.sum((jac * torch.exp(log_iws - stabilizers).unsqueeze(1))**2, 0) #Hxm
+            b_den = torch.sum((jac * torch.exp(log_iws - stabilizers).unsqueeze(-1))**2, 0) #Hxm
             baseline = b_num / b_den #Hxm
             baseline[baseline != baseline] = 0
             values = disc_rewards.unsqueeze(2) - baseline.unsqueeze(0) #NxHxm
-            _samples = torch.sum(tensormat(values * torch.exp(log_iws).unsqueeze(1) * jac, mask), 1) #Nxm
+            _samples = torch.sum(tensormat(values * torch.exp(log_iws).unsqueeze(-1) * jac, mask), 1) #Nxm
         else:
             if baselinekind == 'avg':
                 baseline = torch.mean(disc_rewards, 0) #H
@@ -100,9 +100,7 @@ def _shallow_off_gpomdp_estimator(batch, disc, policy, target_params,
         policy.set_from_flat(behavioral_params)
 
         G = torch.cumsum(tensormat(scores, mask), 1) #NxHxm
-        n_k = torch.sum(mask, dim=0) #H
-        n_k[n_k==0.] = 1.
-              
+
         log_iws = torch.cumsum((target_logps - behavioral_logps) * mask, 1) #NxH
         stabilizers, _ = torch.max(log_iws, dim=0, keepdim=True) #NxH
         
@@ -115,7 +113,7 @@ def _shallow_off_gpomdp_estimator(batch, disc, policy, target_params,
             if baselinekind == 'zero':
                 baseline = torch.zeros_like(disc_rewards[0]) #H
             elif baselinekind == 'avg':
-                baseline = torch.mean(disc_rewards, 0) #H
+                baseline = torch.sum(disc_rewards, 0) / torch.sum(mask, 0) #H
             else:
                 raise NotImplementedError
             baseline[baseline != baseline] = 0 #removes non-real values
@@ -241,13 +239,13 @@ def _shallow_off_reinforce_estimator(batch, disc, policy, target_params,
             else:
                 raise NotImplementedError
             baseline[baseline != baseline] = 0 #removes non-real values
-            values = (returns - baseline.unsqueeze(0)).unsqueeze(1) #Nxm     
+            values = (returns - baseline) #N     
         
-        _samples = torch.exp(log_iws).unsqueeze(1) * values * G #Nxm
+        _samples = torch.einsum("i,i,ij->ij", (torch.exp(log_iws), values, G)) #Nxm
         if result == 'samples':
             return _samples #Nxm
         else:
-            return torch.mean(_samples, 0) #m        
+            return torch.mean(_samples, 0) #m
         
 """Testing"""
 if __name__ == '__main__':

@@ -119,8 +119,8 @@ class ShallowGaussianPolicy(ContinuousPolicy):
             x = self.feature_fun(s)
         else:
             x = s
-        score = torch.einsum('ijk,ijh->ijkh', (x, (a - self.mu(x)) / sigma ** 2))
-        score = score.reshape((score.shape[0], score.shape[1], score.shape[2]*score.shape[3]))
+        score = torch.einsum('...k,...h->...kh', (x, (a - self.mu(x)) / sigma ** 2))
+        score = score.reshape(score.shape[:-2] + (score.shape[-2]*score.shape[-1],))
         return score
     
     def scale_score(self, s, a):
@@ -134,12 +134,14 @@ class ShallowGaussianPolicy(ContinuousPolicy):
     def score(self, s, a):
         s = tu.complete_out(s, 3)
         a = tu.complete_out(a, 3)
+        loc_score = self.loc_score(s,a)
         if self.learn_std:
-            return torch.cat((self.scale_score(s, a),
-                           self.loc_score(s, a)), 
-                           2)
+            scale_score = self.scale_score(s,a)
+            return torch.cat((scale_score,
+                           loc_score 
+                           ), -1)
         else:
-            return self.loc_score(s,a)
+            return loc_score
     
     def entropy(self, s):
         s = tu.complete_out(s, 3)

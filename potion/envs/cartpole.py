@@ -55,7 +55,7 @@ class ContCartPole(gym.Env):
 
     def step(self, action):
         action = np.ravel(action)
-        assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
+        #assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         state = self.state
         x, x_dot, theta, theta_dot = state
         force = np.clip(action,-self.force_mag,self.force_mag)
