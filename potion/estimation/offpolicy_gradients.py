@@ -46,7 +46,8 @@ def off_gpomdp_estimator(batch, disc, policy, target_params,
         states, actions, rewards, mask, _ = unpack(batch) #NxHxd_s, NxHxd_a, NxH, NxH
         H = rewards.shape[1]
         m = policy.num_params()
-        disc_rewards = discount(rewards * mask, disc) #NxH
+        rewards = rewards * mask
+        disc_rewards = discount(rewards, disc) #NxH
         
         #Behavioral
         behavioral_params = policy.get_flat()
@@ -115,7 +116,8 @@ def off_reinforce_estimator(batch, disc, policy, target_params,
         N = len(batch)
         states, actions, rewards, mask, _ = unpack(batch) #NxHxm, NxHxd, NxH, NxH
         
-        disc_rewards = discount(rewards * mask, disc) #NxH
+        rewards = rewards * mask
+        disc_rewards = discount(rewards, disc) #NxH
         rets = torch.sum(disc_rewards, 1) #N
         
         #Behavioral
@@ -168,7 +170,8 @@ def _shallow_off_gpomdp_estimator(batch, disc, policy, target_params,
                          baselinekind, result):
     with torch.no_grad():
         states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
-        disc_rewards = discount(rewards * mask, disc) #NxH
+        rewards = rewards * mask
+        disc_rewards = discount(rewards, disc) #NxH
         
         #Behavioral
         behavioral_params = policy.get_flat()
@@ -212,7 +215,8 @@ def _shallow_off_reinforce_estimator(batch, disc, policy, target_params,
                          baselinekind, result):
     with torch.no_grad():
         states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
-        disc_rewards = discount(rewards * mask, disc) #NxH 
+        rewards = rewards * mask
+        disc_rewards = discount(rewards, disc) #NxH 
         returns = torch.sum(disc_rewards, 1) #N
         
         #Behavioral

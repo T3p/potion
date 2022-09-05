@@ -114,7 +114,7 @@ reinforce(env, policy,
             test_batchsize=test_batchsize,
             log_params=args.log_params)
 """
-pagepg(env, policy,
+stormpg(env, policy,
             horizon = args.horizon,
             stepper = stepper,
             init_batchsize = args.batchsize,

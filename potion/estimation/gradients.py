@@ -43,7 +43,8 @@ def gpomdp_estimator(batch, disc, policy, baselinekind='avg', result='mean',
     H = rewards.shape[1]
     m = policy.num_params()
     
-    disc_rewards = discount(rewards * mask, disc) #NxH
+    rewards = rewards * mask
+    disc_rewards = discount(rewards, disc) #NxH
     logps = policy.log_pdf(states, actions) * mask #NxH
     cm_logps = torch.cumsum(logps, 1) #NxH
     
@@ -94,7 +95,8 @@ def reinforce_estimator(batch, disc, policy, baselinekind='avg',
     N = len(batch)
     states, actions, rewards, mask, _ = unpack(batch) #NxHxm, NxHxd, NxH, NxH
     
-    disc_rewards = discount(rewards * mask, disc) #NxH
+    rewards = rewards * mask
+    disc_rewards = discount(rewards, disc) #NxH
     rets = torch.sum(disc_rewards, 1) #N
     logps = policy.log_pdf(states, actions) * mask #NxH
     
@@ -152,7 +154,8 @@ def _shallow_gpomdp_estimator(batch, disc, policy, baselinekind='peters', result
     with torch.no_grad():        
         states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
         
-        disc_rewards = discount(rewards * mask, disc) #NxH
+        rewards = rewards * mask
+        disc_rewards = discount(rewards, disc) #NxH
         scores = policy.score(states, actions) * mask.unsqueeze(-1) #NxHxM
         G = torch.cumsum(scores, 1) #NxHxm
         
@@ -202,7 +205,8 @@ def _shallow_reinforce_estimator(batch, disc, policy, baselinekind='peters', res
         
         scores = policy.score(states, actions) * mask.unsqueeze(-1) #NxHxm
         G = torch.sum(scores, 1) #Nxm
-        disc_rewards = discount(rewards * mask, disc) #NxH
+        rewards = rewards * mask
+        disc_rewards = discount(rewards, disc) #NxH
         rets = torch.sum(disc_rewards, 1) #N
         
         if baselinekind == 'avg':
@@ -226,7 +230,8 @@ def _shallow_egpomdp_estimator(batch, disc, policy, coeff, baselinekind='peters'
         states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
         
         rewards = (1-coeff) * rewards +  coeff * policy.entropy(states)
-        disc_rewards = discount(rewards * mask, disc) #NxH
+        rewards = rewards * mask
+        disc_rewards = discount(rewards, disc) #NxH
         scores = policy.score(states, actions) * mask.unsqueeze(-1) #NxHxM
         G = torch.cumsum(scores, 1) #NxHxm
         
