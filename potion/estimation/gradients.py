@@ -125,6 +125,29 @@ def reinforce_estimator(batch, disc, policy, baselinekind='avg',
     else:
         return torch.mean(_samples, 0) #m
 
+def egpomdp_estimator(batch, disc, policy, coeff, baselinekind='avg', result='mean',
+                     shallow=False):
+    """entropy-augmented G(PO)MDP policy gradient estimator
+       
+    batch: list of N trajectories. Each trajectory is a tuple 
+        (states, actions, rewards, mask). Each element of the tuple is a 
+        tensor where the first dimension is time.
+    disc: discount factor
+    policy: the one used to collect the data
+    coeff: entropy bonus coefficient
+    baselinekind: kind of baseline to employ in the estimator. 
+        Either 'avg' (average reward, default), 'peters' 
+        (variance-minimizing),  or 'zero' (no baseline)
+    result: whether to return the final estimate ('mean', default), or the 
+        single per-trajectory estimates ('samples')
+    shallow: whether to use precomputed score functions (only available
+        for shallow policies)
+    """
+    if shallow:
+        return _shallow_egpomdp_estimator(batch, disc, policy, coeff, baselinekind, result)    
+    else:
+        raise NotImplementedError
+
 def _shallow_gpomdp_estimator(batch, disc, policy, baselinekind='peters', result='mean'):
     with torch.no_grad():        
         states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
@@ -197,6 +220,32 @@ def _shallow_reinforce_estimator(batch, disc, policy, baselinekind='peters', res
             return _samples #Nxm
         else:
             return torch.mean(_samples, 0) #m
+
+def _shallow_egpomdp_estimator(batch, disc, policy, coeff, baselinekind='peters', result='mean'):
+    with torch.no_grad():        
+        states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
+        
+        rewards = (1-coeff) * rewards +  coeff * policy.entropy(states)
+        disc_rewards = discount(rewards * mask, disc) #NxH
+        scores = policy.score(states, actions) * mask.unsqueeze(-1) #NxHxM
+        G = torch.cumsum(scores, 1) #NxHxm
+        
+        if baselinekind == 'avg':
+            baseline = torch.mean(disc_rewards, 0).unsqueeze(1) #Hx1
+        elif baselinekind == 'peters':
+            baseline = torch.sum(tensormat(G ** 2, disc_rewards), 0) / \
+                            torch.sum(G ** 2, 0) #Hxm
+        else:
+            baseline = torch.zeros(1,1) #1x1
+        baseline[baseline != baseline] = 0
+        values = disc_rewards.unsqueeze(2) - baseline.unsqueeze(0) #NxHxm
+        
+        ent_bonus = torch.mean(policy.entropy_grad(states), 1) #Nxm
+        _samples = (1-coeff) * torch.sum(G * values, 1) + coeff * ent_bonus #Nxm
+        if result == 'samples':
+            return _samples #Nxm
+        else:
+            return torch.mean(_samples, 0) #m
         
 """Testing"""
 if __name__ == '__main__':
@@ -217,13 +266,21 @@ if __name__ == '__main__':
     
     #Just checking that shallow and deep implementations are consistent
     for b, res in zip(["zero", "avg", "peters"], ["mean", "samples"]):
+        #GPOMDP
         deep = gpomdp_estimator(batch, disc, pol, baselinekind=b, result=res,
                          shallow=False)
         shallow = gpomdp_estimator(batch, disc, pol, baselinekind=b, result=res,
                          shallow=True)
         assert torch.allclose(deep, shallow, atol=TOL)
+        #Entropy-augmented version with entropy coefficient set to zero should
+        #also be the same
+        ent = egpomdp_estimator(batch, disc, pol, coeff=0., baselinekind=b, result=res,
+                 shallow=True)
+        assert torch.allclose(ent, shallow, atol=TOL)
+        
+        #REINFORCE
         deep = reinforce_estimator(batch, disc, pol, baselinekind=b, result=res,
                          shallow=False)
         shallow = reinforce_estimator(batch, disc, pol, baselinekind=b, result=res,
                          shallow=True)
-        assert torch.allclose(deep, shallow, atol=TOL)    
+        assert torch.allclose(deep, shallow, atol=TOL)

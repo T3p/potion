@@ -87,50 +87,6 @@ def off_gpomdp_estimator(batch, disc, policy, target_params,
         else:
             return torch.mean(_samples, 0) #m
 
-def _shallow_off_gpomdp_estimator(batch, disc, policy, target_params, 
-                         baselinekind, result):
-    with torch.no_grad():
-        states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
-        disc_rewards = discount(rewards * mask, disc) #NxH
-        
-        #Behavioral
-        behavioral_params = policy.get_flat()
-        behavioral_logps = policy.log_pdf(states, actions) * mask #NxH
-        
-        #Target
-        policy.set_from_flat(target_params)
-        target_logps = policy.log_pdf(states, actions) * mask #NxH
-        scores = policy.score(states, actions) * mask.unsqueeze(-1) #NxHxM
-        
-        #restore (behavioral) policy
-        policy.set_from_flat(behavioral_params)
-
-        G = torch.cumsum(scores, 1) #NxHxm
-
-        log_iws = torch.cumsum(target_logps - behavioral_logps, 1) #NxH
-        stabilizers, _ = torch.max(log_iws, dim=0, keepdim=True) #NxH
-        
-        if baselinekind == 'peters': #Mastrangelo's variant
-            baseline = torch.sum(tensormat(G ** 2, disc_rewards * torch.exp(2*(log_iws - stabilizers))), 0) / \
-                            torch.sum(tensormat(G ** 2, torch.exp(2*(log_iws - stabilizers))), 0) #Hxm
-            baseline[baseline != baseline] = 0 #removes non-real values
-            values = disc_rewards.unsqueeze(2) - baseline.unsqueeze(0) #NxHxm
-        else:
-            if baselinekind == 'zero':
-                baseline = torch.zeros_like(disc_rewards[0]) #H
-            elif baselinekind == 'avg':
-                baseline = torch.mean(disc_rewards, 0) #H
-            else:
-                raise NotImplementedError
-            baseline[baseline != baseline] = 0 #removes non-real values
-            values = (disc_rewards - baseline.unsqueeze(0)).unsqueeze(2) #NxHxm     
-        
-        _samples = torch.sum(tensormat(G * values, torch.exp(log_iws)), 1) #Nxm
-        if result == 'samples':
-            return _samples #Nxm
-        else:
-            return torch.mean(_samples, 0) #m
-
 def off_reinforce_estimator(batch, disc, policy, target_params, 
                          baselinekind='avg', 
                          result='mean',
@@ -208,6 +164,50 @@ def off_reinforce_estimator(batch, disc, policy, target_params,
         else:
             return torch.mean(_samples, 0) #m
 
+def _shallow_off_gpomdp_estimator(batch, disc, policy, target_params, 
+                         baselinekind, result):
+    with torch.no_grad():
+        states, actions, rewards, mask, _ = unpack(batch) # NxHxm, NxHxd, NxH, NxH
+        disc_rewards = discount(rewards * mask, disc) #NxH
+        
+        #Behavioral
+        behavioral_params = policy.get_flat()
+        behavioral_logps = policy.log_pdf(states, actions) * mask #NxH
+        
+        #Target
+        policy.set_from_flat(target_params)
+        target_logps = policy.log_pdf(states, actions) * mask #NxH
+        scores = policy.score(states, actions) * mask.unsqueeze(-1) #NxHxM
+        
+        #restore (behavioral) policy
+        policy.set_from_flat(behavioral_params)
+
+        G = torch.cumsum(scores, 1) #NxHxm
+
+        log_iws = torch.cumsum(target_logps - behavioral_logps, 1) #NxH
+        stabilizers, _ = torch.max(log_iws, dim=0, keepdim=True) #NxH
+        
+        if baselinekind == 'peters': #Mastrangelo's variant
+            baseline = torch.sum(tensormat(G ** 2, disc_rewards * torch.exp(2*(log_iws - stabilizers))), 0) / \
+                            torch.sum(tensormat(G ** 2, torch.exp(2*(log_iws - stabilizers))), 0) #Hxm
+            baseline[baseline != baseline] = 0 #removes non-real values
+            values = disc_rewards.unsqueeze(2) - baseline.unsqueeze(0) #NxHxm
+        else:
+            if baselinekind == 'zero':
+                baseline = torch.zeros_like(disc_rewards[0]) #H
+            elif baselinekind == 'avg':
+                baseline = torch.mean(disc_rewards, 0) #H
+            else:
+                raise NotImplementedError
+            baseline[baseline != baseline] = 0 #removes non-real values
+            values = (disc_rewards - baseline.unsqueeze(0)).unsqueeze(2) #NxHxm     
+        
+        _samples = torch.sum(tensormat(G * values, torch.exp(log_iws)), 1) #Nxm
+        if result == 'samples':
+            return _samples #Nxm
+        else:
+            return torch.mean(_samples, 0) #m
+
 def _shallow_off_reinforce_estimator(batch, disc, policy, target_params, 
                          baselinekind, result):
     with torch.no_grad():
@@ -273,6 +273,7 @@ if __name__ == '__main__':
     
     #Just checking it is consistent with on-policy estimation
     for b, res in zip(["zero", "avg", "peters"], ["mean", "samples"]):
+        #GPOMDP
         on = gpomdp_estimator(batch, disc, pol, baselinekind=b, result=res,
                          shallow=True)
         off1 = off_gpomdp_estimator(batch, disc, pol, 
@@ -286,6 +287,7 @@ if __name__ == '__main__':
         assert torch.allclose(on, off1, atol=TOL)
         assert torch.allclose(off1, off2, atol=TOL)
         
+        #REINFORCE
         on = reinforce_estimator(batch, disc, pol, baselinekind=b, result=res,
                  shallow=True)
         off1 = off_reinforce_estimator(batch, disc, pol, 
