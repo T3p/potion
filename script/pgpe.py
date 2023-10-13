@@ -16,7 +16,6 @@ import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
 from gym.spaces.discrete import Discrete
-import safety_envs
 import numpy as np
 
 # Command line arguments
@@ -26,10 +25,10 @@ parser.add_argument('--name', help='Experiment name', type=str, default='PGPE')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/sugiyama/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
 parser.add_argument('--env', help='Gym environment id', type=str, default='ContCartPole-v0')
-parser.add_argument('--horizon', help='Task horizon', type=int, default=500)
-parser.add_argument('--batchsize', help='Initial batch size', type=int, default=100)
-parser.add_argument('--iterations', help='Iterations', type=int, default=100)
-parser.add_argument('--disc', help='Discount factor', type=float, default=1.)
+parser.add_argument('--horizon', help='Task horizon', type=int, default=100)
+parser.add_argument('--batchsize', help='Initial batch size', type=int, default=10)
+parser.add_argument('--iterations', help='Iterations', type=int, default=500)
+parser.add_argument('--disc', help='Discount factor', type=float, default=0.99)
 parser.add_argument('--std_init', help='Initial policy std', type=float, default=1.)
 parser.add_argument('--stepper', help='Step size rule', type=str, default='constant')
 parser.add_argument('--step', help='Step size', type=float, default=1e-1)
@@ -81,8 +80,8 @@ if 'Minigolf' in args.env:
         res = torch.cat(res, cat_dim - 1)
         return res
     
-policy = ShallowDeterministicPolicy(m, d, feature_fun=feat)
-mu_init = torch.zeros(policy.num_params())
+policy = ShallowDeterministicPolicy(m, d, feature_fun=lambda x: torch.ones(m))
+mu_init = 0.5 + torch.zeros(policy.num_params())
 if 'Minigolf' in args.env:
     mu_init = torch.ones(policy.num_params())
 elif 'DoubleIntegrator' in args.env:
@@ -123,7 +122,7 @@ pgpe(env, hyperpolicy,
             batchsize = args.batchsize,
             iterations = args.iterations,
             disc = args.disc,
-            natural = True,
+            natural = False,
             seed = args.seed,
             logger = logger,
             render = args.render,

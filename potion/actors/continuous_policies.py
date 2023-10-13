@@ -212,7 +212,7 @@ class DeepGaussianPolicy(ContinuousPolicy):
         if learn_std:
             self.logstd = nn.Parameter(logstd_init)
         else:
-            self.logstd = autograd.Variable(logstd_init)
+            self.logstd = nn.Parameter(logstd_init, requires_grad = False)
         
         # Normal(0,1)
         self._pdf = Normal(torch.zeros_like(self.logstd.data), 
