@@ -8,7 +8,7 @@ Created on Wed Jan 16 14:47:33 2019
 import torch
 import gym
 import potion.envs
-from potion.actors.continuous_policies import ShallowGaussianPolicy
+from potion.actors.continuous_policies import ShallowGaussianPolicy, DeepGaussianPolicy
 from potion.actors.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
 from potion.algorithms.variance_reduced import svrpg
@@ -67,7 +67,7 @@ else:
     d = sum(env.action_space.shape)
     mu_init = torch.zeros(m*d)
     logstd_init = torch.log(torch.zeros(d) + args.std_init)
-    policy = ShallowGaussianPolicy(m, d, 
+    policy = DeepGaussianPolicy(m, d, 
                                mu_init=mu_init, 
                                logstd_init=logstd_init, 
                                learn_std=args.learnstd)
@@ -103,7 +103,7 @@ svrpg(env, policy,
             seed = args.seed,
             logger = logger,
             render = args.render,
-            shallow = True,
+            shallow = False,
             estimator = args.estimator,
             baseline = args.baseline,
             test_batchsize=test_batchsize,

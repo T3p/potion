@@ -50,7 +50,7 @@ class LQ(gym.Env):
 
     def step(self, action, render=False):
         u = np.clip(np.ravel(np.atleast_1d(action)), -self.max_action, self.max_action)
-        noise = np.dot(self.sigma_noise, self.np_random.randn(self.ds))
+        noise = np.dot(self.sigma_noise, self.np_random.standard_normal(self.ds))
         xn = np.clip(np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise, -self.max_pos, self.max_pos)
         cost = np.dot(self.state,
                       np.dot(self.Q, self.state)) + \
@@ -59,7 +59,7 @@ class LQ(gym.Env):
         self.state = xn.ravel()
         self.timestep += 1
         
-        return self.get_state(), -np.asscalar(cost), self.timestep >= self.horizon, {'danger':0} #done after fixed horizon (manual reset)
+        return self.get_state(), -cost.item(), self.timestep >= self.horizon, {'danger':0} #done after fixed horizon (manual reset)
 
     def reset(self, state=None):
         """

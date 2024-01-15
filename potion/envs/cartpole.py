@@ -36,12 +36,12 @@ class ContCartPole(gym.Env):
         # Angle limit set to 2 * theta_threshold_radians so failing observation is still within bounds
         high = np.array([
             self.x_threshold * 2,
-            np.finfo(np.float32).max,
+            np.finfo(float).max,
             self.theta_threshold_radians * 2,
-            np.finfo(np.float32).max])
+            np.finfo(float).max])
 
-        self.action_space = spaces.Box(low=-self.force_mag,high=self.force_mag,shape=(1,), dtype=np.float32)
-        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
+        self.action_space = spaces.Box(low=-self.force_mag,high=self.force_mag,shape=(1,), dtype=float)
+        self.observation_space = spaces.Box(-high, high, dtype=float)
 
         self.seed()
         self.viewer = None
@@ -87,7 +87,7 @@ class ContCartPole(gym.Env):
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return np.array(self.state, dtype=np.float), reward, done, {}
+        return np.array(self.state, dtype=float), reward, done, {}
 
     def reset(self,initial=None):
         if initial==None:

@@ -40,7 +40,7 @@ def sequential_episode_generator(env, policy, horizon=float('inf'), max_episodes
             except:
                 pass
         while not done and t < horizon:
-            s = np.array(s, dtype=np.float)
+            s = np.array(s, dtype=float)
             s = torch.tensor(s, dtype=torch.float).view(-1)
             a = policy.act(s, deterministic)
             if not torch.is_tensor(a):

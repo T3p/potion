@@ -6,19 +6,18 @@ if sys.version_info.major != 3:
           "Python {}. The installation will likely fail.".format(sys.version_info.major))
 
 
-setup(name='polyopt',
+setup(name='potion',
       packages=[package for package in find_packages()
-                if package.startswith('polyopt')],
-      install_requires=[
-              'gym[classic_control]',
-              'numpy',
+                if package.startswith('potion')],
+      install_requires=['numpy',
               'scipy',
               'joblib',
-              'torch',
+              'torch==2.1',
               'tensorboardX',
               'matplotlib',
               'jupyter',
-              'pandas'],
+              'pandas',
+              'gym'],
       description="Policy Optimization tools",
       author="Matteo Papini",
       url='https://github.com/T3p/potion',
