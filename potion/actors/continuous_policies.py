@@ -119,7 +119,7 @@ class ShallowGaussianPolicy(ContinuousPolicy):
             x = self.feature_fun(s)
         else:
             x = s
-        score = torch.einsum('...k,...h->...kh', (x, (a - self.mu(x)) / sigma ** 2))
+        score = torch.einsum('...k,...h->...hk', (x, (a - self.mu(x)) / sigma ** 2))
         score = score.reshape(score.shape[:-2] + (score.shape[-2]*score.shape[-1],))
         return score
     
