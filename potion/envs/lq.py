@@ -67,8 +67,8 @@ class LQ(gym.Env):
         """
         self.timestep = 0
         if state is None:
-            self.state = np.array(self.np_random.uniform(low=-1.,
-                                                          high=1.))
+            self.state = np.array(self.np_random.uniform(low=-1. * np.ones(self.ds),
+                                                          high=1. * np.ones(self.ds)))
         else:
             self.state = np.array(state)
 
