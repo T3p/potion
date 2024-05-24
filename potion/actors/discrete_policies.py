@@ -12,8 +12,8 @@ from potion.common.mappings import LinearMapping
 from random import randint
 from torch.distributions.categorical import Categorical
 from potion.actors.feature_functions import one_hot_fun, stack_fun
-from gym.spaces.discrete import Discrete
-from gym.spaces.box import Box
+from gymnasium.spaces.discrete import Discrete
+from gymnasium.spaces.box import Box
 from potion.common.mappings import LinearMapping, MLPMapping
 from torch.distributions.gumbel import Gumbel
 from torch.nn.functional import one_hot

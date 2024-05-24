@@ -1,13 +1,13 @@
 import pandas as pd
 import glob
-from potion.envs.lq import LQ
+from potion.envs.lqr import LQR
 import numpy as np
 
 def addJ(name, sigma=1, gamma=0.9, horizon=10):
     files = [f for f in glob.glob("*.csv") if f.startswith(name + '_')]
     dfs =  [pd.read_csv(file, index_col=False) for file in files]
       
-    lq = LQ()
+    lq = LQR()
     lq.gamma = gamma
     lq.horizon = horizon
       
@@ -21,7 +21,7 @@ def addJmulti(name, nparams=3, sigma=1, gamma=0.9, horizon=10):
     files = [f for f in glob.glob("*.csv") if f.startswith(name + '_')]
     dfs =  [pd.read_csv(file, index_col=False) for file in files]
       
-    lq = LQ()
+    lq = LQR()
     lq.gamma = gamma
     lq.horizon = horizon
       

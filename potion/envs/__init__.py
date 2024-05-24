@@ -6,42 +6,16 @@ Created on Wed Jan 16 15:00:16 2019
 @author: matteo
 """
 
-from gym.envs.registration import register
-from gym import spaces
+from gymnasium.envs.registration import register
 
 register(
-    id='LQG1D-v0',
-    entry_point='potion.envs.lqg1d:LQG1D'
+    id='LQR-v0',
+    entry_point='potion.envs.lqr:LQR'
 )
 
 register(
-    id='lqr1d-v0',
-    entry_point='potion.envs.lqr1d:lqr1d'
-)
-
-register(
-    id='LQ-v0',
-    entry_point='potion.envs.lq:LQ'
-)
-
-register(
-    id='mass-v0',
-    entry_point='potion.envs.mass:mass'
-)
-
-register(
-    id='drone-v0',
-    entry_point='potion.envs.drone:drone'
-)
-
-register(
-    id='crash-v0',
-    entry_point='potion.envs.crash:crash'
-)
-
-register(
-    id='ContCartPole-v0',
-    entry_point='potion.envs.cartpole:ContCartPole'
+    id='CartPoleContinuous-v0',
+    entry_point='potion.envs.cartpole_continuous:CartPoleContinuous'
 )
 
 register(
@@ -50,16 +24,6 @@ register(
 )
 
 register(
-    id='Corridor-v0',
-    entry_point='potion.envs.corridor:Corridor'
-)
-
-register(
-    id='MiniGolf-v0',
-    entry_point='potion.envs.minigolf:MiniGolf'
-)
-
-register(
-    id='ComplexMiniGolf-v0',
-    entry_point='potion.envs.minigolf:ComplexMiniGolf'
+    id='Minigolf-v0',
+    entry_point='potion.envs.minigolf:Minigolf'
 )

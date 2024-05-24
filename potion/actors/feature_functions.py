@@ -11,8 +11,9 @@ import potion.common.torch_utils as tu
 
 def one_hot_fun(n_s, n_a):
     def one_hot(s, a):
-        s = torch.clamp(torch.tensor(s, dtype=torch.int64), 0, n_s - 1)
-        a = torch.clamp(torch.tensor(a, dtype=torch.int64), 0, n_a - 1)
+        s = torch.clamp(torch.as_tensor(s, dtype=torch.int64), 0, n_s - 1)
+        a = torch.clamp(torch.as_tensor(a, dtype=torch.int64), 0, n_a - 1)
+        a = a.squeeze()
         assert s.shape[:-1] == a.shape
         feat = torch.zeros(s.shape[:-1] + (n_s * n_a,))
         indexes = (s * n_a + a.unsqueeze(-1))

@@ -6,8 +6,8 @@ Created on Wed Jan 16 14:47:33 2019
 @author: Matteo Papini
 """
 import torch
-import gym
-import potion.envs
+import gymnasium as gym
+import potion.envs # this registers the custom envs!
 from potion.actors.continuous_policies import ShallowGaussianPolicy
 from potion.actors.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
@@ -15,7 +15,7 @@ from potion.algorithms.reinforce import reinforce
 import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam
-from gym.spaces.discrete import Discrete
+from gymnasium.spaces.discrete import Discrete
 
 # Command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -24,7 +24,7 @@ parser.add_argument('--name', help='Experiment name', type=str, default='GPOMDP'
 parser.add_argument('--estimator', help='Policy gradient estimator (reinforce/gpomdp)', type=str, default='gpomdp')
 parser.add_argument('--baseline', help='baseline for policy gradient estimator (avg/peters/zero)', type=str, default='peters')
 parser.add_argument('--seed', help='RNG seed', type=int, default=0)
-parser.add_argument('--env', help='Gym environment id', type=str, default='LQ-v0')
+parser.add_argument('--env', help='Gym environment id', type=str, default='GridWorld-v0')
 parser.add_argument('--horizon', help='Task horizon', type=int, default=10)
 parser.add_argument('--batchsize', help='Initial batch size', type=int, default=100)
 parser.add_argument('--iterations', help='Iterations', type=int, default=100)
@@ -56,7 +56,6 @@ args = parser.parse_args()
 # Prepare
 
 env = gym.make(args.env)
-env.seed(args.seed)
 
 if type(env.action_space) is Discrete:
     policy = ShallowGibbsPolicy(env, 
