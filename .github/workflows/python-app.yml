@@ -28,9 +28,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Lint with ruff
+    - name: Lint with ruff  
       run: |
-        make lint
+        pip install ruff
+        ruff --output-format=github .
     - name: Test with pytest
       run: |
         pytest
