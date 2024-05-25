@@ -90,7 +90,6 @@ parso==0.8.4
 pexpect==4.9.0
 pillow==10.3.0
 platformdirs==4.2.2
-polyopt==0.1.1
 -e git+https://github.com/T3p/potion.git@df3fe88f3191a62606b96094eb704d6cb5e049fd#egg=potion
 prometheus_client==0.20.0
 prompt-toolkit==3.0.43
