@@ -90,7 +90,8 @@ parso==0.8.4
 pexpect==4.9.0
 pillow==10.3.0
 platformdirs==4.2.2
--e git+https://github.com/T3p/potion.git@524ea0a4e0bc6f5550af71f7807bb48d2dfedbff#egg=polyopt
+polyopt==0.1.1
+-e git+https://github.com/T3p/potion.git@df3fe88f3191a62606b96094eb704d6cb5e049fd#egg=potion
 prometheus_client==0.20.0
 prompt-toolkit==3.0.43
 protobuf==5.27.0
@@ -98,7 +99,7 @@ psutil==5.9.8
 ptyprocess==0.7.0
 pure-eval==0.2.2
 pycparser==2.22
-pygame==2.1.0
+pygame==2.5.2
 Pygments==2.18.0
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
