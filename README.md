@@ -1,3 +1,5 @@
+[![Python application](https://github.com/T3p/potion/actions/workflows/python-app.yml/badge.svg)](https://github.com/T3p/potion/actions/workflows/python-app.yml)
+
 # POlicy optimizaTION
 
 How to install (tested on Ubuntu 18.04.2):
