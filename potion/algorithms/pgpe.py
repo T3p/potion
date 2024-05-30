@@ -5,7 +5,7 @@ REINFORCE family of algorithms (actor-only policy gradient)
 @author: Matteo Papini
 """
 
-from potion.simulation.trajectory_generators import light_episode_generator
+from potion.simulation.trajectory_generators import minimal_episode_generator
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 from potion.meta.steppers import ConstantStepper
@@ -24,9 +24,9 @@ def evaluate_hyperpolicy(env, hyperpolicy, horizon, disc, batchsize, action_filt
             #Sample policy parameters
             policy_params.append(hyperpolicy.resample(deterministic=deterministic))
             #Generate trajectory
-            ret, uret, ep_len, info_sum = light_episode_generator(env, hyperpolicy.lower_policy, horizon, disc,
-                               action_filter=action_filter,
-                               key=info_key)
+            ret, uret, ep_len, info_sum = minimal_episode_generator(env, hyperpolicy.lower_policy, horizon, disc,
+                                                                    action_filter=action_filter,
+                                                                    key=info_key)
             rets.append(ret)
             urets.append(uret)
             ep_lens.append(ep_len)
@@ -138,11 +138,11 @@ def pgpe(env, hyperpolicy, horizon, *,
         #Render the agent's behavior
         if render and it % render==0:
             hyperpolicy.resample()
-            light_episode_generator(env, hyperpolicy.lower_policy, horizon, disc,
-                           episodes=1, 
-                           action_filter=action_filter, 
-                           render=True,
-                           key=info_key)
+            minimal_episode_generator(env, hyperpolicy.lower_policy, horizon, disc,
+                                      episodes=1,
+                                      action_filter=action_filter,
+                                      render=True,
+                                      key=info_key)
     
         if test_batchsize:
             _, test_rets, _, _, _ = evaluate_hyperpolicy(env, hyperpolicy, horizon, disc, test_batchsize, action_filter, info_key, 
