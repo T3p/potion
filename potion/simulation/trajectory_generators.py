@@ -2,35 +2,32 @@ import numpy as np
 from joblib import Parallel, delayed
 
 
-def sequential_trajectory_generator(env, policy, max_trajectory_len=200, max_episodes=None, seed_sequence=None):
+def sequential_trajectory_generator(env, policy, max_trajectory_len, rng):
     # Infer state and action dimensions from the environment
     ds = max(1, sum(env.observation_space.shape))
     da = max(1, sum(env.action_space.shape))
 
-    # Stream of random seeds minimizing collision probability
-    if seed_sequence is None:
-        seed_sequence = np.random.SeedSequence(None)
-
-    n = 0
-    while max_episodes is None or n < max_episodes:
+    while True:
         # Prepare storage
         states = np.zeros((max_trajectory_len, ds), dtype=float)
         actions = np.zeros((max_trajectory_len, da), dtype=float)
         rewards = np.zeros(max_trajectory_len, dtype=float)
         alive = np.full(max_trajectory_len, False)
 
-        # Reset (and seed) environment
-        init_seed, = seed_sequence.generate_state(1)
+        # Generate independent pseudo-random stream to seed the environment
+        # If the env accepts a rng instead of a seed, use env_rng, = rng.spawn(1)
+        init_seed, = rng.bit_generator.seed_seq.generate_state(1)
+
+        # Seed and reset the environment
         s, _ = env.reset(init_seed)
 
         done = False
         t = 0
         while not done and t < max_trajectory_len:
-            # Generate a seed for the next action
-            action_seed, = seed_sequence.generate_state(1)
+            # Act
+            a = policy.act(s, rng)
 
             # Step
-            a = policy.act(s, action_seed)
             next_s, r, terminated, truncated, info = env.step(a)
             done = terminated or truncated
 
@@ -48,17 +45,12 @@ def sequential_trajectory_generator(env, policy, max_trajectory_len=200, max_epi
             states[t] = s
 
         yield states, actions, rewards, alive
-        n += 1
 
 
-def parallel_episode_generator(env, policy, max_trajectory_len=200, seed_sequence=None):
+def parallel_episode_generator(env, policy, max_trajectory_len, rng):
     # Infer state and action dimensions from the environment
     ds = max(1, sum(env.observation_space.shape))
     da = max(1, sum(env.action_space.shape))
-
-    # Stream of random seeds minimizing collision probability
-    if seed_sequence is None:
-        seed_sequence = np.random.SeedSequence(None)
 
     # Prepare storage
     states = np.zeros((max_trajectory_len, ds), dtype=float)
@@ -66,16 +58,19 @@ def parallel_episode_generator(env, policy, max_trajectory_len=200, seed_sequenc
     rewards = np.zeros(max_trajectory_len, dtype=float)
     alive = np.full(max_trajectory_len, False)
 
-    # Reset (and seed) the environment
-    init_seed, = seed_sequence.generate_state(1)
-    s, _ = env.reset(seed=init_seed)
+    # Generate independent pseudo-random stream to seed the environment
+    # If the env accepts a rng instead of a seed, use env_rng, = rng.spawn(1)
+    # noinspection
+    init_seed, = rng.bit_generator.seed_seq.generate_state(1)
+
+    # Seed and reset the environment
+    s, _ = env.reset(init_seed)
 
     done = False
     t = 0
     while not done and t < max_trajectory_len:
         # Act
-        action_seed, = seed_sequence.generate_state(1)
-        a = policy.act(s, action_seed)
+        a = policy.act(s, rng)
 
         # Step
         next_s, r, terminated, truncated, info = env.step(a.numpy())
@@ -97,51 +92,45 @@ def parallel_episode_generator(env, policy, max_trajectory_len=200, seed_sequenc
     return states, actions, rewards, alive
 
 
-def minimal_episode_generator(env, policy, max_trajectory_len=200, seed_sequence=None, discount=1.):
-    # Stream of random seeds minimizing collision probability
-    if seed_sequence is None:
-        seed_sequence = np.random.SeedSequence(None)
+def minimal_episode_generator(env, policy, max_trajectory_len, rng, discount=1.):
+    while True:
+        # Generate independent pseudo-random stream to seed the environment
+        # If the env accepts a rng instead of a seed, use env_rng, = rng.spawn(1)
+        init_seed, = rng.bit_generator.seed_seq.generate_state(1)
 
-    # Reset (and seed) the environment
-    init_seed, = seed_sequence.generate_state(1)
-    s, _ = env.reset(init_seed)
+        # Seed and reset the environment
+        s, _ = env.reset(init_seed)
 
-    done = False
-    t = 0
-    ret = 0.
-    undiscounted_return = 0.
-    while not done and t < max_trajectory_len:
-        # Act
-        action_seed, = seed_sequence.generate_state(1)
-        a = policy.act(s, action_seed)
+        done = False
+        t = 0
+        ret = 0.
+        while not done and t < max_trajectory_len:
+            # Act
+            a = policy.act(s, rng)
 
-        # Step
-        next_s, r, terminated, truncated, info = env.step(a.numpy())
-        done = terminated or truncated
+            # Step
+            next_s, r, terminated, truncated, info = env.step(a.numpy())
+            done = terminated or truncated
 
-        # Update return
-        ret += discount**t * r
-        undiscounted_return += r
+            # Update return
+            ret += discount**t * r
 
-        s = next_s
-        t += 1
+            s = next_s
+            t += 1
 
-    return ret, undiscounted_return, t
+        yield ret, t
 
 
-def generate_batch(env, policy, max_trajectory_len=200, episodes=100, parallel=False, n_jobs=2, seed_sequence=None):
+def generate_batch(env, policy, rng, max_trajectory_len=200, episodes=100, parallel=False, n_jobs=2):
     # A batch is a list of trajectories, a trajectory is a tuple of numpy arrays (states, actions, rewards, alive)
     if not parallel:
-        traj_gen = sequential_trajectory_generator(env, policy, max_trajectory_len, max_episodes=episodes,
-                                                   seed_sequence=seed_sequence)
-        batch = [traj for traj in traj_gen]
+        traj_gen = sequential_trajectory_generator(env, policy, max_trajectory_len, rng)
+        batch = [next(traj_gen) for _ in range(episodes)]
     else:
-        # Each process has its own independent sequence of seeds
-        if seed_sequence is None:
-            seed_sequence = np.random.SeedSequence(None)
-        parallel_seed_sequences = seed_sequence.spawn(episodes)
-
+        # Each process has its own independent pseudo-random stream
+        parallel_generators = rng.spawn(episodes)
         # Joblib (with processes)
-        batch = Parallel(n_jobs=n_jobs)(delayed(parallel_episode_generator)(env, policy, max_trajectory_len, pss)
-                                        for pss in parallel_seed_sequences)
+        batch = Parallel(backend="loky", n_jobs=n_jobs)(delayed(parallel_episode_generator)
+                                                        (env, policy, max_trajectory_len, r)
+                                                        for r in parallel_generators)
     return batch
