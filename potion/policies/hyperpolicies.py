@@ -26,7 +26,7 @@ class Hyperpolicy(tu.FlatModule):
                 return self.policy_module.act(s)
             
             def num_params(self):
-                return self.policy_module.num_parameters()
+                return self.policy_module.num_params()
     
             def get_params(self):
                 return self.policy_module.get_params()

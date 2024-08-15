@@ -155,8 +155,8 @@ def test_linear_gaussian_policy(rng):
     assert np.allclose(score, np.array([5., 20., -0.5, -2., 7. / 8, 3.5]))
     assert np.allclose(entropy, 1.5 * (np.log(2 * np.pi) + 1) + np.log(0.5) + np.log(2.))
     assert np.allclose(entropy_grad, np.zeros(6))
-    assert pol.n_std_params == 0
-    assert pol.num_parameters == 6 and pol.n_mean_params == pol.num_parameters
+    assert pol.num_std_params == 0
+    assert pol.num_params == 6 and pol.num_mean_params == pol.num_params
 
 
 def test_linear_adaptive_gaussian_policy(rng):
@@ -178,7 +178,7 @@ def test_linear_adaptive_gaussian_policy(rng):
     x = 0.5 * np.ones(1)
 
     assert pol1.parameters.shape == (9,)
-    assert pol1.num_parameters == 9 and pol1.n_mean_params + pol1.n_std_params == pol1.num_parameters
+    assert pol1.num_params == 9 and pol1.num_mean_params + pol1.num_std_params == pol1.num_params
     assert np.allclose(pol1.parameters, [0., -1., 2., 1., 0.5, 0., np.log(0.5), np.log(2.), 0.])
     assert np.allclose(pol1.mean(s), np.array([-2., 3., 0.25]))
     assert np.allclose(pol1.mean(c1 * s1 + c2 * s2), c1 * pol1.mean(s1) + c2 * pol1.mean(s2))
@@ -188,7 +188,7 @@ def test_linear_adaptive_gaussian_policy(rng):
     assert np.allclose(pol1.entropy_grad(s), np.concatenate((np.zeros(6), np.ones(3)), axis=-1))
 
     assert pol2.parameters.shape == (7,)
-    assert pol2.num_parameters == 7 and pol2.n_mean_params + pol2.n_std_params == pol2.num_parameters
+    assert pol2.num_params == 7 and pol2.num_mean_params + pol2.num_std_params == pol2.num_params
     assert np.allclose(pol2.parameters, [0., -1., 2., 1., 0.5, 0., np.log(0.5)])
     assert np.allclose(pol2.log_pdf(s, a), -0.5 * np.log(2 * np.pi) * 3 - 3 * np.log(0.5) - 50.625)
     assert np.allclose(pol2.score(s, a), np.array([5., 20., -8., -32., 3.5, 14., 24. + 63 + 45. / 4]))
@@ -196,7 +196,7 @@ def test_linear_adaptive_gaussian_policy(rng):
     assert np.allclose(pol2.entropy_grad(s), np.concatenate((np.zeros(6), 3 * np.ones(1)), axis=-1))
 
     assert pol3.parameters.shape == (2,)
-    assert pol3.num_parameters == 2 and pol3.n_mean_params + pol3.n_std_params == pol3.num_parameters
+    assert pol3.num_params == 2 and pol3.num_mean_params + pol3.num_std_params == pol3.num_params
     assert np.allclose(pol3.parameters, [0., np.log(0.5)])
     assert np.allclose(pol3.log_pdf(x, x), -0.5 * np.log(2 * np.pi) - np.log(0.5) - 0.5)
     assert np.allclose(pol3.score(x, x), np.array([1., 0.]))
@@ -289,8 +289,15 @@ def test_linear_gaussian_policy_setters(linear_gaussian_policy_1d, linear_gaussi
     assert np.allclose(pol10.std, np.exp(2.))
 
 
-def test_linear_gaussian_exceptions(linear_gaussian_policy_1d, linear_gaussian_policy, linear_adaptive_gaussian_policy,
-                                    state_d, action_d):
+def test_gaussian_exceptions(linear_gaussian_policy_1d, linear_gaussian_policy, linear_adaptive_gaussian_policy,
+                             state_d, action_d, rng):
+    s = np.ones(state_d)
+    bad_s = np.ones(state_d + 1)
+    a = np.ones(action_d)
+    bad_a = np.ones(action_d - 1)
+    batch_s = np.ones((4, state_d))
+    batch_a = np.ones((5, action_d))
+
     with pytest.raises(ValueError):
         _ = LinearGaussianPolicy(state_d, action_d, mean_params_init=np.ones(state_d * action_d + 1))
     with pytest.raises(ValueError):
@@ -336,9 +343,9 @@ def test_linear_gaussian_exceptions(linear_gaussian_policy_1d, linear_gaussian_p
 
     pol3 = linear_adaptive_gaussian_policy
     with pytest.raises(ValueError):
-        pol3.set_params(np.ones(state_d * action_d + pol3.n_std_params - 1))
+        pol3.set_params(np.ones(state_d * action_d + pol3.num_std_params - 1))
     with pytest.raises(ValueError):
-        pol3.set_params(np.ones(state_d * action_d + pol3.n_std_params + 1))
+        pol3.set_params(np.ones(state_d * action_d + pol3.num_std_params + 1))
     with pytest.raises(ValueError):
         pol3.set_params(np.ones((state_d, action_d, 1)))
     with pytest.raises(RuntimeError):
@@ -346,14 +353,39 @@ def test_linear_gaussian_exceptions(linear_gaussian_policy_1d, linear_gaussian_p
 
     pol4 = LinearGaussianPolicy(state_d, action_d, learn_std=True, std_init=np.ones(action_d))
     with pytest.raises(ValueError):
-        pol4.set_params(np.ones(state_d * action_d + pol4.n_std_params - 1))
+        pol4.set_params(np.ones(state_d * action_d + pol4.num_std_params - 1))
     with pytest.raises(ValueError):
-        pol4.set_params(np.ones(state_d * action_d + pol4.n_std_params + 1))
+        pol4.set_params(np.ones(state_d * action_d + pol4.num_std_params + 1))
     with pytest.raises(ValueError):
         pol4.set_params(np.ones((state_d, action_d, 1)))
     with pytest.raises(RuntimeError):
         pol4.set_std(np.ones((state_d, action_d)))
 
+    with pytest.raises(ValueError):
+        _ = pol4.mean(bad_s)
+
+    with pytest.raises(ValueError):
+        _ = pol4.act(bad_s, rng)
+
+    with pytest.raises(ValueError):
+        _ = pol4.log_pdf(bad_s, a)
+    with pytest.raises(ValueError):
+        _ = pol4.log_pdf(s, bad_a)
+    with pytest.raises(ValueError):
+        _ = pol4.log_pdf(batch_s, batch_a)
+
+    with pytest.raises(ValueError):
+        _ = pol4.score(bad_s, a)
+    with pytest.raises(ValueError):
+        _ = pol4.score(s, bad_a)
+    with pytest.raises(ValueError):
+        _ = pol4.score(batch_s, batch_a)
+
+    with pytest.raises(ValueError):
+        _ = pol4.entropy(bad_s)
+
+    with pytest.raises(ValueError):
+        _ = pol4.entropy_grad(bad_s)
 
 def test_deep_gaussian_policy_linear(linear_gaussian_policy, state_d, action_d, rng):
     pol = linear_gaussian_policy
@@ -370,7 +402,7 @@ def test_deep_gaussian_policy_linear(linear_gaussian_policy, state_d, action_d, 
     assert np.allclose(mean, nn_mean)
     assert np.allclose(score, nn_score)
 
-    params = rng.normal(size=pol.num_parameters)
+    params = rng.normal(size=pol.num_params)
     pol.set_params(params)
     nn_pol.set_params(params)
     mean = pol.mean(s)
@@ -395,9 +427,9 @@ def test_deep_gaussian_policy_nn(state_d, action_d, deep_gaussian_policy, rng):
     played = pol.act(s, rng)
     score = pol.score(s, a)
 
-    assert pol.n_std_params + pol.n_mean_params == pol.num_parameters
+    assert pol.num_std_params + pol.num_mean_params == pol.num_params
     assert isinstance(played, np.ndarray) and played.shape == (action_d, )
-    assert isinstance(score, np.ndarray) and score.shape == (pol.num_parameters, )
+    assert isinstance(score, np.ndarray) and score.shape == (pol.num_params,)
     assert not np.isnan(score).any()
     assert not np.allclose(score, 0.)
 
@@ -417,12 +449,12 @@ def test_deep_gaussian_policy_adaptive_std(state_d, action_d, deep_gaussian_poli
     pol1 = DeepGaussianPolicy(state_d, action_d, learn_std=False)
     pol2 = DeepGaussianPolicy(state_d, action_d, learn_std=True)
 
-    mean_params = rng.normal(size=pol1.num_parameters)
+    mean_params = rng.normal(size=pol1.num_params)
     pol2.set_params(np.concatenate((mean_params, np.array([0.5]))))
     params = pol2.parameters
 
-    assert pol2.n_mean_params + pol2.n_std_params == pol2.num_parameters
-    assert pol2.num_parameters == pol1.num_parameters + 1
+    assert pol2.num_mean_params + pol2.num_std_params == pol2.num_params
+    assert pol2.num_params == pol1.num_params + 1
     assert np.allclose(params[:-1], mean_params)
     assert np.isclose(params[-1], 0.5)
 
@@ -431,4 +463,4 @@ def test_deep_gaussian_policy_broadcast(deep_gaussian_policy):
     pol = deep_gaussian_policy
     pol.set_params(1.)
 
-    assert np.allclose(pol.parameters, np.ones(pol.num_parameters))
+    assert np.allclose(pol.parameters, np.ones(pol.num_params))

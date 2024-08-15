@@ -71,7 +71,7 @@ def sepg(env, policy,
                 'UpsilonGradVar', 'UpsilonEps', 'OmegaGradVar', 'OmegaEps',
                 'Req', 'MinBatchSize', 'MaxReq', 'Info', 'MaxRew', 'MaxFeat']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if test_batchsize:
         log_keys.append('DetPerf')
     log_row = dict.fromkeys(log_keys)
@@ -241,7 +241,7 @@ def sepg(env, policy,
         log_row['MaxFeat'] = max_feat
         params = policy.get_flat()
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         logger.write_row(log_row, it)
         if save_params and it % save_params == 0:
@@ -305,7 +305,7 @@ def naive_sepg(env, policy,
                 'UpsilonGradVar', 'UpsilonEps', 'OmegaGradVar', 'OmegaEps',
                 'Req', 'MinBatchSize', 'MaxReq', 'MaxRew']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if test_batchsize:
         log_keys.append('DetPerf')
     log_row = dict.fromkeys(log_keys)
@@ -452,7 +452,7 @@ def naive_sepg(env, policy,
         log_row['MaxRew'] = max_rew
         params = policy.get_flat()
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         logger.write_row(log_row, it)
         if save_params and it % save_params == 0:

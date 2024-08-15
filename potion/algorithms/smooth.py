@@ -121,9 +121,9 @@ def smoothpg(env, policy, horizon, lip_const1, lip_const2, *,
                 'Improv2', 
                 'Order']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
     if test_batchsize:
         log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
     log_row = dict.fromkeys(log_keys)
@@ -211,10 +211,10 @@ def smoothpg(env, policy, horizon, lip_const1, lip_const2, *,
         log_row['BatchSize'] = batchsize
         log_row['TotSamples'] = tot_samples
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         

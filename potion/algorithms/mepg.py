@@ -63,7 +63,7 @@ def mepg(env, policy,
                 'StepSize', 'MetaStepSize', 'BatchSize', 'Exploration', 
                 'OmegaGrad', 'OmegaMetagrad', 'UpsilonGradNorm', 'Info']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if test_batchsize:
         log_keys.append('DetPerf')
     log_row = dict.fromkeys(log_keys)
@@ -142,7 +142,7 @@ def mepg(env, policy,
         log_row['Info'] = mean_sum_info(batch).item()
         params = policy.get_flat()
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         logger.write_row(log_row, it)
         if save_params and it % save_params == 0:

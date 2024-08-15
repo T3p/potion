@@ -43,16 +43,23 @@ class GaussianPolicy(ABC):
         return self._learn_std
 
     @property
-    def n_std_params(self):
+    def parameters(self):
+        if not self._learn_std:
+            return self._flat_mean_params
+        else:
+            return np.concatenate((self._flat_mean_params, np.atleast_1d(self._std_params)))
+
+    @property
+    def num_mean_params(self):
+        return self.num_params - self._n_std_params
+
+    @property
+    def num_std_params(self):
         return self._n_std_params
 
     @property
-    def n_mean_params(self):
-        return self.num_parameters - self._n_std_params
-
-    @abstractmethod
-    def mean(self, s):  # pragma: no cover
-        pass
+    def num_params(self):
+        return len(self.parameters)
 
     @property
     def std(self):
@@ -61,9 +68,27 @@ class GaussianPolicy(ABC):
         else:
             return np.exp(self._std_params)
 
-    def act(self, s, rng):
-        noise = rng.normal(self.action_dim)
-        return self.mean(s) + noise * self.std
+    def set_params(self, params):
+        if np.isscalar(params):  # Broadcast
+            self._set_mean_params(params)
+            if self.learn_std:
+                self._std_params = self._std_params * 0. + params
+            return
+
+        if params.ndim > 1:
+            if params.ndim != 2:
+                raise ValueError("Bad shape, params should be 1d (flat) or 2d (matrix, only for LinearGaussianPolicy)")
+            params = np.ravel(params)
+        if len(params) > self.num_params:
+            raise ValueError("Too many params")
+        if len(params) < self.num_params:
+            raise ValueError("Too few params")
+        if not self._learn_std:
+            self._set_mean_params(params)
+        else:
+            mean_params = params[:-self._n_std_params]
+            self._set_mean_params(mean_params)
+            self._std_params = params[-self._n_std_params:] if self.num_std_params > 1 else params[-1]
 
     def set_std(self, std):
         if self.learn_std:
@@ -78,25 +103,69 @@ class GaussianPolicy(ABC):
             raise ValueError("Scalar std should not be an array")
         self._std_params = np.log(std)
 
+    def mean(self, s):
+        if s.shape[-1] != self.state_dim:
+            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        return self._mean(s)
+
+    def act(self, s, rng):
+        if s.shape[-1] != self.state_dim:
+            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        noise = rng.normal(self.action_dim)
+        return self.mean(s) + noise * self.std
+
+    def log_pdf(self, s, a):
+        if s.shape[-1] != self.state_dim:
+            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        if a.shape[-1] != self.action_dim:
+            raise ValueError("Bad shape: expected %d-dimensional action(s)" % self.action_dim)
+        if not s.shape[:-1] == a.shape[:-1]:
+            raise ValueError("Bad shape: all state and action dimensions should match except the last")
+        log_p = -((a - self.mean(s)) ** 2) / (2 * self.std ** 2) - self._std_params - 0.5 * np.log(2 * np.pi)
+        return np.sum(log_p, -1)
+
+    def score(self, s, a):
+        if s.shape[-1] != self.state_dim:
+            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        if a.shape[-1] != self.action_dim:
+            raise ValueError("Bad shape: expected %d-dimensional action(s)" % self.action_dim)
+        if not s.shape[:-1] == a.shape[:-1]:
+            raise ValueError("Bad shape: all state and action dimensions should match except the last")
+        if self._learn_std:
+            return np.concatenate((self._mean_score(s, a), self._log_std_score(s, a)), axis=-1)
+        else:
+            return self._mean_score(s, a)
+
+    def entropy(self, s):
+        if s.shape[-1] != self.state_dim:
+            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        ent = self._std_params + 0.5 * (1. + np.log(2 * np.pi)) * np.ones(self.action_dim)
+        return np.sum(ent, -1) * np.ones(s.shape[:-1])
+
+    def entropy_grad(self, s):
+        if s.shape[-1] != self.state_dim:
+            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        if self._learn_std:
+            std_score = np.ones(s.shape[:-1] + (self._action_dim,))
+            if np.isscalar(self._std_params):
+                std_score = np.sum(std_score, -1, keepdims=True)
+            return np.concatenate((np.zeros(s.shape[:-1] + (self._state_dim * self._action_dim,)),
+                                   std_score), -1)
+        else:
+            return np.zeros(s.shape[:-1] + (self._state_dim * self._action_dim,))
+
     @property
     @abstractmethod
     def _flat_mean_params(self):  # pragma: no cover
         pass
 
-    @property
-    def parameters(self):
-        if not self._learn_std:
-            return self._flat_mean_params
-        else:
-            return np.concatenate((self._flat_mean_params, np.atleast_1d(self._std_params)))
+    @abstractmethod
+    def _set_mean_params(self, params):  # pragma: no cover
+        pass
 
-    @property
-    def num_parameters(self):
-        return len(self.parameters)
-
-    def log_pdf(self, s, a):
-        log_p = -((a - self.mean(s)) ** 2) / (2 * self.std ** 2) - self._std_params - 0.5 * np.log(2 * np.pi)
-        return np.sum(log_p, -1)
+    @abstractmethod
+    def _mean(self, s):  # pragma: no cover
+        pass
 
     @abstractmethod
     def _mean_score(self, s, a):  # pragma: no cover
@@ -107,52 +176,6 @@ class GaussianPolicy(ABC):
         if np.isscalar(self._std_params):
             return np.sum(score, -1, keepdims=True)
         return score
-
-    def score(self, s, a):
-        if self._learn_std:
-            return np.concatenate((self._mean_score(s, a), self._log_std_score(s, a)), axis=-1)
-        else:
-            return self._mean_score(s, a)
-
-    def entropy(self, s):
-        ent = self._std_params + 0.5 * (1. + np.log(2 * np.pi)) * np.ones(self.action_dim)
-        return np.sum(ent, -1)
-
-    def entropy_grad(self, s):
-        if self._learn_std:
-            std_score = np.ones(s.shape[:-1] + (self._action_dim,))
-            if np.isscalar(self._std_params):
-                std_score = np.sum(std_score, -1, keepdims=True)
-            return np.concatenate((np.zeros(s.shape[:-1] + (self._state_dim * self._action_dim,)),
-                                   std_score), -1)
-        else:
-            return np.zeros(s.shape[:-1] + (self._state_dim * self._action_dim,))
-
-    @abstractmethod
-    def _set_mean_params(self, params):  # pragma: no cover
-        pass
-
-    def set_params(self, params):
-        if np.isscalar(params):  # Broadcast
-            self._set_mean_params(params)
-            if self.learn_std:
-                self._std_params = self._std_params * 0. + params
-            return
-
-        if params.ndim > 1:
-            if params.ndim != 2:
-                raise ValueError("Bad shape, params should be 1d (flat) or 2d (matrix)")
-            params = np.ravel(params)
-        if len(params) > self.num_parameters:
-            raise ValueError("Too many params")
-        if len(params) < self.num_parameters:
-            raise ValueError("Too few params")
-        if not self._learn_std:
-            self._set_mean_params(params)
-        else:
-            mean_params = params[:-self._n_std_params]
-            self._set_mean_params(mean_params)
-            self._std_params = params[-self._n_std_params:] if self.n_std_params > 1 else params[-1]
 
 
 class LinearGaussianPolicy(GaussianPolicy):
@@ -178,19 +201,19 @@ class LinearGaussianPolicy(GaussianPolicy):
     def _flat_mean_params(self):
         return np.ravel(self._mean_params)
 
-    def mean(self, s):
-        return self._mean_params @ s
-
-    def _mean_score(self, s, a):
-        score = np.einsum('...k,...h->...hk', s, (a - self.mean(s)) / self.std ** 2)
-        score = score.reshape(score.shape[:-2] + (score.shape[-2] * score.shape[-1],))
-        return score
-
     def _set_mean_params(self, params):
         if np.isscalar(params):  # Broadcast
             self._mean_params = self._mean_params * 0 + params
             return
         self._mean_params = params.reshape((self._action_dim, self._state_dim))
+
+    def _mean(self, s):
+        return self._mean_params @ s
+
+    def _mean_score(self, s, a):
+        score = np.einsum('...k,...h->...hk', s, (a - self._mean(s)) / self.std ** 2)
+        score = score.reshape(score.shape[:-2] + (score.shape[-2] * score.shape[-1],))
+        return score
 
 
 class DeepGaussianPolicy(GaussianPolicy):
@@ -211,7 +234,20 @@ class DeepGaussianPolicy(GaussianPolicy):
                 raise ValueError("Network could not process state, likely bad input shape") from e
             self._mean_network = mean_network
 
-    def mean(self, s, requires_grad=False):
+    @property
+    def _flat_mean_params(self):
+        return parameters_to_vector(self._mean_network.parameters()).detach().numpy()
+
+    def _set_mean_params(self, params):
+        if np.isscalar(params):  # Broadcast
+            params = params * torch.ones(size=(self.num_params - self.num_std_params,), dtype=torch.float,
+                                         requires_grad=False)
+        else:
+            params = torch.tensor(params, dtype=torch.float, requires_grad=False)
+
+        vector_to_parameters(params, self._mean_network.parameters())
+
+    def _mean(self, s, requires_grad=False):
         if not torch.is_tensor(s):
             s = torch.tensor(s, dtype=torch.float, requires_grad=False)
         if requires_grad:
@@ -220,23 +256,11 @@ class DeepGaussianPolicy(GaussianPolicy):
             with torch.no_grad():
                 return self._mean_network(s).numpy()
 
-    @property
-    def _flat_mean_params(self):
-        return parameters_to_vector(self._mean_network.parameters()).detach().numpy()
-
     def _mean_score(self, s, a):
         s = torch.tensor(s, dtype=torch.float, requires_grad=False)
         a = torch.tensor(a, dtype=torch.float, requires_grad=False)
         std = torch.tensor(self.std, dtype=torch.float, requires_grad=False)
-        val = torch.sum(-((a - self.mean(s, requires_grad=True)) ** 2) / (2 * std ** 2), -1)
+        val = torch.sum(-((a - self._mean(s, requires_grad=True)) ** 2) / (2 * std ** 2), -1)
         grad = torch.autograd.grad(val, self._mean_network.parameters())
         return parameters_to_vector(grad).numpy()
 
-    def _set_mean_params(self, params):
-        if np.isscalar(params):  # Broadcast
-            params = params * torch.ones(size=(self.num_parameters - self.n_std_params,), dtype=torch.float,
-                                         requires_grad=False)
-        else:
-            params = torch.tensor(params, dtype=torch.float, requires_grad=False)
-
-        vector_to_parameters(params, self._mean_network.parameters())

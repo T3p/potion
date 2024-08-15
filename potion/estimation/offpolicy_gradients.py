@@ -39,7 +39,7 @@ def off_gpomdp_estimator(batch, disc, policy, target_params,
         N = len(batch)
         states, actions, rewards, mask, _ = unpack(batch) #NxHxd_s, NxHxd_a, NxH, NxH
         H = rewards.shape[1]
-        m = policy.num_parameters()
+        m = policy.num_params()
         disc_rewards = discount(rewards, disc) #NxH
         
         #Behavioral

@@ -118,9 +118,9 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
     if oracle is not None:
         log_keys += ['Oracle']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
     log_row = dict.fromkeys(log_keys)
     logger.open(log_row.keys())
     
@@ -198,10 +198,10 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
         if oracle is not None:
             log_row['Oracle'] = oracle(params.numpy())
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['grad%d' % i] = grad[i].item()
 
             #Log
@@ -358,9 +358,9 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
     if oracle is not None:
         log_keys += ['Oracle']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
     log_row = dict.fromkeys(log_keys)
     logger.open(log_row.keys())
     
@@ -461,10 +461,10 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
         if oracle is not None:
             log_row['Oracle'] = oracle(params.numpy())
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['grad%d' % i] = grad[i].item()
 
             #Log
@@ -568,9 +568,9 @@ def safe_step_strict(env, policy, disc, horizon, lip_const, var_bound,
                 'Threshold',
                 'VarBound']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
     if info_key is not None:
         log_keys.append(info_key)
     log_row = dict.fromkeys(log_keys)
@@ -629,10 +629,10 @@ def safe_step_strict(env, policy, disc, horizon, lip_const, var_bound,
         log_row['GradNorm'] = grad_norm.item()
         log_row['TotSamples'] = tot_samples
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Safety test
@@ -735,9 +735,9 @@ def safe_step(env, policy, disc, horizon, lip_const,
                 'Threshold',
                 'VarBound']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
     if info_key is not None:
         log_keys.append(info_key)
     log_row = dict.fromkeys(log_keys)
@@ -804,10 +804,10 @@ def safe_step(env, policy, disc, horizon, lip_const,
         log_row['GradNorm'] = grad_norm.item()
         log_row['TotSamples'] = tot_samples
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Safety test
@@ -958,9 +958,9 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
                 'TotSamples',
                 'Safety']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
     if test_batchsize:
         log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
     log_row = dict.fromkeys(log_keys)
@@ -1048,10 +1048,10 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
         log_row['BatchSize'] = batchsize
         log_row['TotSamples'] = tot_samples
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Check if number of samples is sufficient to perform update
@@ -1216,9 +1216,9 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
     if oracle is not None:
         log_keys += ['Oracle']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(policy.num_params())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
+        log_keys += ['grad%d' % i for i in range(policy.num_params())]
     if test_batchsize:
         log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
     log_row = dict.fromkeys(log_keys)
@@ -1377,10 +1377,10 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
         if oracle is not None:
             log_row['Oracle'] = oracle(params.numpy())
         if log_params:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_parameters()):
+            for i in range(policy.num_params()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Check if number of samples is sufficient to perform update

@@ -116,9 +116,9 @@ def pgpe(env, hyperpolicy, horizon, *,
     if test_batchsize:
         log_keys += ['TestPerf']
     if log_params:
-        log_keys += ['param%d' % i for i in range(hyperpolicy.num_parameters())]
+        log_keys += ['param%d' % i for i in range(hyperpolicy.num_params())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(hyperpolicy.num_parameters())]
+        log_keys += ['grad%d' % i for i in range(hyperpolicy.num_params())]
     log_row = dict.fromkeys(log_keys)
     logger.open(log_row.keys())
     
@@ -198,10 +198,10 @@ def pgpe(env, hyperpolicy, horizon, *,
         #Log
         log_row['Time'] = time.time() - start
         if log_params:
-            for i in range(hyperpolicy.num_parameters()):
+            for i in range(hyperpolicy.num_params()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(hyperpolicy.num_parameters()):
+            for i in range(hyperpolicy.num_params()):
                 log_row['grad%d' % i] = grad[i].item()
         logger.write_row(log_row, it)
         
