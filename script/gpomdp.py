@@ -8,8 +8,8 @@ Created on Wed Jan 16 14:47:33 2019
 import torch
 import gymnasium as gym
 import potion.envs # this registers the custom envs!
-from potion.actors.continuous_policies import ShallowGaussianPolicy
-from potion.actors.discrete_policies import ShallowGibbsPolicy
+from potion.policies.gaussian_policies import LinearGaussianPolicy
+from potion.policies.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
 from potion.algorithms.reinforce import reinforce
 import argparse
@@ -65,10 +65,10 @@ else:
     d = sum(env.action_space.shape)
     mu_init = torch.zeros(m*d)
     logstd_init = torch.log(torch.zeros(d) + args.std_init)
-    policy = ShallowGaussianPolicy(m, d, 
-                               mu_init=mu_init, 
-                               logstd_init=logstd_init, 
-                               learn_std=args.learnstd)
+    policy = LinearGaussianPolicy(m, d,
+                                  mean_params_init=mu_init,
+                                  std_init=logstd_init,
+                                  learn_std=args.learnstd)
 
 test_batchsize = args.batchsize if args.test else 0
 

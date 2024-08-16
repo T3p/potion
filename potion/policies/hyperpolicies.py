@@ -26,7 +26,7 @@ class Hyperpolicy(tu.FlatModule):
                 return self.policy_module.act(s)
             
             def num_params(self):
-                return self.policy_module.num_params()
+                return self.policy_module.num_parameters()
     
             def get_params(self):
                 return self.policy_module.get_params()
@@ -141,7 +141,7 @@ Testing
 """
 if __name__ == '__main__':
     from potion.common.misc_utils import seed_all_agent
-    from potion.actors.continuous_deterministic_policies import ShallowDeterministicPolicy, DeepDeterministicPolicy
+    from potion.policies.continuous_deterministic_policies import ShallowDeterministicPolicy, DeepDeterministicPolicy
     
     ds = 2
     da = 2

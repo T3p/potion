@@ -39,7 +39,7 @@ def off_gpomdp_estimator(batch, disc, policy, target_params,
         N = len(batch)
         states, actions, rewards, mask, _ = unpack(batch) #NxHxd_s, NxHxd_a, NxH, NxH
         H = rewards.shape[1]
-        m = policy.num_params()
+        m = policy.num_parameters()
         disc_rewards = discount(rewards, disc) #NxH
         
         #Behavioral
@@ -251,7 +251,7 @@ def _shallow_off_reinforce_estimator(batch, disc, policy, target_params,
         
 """Testing"""
 if __name__ == '__main__':
-    from potion.actors.continuous_policies import ShallowGaussianPolicy as Gauss
+    from potion.policies.gaussian_policies import LinearGaussianPolicy as Gauss
     from potion.simulation.trajectory_generators import generate_batch
     from potion.common.misc_utils import seed_all_agent
     import potion.envs
@@ -264,7 +264,7 @@ if __name__ == '__main__':
     N = 100
     H = 100
     disc = 0.99
-    pol = Gauss(4,1, mu_init=[0.,0.,0.,0.], learn_std=True)
+    pol = Gauss(4, 1, mean_params_init=[0., 0., 0., 0.], learn_std=True)
     
     batch = generate_batch(env, pol, H, N)
     

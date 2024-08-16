@@ -5,7 +5,7 @@ REINFORCE family of algorithms (actor-only policy gradient)
 @author: Matteo Papini
 """
 
-from potion.simulation.trajectory_generators import minimal_episode_generator
+from potion.simulation.trajectory_generators import blackbox_simulate_episode
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 from potion.meta.steppers import ConstantStepper
@@ -24,7 +24,7 @@ def evaluate_hyperpolicy(env, hyperpolicy, horizon, disc, batchsize, action_filt
             #Sample policy parameters
             policy_params.append(hyperpolicy.resample(deterministic=deterministic))
             #Generate trajectory
-            ret, uret, ep_len, info_sum = minimal_episode_generator(env, hyperpolicy.lower_policy, horizon, disc,
+            ret, uret, ep_len, info_sum = blackbox_simulate_episode(env, hyperpolicy.lower_policy, horizon, disc,
                                                                     action_filter=action_filter,
                                                                     key=info_key)
             rets.append(ret)
@@ -116,9 +116,9 @@ def pgpe(env, hyperpolicy, horizon, *,
     if test_batchsize:
         log_keys += ['TestPerf']
     if log_params:
-        log_keys += ['param%d' % i for i in range(hyperpolicy.num_params())]
+        log_keys += ['param%d' % i for i in range(hyperpolicy.num_parameters())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(hyperpolicy.num_params())]
+        log_keys += ['grad%d' % i for i in range(hyperpolicy.num_parameters())]
     log_row = dict.fromkeys(log_keys)
     logger.open(log_row.keys())
     
@@ -138,7 +138,7 @@ def pgpe(env, hyperpolicy, horizon, *,
         #Render the agent's behavior
         if render and it % render==0:
             hyperpolicy.resample()
-            minimal_episode_generator(env, hyperpolicy.lower_policy, horizon, disc,
+            blackbox_simulate_episode(env, hyperpolicy.lower_policy, horizon, disc,
                                       episodes=1,
                                       action_filter=action_filter,
                                       render=True,
@@ -198,10 +198,10 @@ def pgpe(env, hyperpolicy, horizon, *,
         #Log
         log_row['Time'] = time.time() - start
         if log_params:
-            for i in range(hyperpolicy.num_params()):
+            for i in range(hyperpolicy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(hyperpolicy.num_params()):
+            for i in range(hyperpolicy.num_parameters()):
                 log_row['grad%d' % i] = grad[i].item()
         logger.write_row(log_row, it)
         

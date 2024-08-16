@@ -121,9 +121,9 @@ def smoothpg(env, policy, horizon, lip_const1, lip_const2, *,
                 'Improv2', 
                 'Order']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
     if test_batchsize:
         log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
     log_row = dict.fromkeys(log_keys)
@@ -150,8 +150,8 @@ def smoothpg(env, policy, horizon, lip_const1, lip_const2, *,
         
         #Test the corresponding deterministic policy
         if test_batchsize:
-            test_batch = generate_batch(env, policy, horizon, 
-                                        episodes=test_batchsize, 
+            test_batch = generate_batch(env, policy, horizon,
+                                        n_episodes=test_batchsize,
                                         action_filter=action_filter,
                                         n_jobs=parallel,
                                         deterministic=True,
@@ -163,16 +163,16 @@ def smoothpg(env, policy, horizon, lip_const1, lip_const2, *,
         #Render the agent's behavior
         if render and it % render==0:
             generate_batch(env, policy, horizon,
-                           episodes=1,
-                           action_filter=action_filter, 
+                           n_episodes=1,
+                           action_filter=action_filter,
                            render=True)
     
         #Collect trajectories
-        batch = generate_batch(env, policy, horizon, 
-                    episodes=batchsize, 
-                    action_filter=action_filter,
-                    n_jobs=parallel,
-                    key=info_key)
+        batch = generate_batch(env, policy, horizon,
+                               n_episodes=batchsize,
+                               action_filter=action_filter,
+                               n_jobs=parallel,
+                               key=info_key)
                 
         #Estimate policy gradient
         grad_samples = _estimator(batch, disc, policy, 
@@ -211,10 +211,10 @@ def smoothpg(env, policy, horizon, lip_const1, lip_const2, *,
         log_row['BatchSize'] = batchsize
         log_row['TotSamples'] = tot_samples
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         

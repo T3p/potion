@@ -38,7 +38,7 @@ def importance_weights(batch, policy, target_params, normalize=False, clip=None)
 
 """Testing"""
 if __name__ == '__main__':
-    from potion.actors.continuous_policies import ShallowGaussianPolicy as Gauss
+    from potion.policies.gaussian_policies import LinearGaussianPolicy as Gauss
     from potion.simulation.trajectory_generators import generate_batch
     from potion.common.misc_utils import seed_all_agent
     import potion.envs
@@ -49,7 +49,7 @@ if __name__ == '__main__':
     N = 100
     H = 100
     disc = 0.99
-    pol = Gauss(4,1, mu_init=[0.,0.,0.,0.], learn_std=True)
+    pol = Gauss(4, 1, mean_params_init=[0., 0., 0., 0.], learn_std=True)
     
     batch = generate_batch(env, pol, H, N)
     print(importance_weights(batch, pol, pol.get_flat()))

@@ -11,7 +11,7 @@ from potion.estimation.gradients import gpomdp_estimator
 from potion.estimation.metagradients import metagrad
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent, mean_sum_info, max_reward, max_feature
-from potion.actors.continuous_policies import ShallowGaussianPolicy
+from potion.policies.gaussian_policies import LinearGaussianPolicy
 from potion.meta.smoothing_constants import gauss_lip_const, std_lip_const
 from potion.meta.safety_requirements import MonotonicImprovement
 import scipy.stats as sts
@@ -46,8 +46,8 @@ def sepg(env, policy,
     """
         
     #Defaults
-    assert type(policy) == ShallowGaussianPolicy
-    assert policy.learn_std
+    assert type(policy) == LinearGaussianPolicy
+    assert policy._learn_std
     if action_filter is None:
         action_filter = clip(env)
     
@@ -71,7 +71,7 @@ def sepg(env, policy,
                 'UpsilonGradVar', 'UpsilonEps', 'OmegaGradVar', 'OmegaEps',
                 'Req', 'MinBatchSize', 'MaxReq', 'Info', 'MaxRew', 'MaxFeat']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if test_batchsize:
         log_keys.append('DetPerf')
     log_row = dict.fromkeys(log_keys)
@@ -241,7 +241,7 @@ def sepg(env, policy,
         log_row['MaxFeat'] = max_feat
         params = policy.get_flat()
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         logger.write_row(log_row, it)
         if save_params and it % save_params == 0:
@@ -280,8 +280,8 @@ def naive_sepg(env, policy,
     """
         
     #Defaults
-    assert type(policy) == ShallowGaussianPolicy
-    assert policy.learn_std
+    assert type(policy) == LinearGaussianPolicy
+    assert policy._learn_std
     if action_filter is None:
         action_filter = clip(env)
     
@@ -305,7 +305,7 @@ def naive_sepg(env, policy,
                 'UpsilonGradVar', 'UpsilonEps', 'OmegaGradVar', 'OmegaEps',
                 'Req', 'MinBatchSize', 'MaxReq', 'MaxRew']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if test_batchsize:
         log_keys.append('DetPerf')
     log_row = dict.fromkeys(log_keys)
@@ -452,7 +452,7 @@ def naive_sepg(env, policy,
         log_row['MaxRew'] = max_rew
         params = policy.get_flat()
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         logger.write_row(log_row, it)
         if save_params and it % save_params == 0:

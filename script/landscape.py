@@ -2,7 +2,7 @@ import gym
 import torch
 import numpy as np
 from potion.simulation.play import play
-from potion.actors.continuous_policies import ShallowGaussianPolicy
+from potion.policies.gaussian_policies import LinearGaussianPolicy
 from potion.common.misc_utils import returns
 import matplotlib.pyplot as plt
 import potion.envs
@@ -19,7 +19,7 @@ start = torch.zeros(m*d) - 2.
 end = torch.zeros(m*d)
 
 logstd = torch.log(torch.zeros(d) + std)
-policy = ShallowGaussianPolicy(m, d, learn_std=False, logstd_init=logstd)
+policy = LinearGaussianPolicy(m, d, learn_std=False, std_init=logstd)
 
 points = np.linspace(0, 1, 100)
 rets = []

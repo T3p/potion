@@ -26,7 +26,7 @@ def interpolate_landscape(env, policy, param_1, param_2, horizon, disc = 0.99, e
     plt.show()
     
 if __name__ == '__main__':
-    from potion.actors.continuous_policies import ShallowGaussianPolicy
+    from potion.policies.gaussian_policies import LinearGaussianPolicy
     import potion.envs
     import gym
     import torch
@@ -35,7 +35,7 @@ if __name__ == '__main__':
     std = 1.
     disc = 0.9
     #env = gym.make('LQGX-v0')
-    pol = ShallowGaussianPolicy(1, 1, learn_std=False, logstd_init=np.log(1.))
+    pol = LinearGaussianPolicy(1, 1, learn_std=False, std_init=np.log(1.))
     p1 = torch.tensor([-1.])
     p2 = torch.tensor([1.])
     fun = None#lambda x: env._grad(x, std, disc)

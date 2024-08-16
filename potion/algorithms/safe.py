@@ -118,9 +118,9 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
     if oracle is not None:
         log_keys += ['Oracle']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
     log_row = dict.fromkeys(log_keys)
     logger.open(log_row.keys())
     
@@ -140,8 +140,8 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
         #Render the agent's behavior
         if render and it % render==0:
             generate_batch(env, policy, horizon,
-                           episodes=1,
-                           action_filter=action_filter, 
+                           n_episodes=1,
+                           action_filter=action_filter,
                            render=True)
         
         #Collect trajectories to match optimal safe batch size
@@ -153,10 +153,10 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
         while do or batchsize + mini_batchsize <= max_batchsize:
             do = False
             i = i + 1
-            batch += generate_batch(env, policy, horizon, 
-                        episodes=mini_batchsize, 
-                        action_filter=action_filter,
-                        n_jobs=parallel)
+            batch += generate_batch(env, policy, horizon,
+                                    n_episodes=mini_batchsize,
+                                    action_filter=action_filter,
+                                    n_jobs=parallel)
             batchsize = len(batch)
             
             #Estimate policy gradient
@@ -198,10 +198,10 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
         if oracle is not None:
             log_row['Oracle'] = oracle(params.numpy())
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['grad%d' % i] = grad[i].item()
 
             #Log
@@ -358,9 +358,9 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
     if oracle is not None:
         log_keys += ['Oracle']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
     log_row = dict.fromkeys(log_keys)
     logger.open(log_row.keys())
     
@@ -382,8 +382,8 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
         #Render the agent's behavior
         if render and it % render==0:
             generate_batch(env, policy, horizon,
-                           episodes=1,
-                           action_filter=action_filter, 
+                           n_episodes=1,
+                           action_filter=action_filter,
                            render=True)
         
         #Collect trajectories to match optimal safe batch size
@@ -396,19 +396,19 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
         safe_flag = False
         
         if warm_start:
-            batch += generate_batch(env, policy, horizon, 
-                        episodes=int(3/2*batchsize), 
-                        action_filter=action_filter,
-                        n_jobs=parallel)
+            batch += generate_batch(env, policy, horizon,
+                                    n_episodes=int(3 / 2 * batchsize),
+                                    action_filter=action_filter,
+                                    n_jobs=parallel)
             batchsize = len(batch) 
         
         while do or batchsize + mini_batchsize <= max_batchsize:
             do = False
             i = i + 1
-            batch += generate_batch(env, policy, horizon, 
-                        episodes=mini_batchsize, 
-                        action_filter=action_filter,
-                        n_jobs=parallel)
+            batch += generate_batch(env, policy, horizon,
+                                    n_episodes=mini_batchsize,
+                                    action_filter=action_filter,
+                                    n_jobs=parallel)
             batchsize = len(batch)
             
             #Estimate policy gradient
@@ -461,10 +461,10 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
         if oracle is not None:
             log_row['Oracle'] = oracle(params.numpy())
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['grad%d' % i] = grad[i].item()
 
             #Log
@@ -568,9 +568,9 @@ def safe_step_strict(env, policy, disc, horizon, lip_const, var_bound,
                 'Threshold',
                 'VarBound']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
     if info_key is not None:
         log_keys.append(info_key)
     log_row = dict.fromkeys(log_keys)
@@ -592,16 +592,16 @@ def safe_step_strict(env, policy, disc, horizon, lip_const, var_bound,
         #Render the agent's behavior
         if render and it % render==0:
             generate_batch(env, policy, horizon,
-                           episodes=1,
-                           action_filter=action_filter, 
+                           n_episodes=1,
+                           action_filter=action_filter,
                            render=True)
 
         #Collect trajectories
-        batch = generate_batch(env, policy, horizon, 
-                                episodes=batchsize, 
-                                action_filter=action_filter,
-                                n_jobs=parallel,
-                                key=info_key)
+        batch = generate_batch(env, policy, horizon,
+                               n_episodes=batchsize,
+                               action_filter=action_filter,
+                               n_jobs=parallel,
+                               key=info_key)
 
         #Estimate policy gradient
         grad_samples = _estimator(batch, disc, policy, 
@@ -629,10 +629,10 @@ def safe_step_strict(env, policy, disc, horizon, lip_const, var_bound,
         log_row['GradNorm'] = grad_norm.item()
         log_row['TotSamples'] = tot_samples
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Safety test
@@ -735,9 +735,9 @@ def safe_step(env, policy, disc, horizon, lip_const,
                 'Threshold',
                 'VarBound']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
     if info_key is not None:
         log_keys.append(info_key)
     log_row = dict.fromkeys(log_keys)
@@ -759,16 +759,16 @@ def safe_step(env, policy, disc, horizon, lip_const,
         #Render the agent's behavior
         if render and it % render==0:
             generate_batch(env, policy, horizon,
-                           episodes=1,
-                           action_filter=action_filter, 
+                           n_episodes=1,
+                           action_filter=action_filter,
                            render=True)
 
         #Collect trajectories
-        batch = generate_batch(env, policy, horizon, 
-                                episodes=batchsize, 
-                                action_filter=action_filter,
-                                n_jobs=parallel,
-                                key=info_key)
+        batch = generate_batch(env, policy, horizon,
+                               n_episodes=batchsize,
+                               action_filter=action_filter,
+                               n_jobs=parallel,
+                               key=info_key)
 
         #Estimate policy gradient
         grad_samples = _estimator(batch, disc, policy, 
@@ -804,10 +804,10 @@ def safe_step(env, policy, disc, horizon, lip_const,
         log_row['GradNorm'] = grad_norm.item()
         log_row['TotSamples'] = tot_samples
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Safety test
@@ -958,9 +958,9 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
                 'TotSamples',
                 'Safety']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
     if test_batchsize:
         log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
     log_row = dict.fromkeys(log_keys)
@@ -986,8 +986,8 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
         
         #Test the corresponding deterministic policy
         if test_batchsize:
-            test_batch = generate_batch(env, policy, horizon, 
-                                        episodes=test_batchsize, 
+            test_batch = generate_batch(env, policy, horizon,
+                                        n_episodes=test_batchsize,
                                         action_filter=action_filter,
                                         n_jobs=parallel,
                                         deterministic=True,
@@ -999,16 +999,16 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
         #Render the agent's behavior
         if render and it % render==0:
             generate_batch(env, policy, horizon,
-                           episodes=1,
-                           action_filter=action_filter, 
+                           n_episodes=1,
+                           action_filter=action_filter,
                            render=True)
     
         #Collect trajectories according to fixed batch size
-        batch = generate_batch(env, policy, horizon, 
-                                episodes=batchsize, 
-                                action_filter=action_filter,
-                                n_jobs=parallel,
-                                key=info_key)
+        batch = generate_batch(env, policy, horizon,
+                               n_episodes=batchsize,
+                               action_filter=action_filter,
+                               n_jobs=parallel,
+                               key=info_key)
             
         #Estimate policy gradient
         grad_samples = _estimator(batch, disc, policy, 
@@ -1048,10 +1048,10 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
         log_row['BatchSize'] = batchsize
         log_row['TotSamples'] = tot_samples
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Check if number of samples is sufficient to perform update
@@ -1216,9 +1216,9 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
     if oracle is not None:
         log_keys += ['Oracle']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if log_grad:
-        log_keys += ['grad%d' % i for i in range(policy.num_params())]
+        log_keys += ['grad%d' % i for i in range(policy.num_parameters())]
     if test_batchsize:
         log_keys += ['TestPerf', 'TestPerf', 'TestInfo']
     log_row = dict.fromkeys(log_keys)
@@ -1248,8 +1248,8 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
         
         #Test the corresponding deterministic policy
         if test_batchsize:
-            test_batch = generate_batch(env, policy, horizon, 
-                                        episodes=test_batchsize, 
+            test_batch = generate_batch(env, policy, horizon,
+                                        n_episodes=test_batchsize,
                                         action_filter=action_filter,
                                         n_jobs=parallel,
                                         deterministic=True,
@@ -1261,18 +1261,18 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
         #Render the agent's behavior
         if render and it % render==0:
             generate_batch(env, policy, horizon,
-                           episodes=1,
-                           action_filter=action_filter, 
+                           n_episodes=1,
+                           action_filter=action_filter,
                            render=True)
     
         #Collect trajectories according to previous optimal batch size
-        batch = generate_batch(env, policy, horizon, 
-                                episodes=max(min_batchsize, 
-                                             min(max_batchsize, 
-                                                 optimal_batchsize)), 
-                                action_filter=action_filter,
-                                n_jobs=parallel,
-                                key=info_key)
+        batch = generate_batch(env, policy, horizon,
+                               n_episodes=max(min_batchsize,
+                                              min(max_batchsize,
+                                                 optimal_batchsize)),
+                               action_filter=action_filter,
+                               n_jobs=parallel,
+                               key=info_key)
         batchsize = len(batch)
             
         #Estimate policy gradient
@@ -1377,10 +1377,10 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
         if oracle is not None:
             log_row['Oracle'] = oracle(params.numpy())
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         if log_grad:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['grad%d' % i] = grad[i].item()
                 
         #Check if number of samples is sufficient to perform update

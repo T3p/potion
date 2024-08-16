@@ -11,7 +11,7 @@ from potion.estimation.gradients import gpomdp_estimator
 from potion.estimation.metagradients import metagrad
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
-from potion.actors.continuous_policies import ShallowGaussianPolicy
+from potion.policies.gaussian_policies import LinearGaussianPolicy
 import torch
 
 def mepg(env, policy, 
@@ -37,8 +37,8 @@ def mepg(env, policy,
     """
         
     #Defaults
-    assert type(policy) == ShallowGaussianPolicy
-    assert policy.learn_std
+    assert type(policy) == LinearGaussianPolicy
+    assert policy._learn_std
     if action_filter is None:
         action_filter = clip(env)
     
@@ -62,7 +62,7 @@ def mepg(env, policy,
                 'StepSize', 'MetaStepSize', 'BatchSize', 'Exploration', 
                 'OmegaGrad', 'OmegaMetagrad', 'upsilonGradNorm']
     if log_params:
-        log_keys += ['param%d' % i for i in range(policy.num_params())]
+        log_keys += ['param%d' % i for i in range(policy.num_parameters())]
     if test_batchsize:
         log_keys.append('DetPerf')
     log_row = dict.fromkeys(log_keys)
@@ -131,7 +131,7 @@ def mepg(env, policy,
         log_row['AvgHorizon'] = avg_horizon(batch)
         params = policy.get_flat()
         if log_params:
-            for i in range(policy.num_params()):
+            for i in range(policy.num_parameters()):
                 log_row['param%d' % i] = params[i].item()
         logger.write_row(log_row, it)
         if save_params and it % save_params == 0:
