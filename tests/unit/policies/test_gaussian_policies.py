@@ -387,6 +387,7 @@ def test_gaussian_exceptions(linear_gaussian_policy_1d, linear_gaussian_policy, 
     with pytest.raises(ValueError):
         _ = pol4.entropy_grad(bad_s)
 
+
 def test_deep_gaussian_policy_linear(linear_gaussian_policy, state_d, action_d, rng):
     pol = linear_gaussian_policy
     nn_pol = DeepGaussianPolicy(state_d, action_d, mean_network=None)

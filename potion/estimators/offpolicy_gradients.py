@@ -9,7 +9,7 @@ import torch
 import potion.common.torch_utils as tu
 from potion.common.misc_utils import unpack, discount
 from potion.common.torch_utils import tensormat, jacobian
-from potion.estimation.moments import incr_mean, incr_var
+from potion.estimators.moments import incr_mean, incr_var
 
 def off_gpomdp_estimator(batch, disc, policy, target_params, 
                          baselinekind='avg', 
@@ -256,7 +256,7 @@ if __name__ == '__main__':
     from potion.common.misc_utils import seed_all_agent
     import potion.envs
     import gym.spaces
-    from potion.estimation.gradients import gpomdp_estimator
+    from potion.estimators.gradients import gpomdp_estimator
     
     env = gym.make('ContCartPole-v0')
     env.seed(0)

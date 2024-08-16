@@ -263,4 +263,3 @@ class DeepGaussianPolicy(GaussianPolicy):
         val = torch.sum(-((a - self._mean(s, requires_grad=True)) ** 2) / (2 * std ** 2), -1)
         grad = torch.autograd.grad(val, self._mean_network.parameters())
         return parameters_to_vector(grad).numpy()
-

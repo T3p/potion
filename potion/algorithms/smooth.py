@@ -8,7 +8,7 @@ Smooth Policy Gradient (SmoPG)
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import (performance, avg_horizon, mean_sum_info, 
                                       clip, seed_all_agent, returns, separator)
-from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
+from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
 import torch
 import time
@@ -53,7 +53,7 @@ def smoothpg(env, policy, horizon, lip_const1, lip_const2, *,
     disc: discount factor
     forget: decay of the (estimated) global gradient Lipscthiz constant
     action_filter: function to apply to the agent's action before feeding it to 
-        the environment, not considered in gradient estimation. By default,
+        the environment, not considered in gradient estimators. By default,
         the action is clipped to satisfy evironmental boundaries
     estimator: either 'reinforce' or 'gpomdp' (default). The latter typically
         suffers from less variance
@@ -248,7 +248,7 @@ def smoothpg(env, policy, horizon, lip_const1, lip_const2, *,
         stepsize = stepsize2 if improv2 > improv1 else stepsize1
         log_row['StepSize'] = stepsize
         
-        #Store old info for curvature estimation
+        #Store old info for curvature estimators
         old_stepsize = stepsize
         old_grad = grad
         old_grad_var = torch.norm(grad_var)

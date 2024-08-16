@@ -172,7 +172,7 @@ class LQR(gym.Env):
         if np.size(K) == 1:
             return min(0, np.array(-self.max_pos ** 2 * P / 3 - W).item())
 
-        # Monte Carlo estimation for higher dimensions
+        # Monte Carlo estimators for higher dimensions
         J = 0.0
         for i in range(n_random_x0):
             self.reset()

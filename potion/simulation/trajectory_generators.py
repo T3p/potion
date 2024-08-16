@@ -1,5 +1,7 @@
 import numpy as np
 from joblib import Parallel, delayed
+from collections.abc import Sequence
+
 
 
 def generate_trajectory(env, policy, max_trajectory_len, seed):
@@ -104,3 +106,26 @@ def blackbox_simulate_batch(env, policy, n_episodes, max_trajectory_len, rng, di
                                                         (env, policy, max_trajectory_len, s, discount)
                                                         for s in seeds)
     return batch
+
+
+def unpack(batch):
+    if not (isinstance(batch, Sequence) and isinstance(batch[0], tuple) and len(batch[0]) == 4):
+        raise ValueError("batch should be a list of 4-tuples")
+    return (np.stack(x) for x in zip(*batch))
+
+
+def apply_mask(data, mask):
+    if data.shape != mask.shape:
+        if data.shape[:-1] != mask.shape:
+            raise ValueError("Dimensions of data and mask should match, except possibly the last dimension of data")
+        return data * mask[..., None]
+    return data * mask
+
+
+def apply_discount(rewards, disc):
+    if not 0 <= disc <= 1:
+        raise ValueError("discount factor should be between zero and one")
+
+    horizon = rewards.shape[-1]
+    factors = disc ** np.indices(dimensions=(horizon,))
+    return rewards * factors

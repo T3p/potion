@@ -8,9 +8,9 @@ from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import (performance, avg_horizon, mean_sum_info, 
                                       clip, seed_all_agent, returns, separator,
                                       performance_lcb, performance_ucb)
-from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator
+from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator
 from potion.common.logger import Logger
-from potion.estimation.jackknife import jackknife
+from potion.estimators.jackknife import jackknife
 import scipy.stats as sts
 import torch
 import time
@@ -46,7 +46,7 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
     policy: the one to improve
     horizon: maximum task horizon
     lip_const: Lipschitz constant of the gradient (upper bound)
-    err_bound: statistical upper bound on the PG estimation error (function of
+    err_bound: statistical upper bound on the PG estimators error (function of
                 probability)
     conf: probability of failure
     min_batchsize: minimum number of trajectories to estimate policy gradient
@@ -55,7 +55,7 @@ def spg(env, policy, horizon, lip_const, err_bound, *,
     max_samples: maximum number of total collected trajectories
     disc: discount factor
     action_filter: function to apply to the agent's action before feeding it to 
-        the environment, not considered in gradient estimation. By default,
+        the environment, not considered in gradient estimators. By default,
         the action is clipped to satisfy evironmental boundaries
     estimator: either 'reinforce' or 'gpomdp' (default). The latter typically
         suffers from less variance
@@ -284,7 +284,7 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
     policy: the one to improve
     horizon: maximum task horizon
     lip_const: Lipschitz constant of the gradient (upper bound)
-    err_bound: statistical upper bound on the PG estimation error (function of
+    err_bound: statistical upper bound on the PG estimators error (function of
                 probability)
     conf: probability of failure
     min_batchsize: minimum number of trajectories to estimate policy gradient
@@ -293,7 +293,7 @@ def relaxed_spg(env, policy, horizon, lip_const, err_bound, max_rew, *,
     max_samples: maximum number of total collected trajectories
     disc: discount factor
     action_filter: function to apply to the agent's action before feeding it to 
-        the environment, not considered in gradient estimation. By default,
+        the environment, not considered in gradient estimators. By default,
         the action is clipped to satisfy evironmental boundaries
     estimator: either 'reinforce' or 'gpomdp' (default). The latter typically
         suffers from less variance
@@ -894,7 +894,7 @@ def legacy_adastep(env, policy, horizon, pen_coeff, var_bound, *,
     max_samples: maximum number of total trajectories
     disc: discount factor
     action_filter: function to apply to the agent's action before feeding it to 
-        the environment, not considered in gradient estimation. By default,
+        the environment, not considered in gradient estimators. By default,
         the action is clipped to satisfy evironmental boundaries
     estimator: either 'reinforce' or 'gpomdp' (default). The latter typically
         suffers from less variance
@@ -1142,7 +1142,7 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
     max_samples: maximum number of total trajectories
     disc: discount factor
     action_filter: function to apply to the agent's action before feeding it to 
-        the environment, not considered in gradient estimation. By default,
+        the environment, not considered in gradient estimators. By default,
         the action is clipped to satisfy evironmental boundaries
     estimator: either 'reinforce' or 'gpomdp' (default). The latter typically
         suffers from less variance
@@ -1284,7 +1284,7 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
         grad_infnorm = torch.max(torch.abs(grad))
         coordinate = torch.min(torch.argmax(torch.abs(grad))).item()
         
-        #Compute statistics for estimation error
+        #Compute statistics for estimators error
         if bound in ['bernstein', 'student']:
             grad_var = torch.var(grad_samples, 0, unbiased = True)
             grad_var = torch.max(grad_var).item()
@@ -1299,7 +1299,7 @@ def legacy_adabatch(env, policy, horizon, pen_coeff, *,
                 grad_range = torch.max(2 * abs(max_grad)).item()
         log_row['GradRange'] = grad_range
           
-        #Compute estimation error
+        #Compute estimators error
         if bound == 'chebyshev':
             eps = math.sqrt(var_bound / delta)
         elif bound == 'student':

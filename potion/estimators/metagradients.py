@@ -7,7 +7,7 @@ Created on Tue Jan 15 14:57:23 2019
 """
 
 import torch
-from potion.estimation.gradients import gpomdp_estimator
+from potion.estimators.gradients import gpomdp_estimator
 from potion.common.misc_utils import unpack, discount
 from potion.common.torch_utils import tensormat
 

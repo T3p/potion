@@ -7,8 +7,8 @@ Created on Wed Jan 16 16:18:45 2019
 """
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon
-from potion.estimation.gradients import gpomdp_estimator
-from potion.estimation.metagradients import metagrad
+from potion.estimators.gradients import gpomdp_estimator
+from potion.estimators.metagradients import metagrad
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 from potion.policies.gaussian_policies import LinearGaussianPolicy

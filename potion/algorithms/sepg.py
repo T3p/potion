@@ -7,8 +7,8 @@ Created on Wed Jan 16 16:18:45 2019
 """
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon
-from potion.estimation.gradients import gpomdp_estimator
-from potion.estimation.metagradients import metagrad
+from potion.estimators.gradients import gpomdp_estimator
+from potion.estimators.metagradients import metagrad
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent, mean_sum_info, max_reward, max_feature
 from potion.policies.gaussian_policies import LinearGaussianPolicy
@@ -135,7 +135,7 @@ def sepg(env, policy,
         
         ### Mean-update iteration
         if it % 2 == 0:
-            #Compute gradient estimation error for mean parameters
+            #Compute gradient estimators error for mean parameters
             if conf < 1 and grad_samples.size()[1] > 2:
                 centered = grad_samples[:, 1:] - upsilon_grad.unsqueeze(0)
                 grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
@@ -184,7 +184,7 @@ def sepg(env, policy,
                                       grad_samples=grad_samples)
             omega_metagrad_norm = torch.norm(omega_metagrad)
             
-            #Compute gradient estimation error for variance parameter
+            #Compute gradient estimators error for variance parameter
             if conf < 1:
                 omega_grad_var = torch.var(grad_samples[:, 0]).item()
                 quant = sts.t.ppf(1 - conf/2, batchsize - 1)
@@ -363,7 +363,7 @@ def naive_sepg(env, policy,
         
         ### Mean-update iteration
         if it % 2 == 0:
-            #Compute gradient estimation error for mean parameters
+            #Compute gradient estimators error for mean parameters
             if conf < 1 and grad_samples.size()[1] > 2:
                 centered = grad_samples[:, 1:] - upsilon_grad.unsqueeze(0)
                 grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
@@ -403,7 +403,7 @@ def naive_sepg(env, policy,
         ###  
         ### Variance-update iteration
         else:
-            #Compute gradient estimation error for variance parameter
+            #Compute gradient estimators error for variance parameter
             if conf < 1:
                 omega_grad_var = torch.var(grad_samples[:, 0]).item()
                 quant = sts.t.ppf(1 - conf/2, batchsize - 1)
@@ -576,7 +576,7 @@ def naive_sepg(env, policy,
 #        
 #        ### Mean-update iteration
 #        if it % 2 == 0:
-#            #Compute gradient estimation error for mean parameters
+#            #Compute gradient estimators error for mean parameters
 #            if conf < 1 and grad_samples.size()[1] > 2:
 #                centered = grad_samples[:, 1:] - upsilon_grad.unsqueeze(0)
 #                grad_cov = batchsize/(batchsize - 1) * torch.mean(torch.bmm(centered.unsqueeze(2), centered.unsqueeze(1)),0)
@@ -630,7 +630,7 @@ def naive_sepg(env, policy,
 #                                      grad_samples=grad_samples)
 #            omega_metagrad_norm = torch.norm(omega_metagrad)
 #            
-#            #Compute gradient estimation error for variance parameter
+#            #Compute gradient estimators error for variance parameter
 #            if conf < 1:
 #                omega_grad_var = torch.var(grad_samples[:, 0]).item()
 #                quant = sts.t.ppf(1 - conf/2, batchsize - 1)

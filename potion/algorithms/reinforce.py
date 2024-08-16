@@ -7,7 +7,7 @@ REINFORCE family of algorithms (actor-only policy gradient)
 
 from potion.simulation.trajectory_generators import generate_batch
 from potion.common.misc_utils import performance, avg_horizon, mean_sum_info
-from potion.estimation.gradients import gpomdp_estimator, reinforce_estimator, egpomdp_estimator
+from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, egpomdp_estimator
 from potion.common.logger import Logger
 from potion.common.misc_utils import clip, seed_all_agent
 from potion.meta.steppers import ConstantStepper
@@ -47,7 +47,7 @@ def reinforce(env, policy, horizon, *,
     disc: discount factor
     stepper: step size criterion. A constant step size is used by default
     action_filter: function to apply to the agent's action before feeding it to 
-        the environment, not considered in gradient estimation. By default,
+        the environment, not considered in gradient estimators. By default,
         the action is clipped to satisfy evironmental boundaries
     estimator: either 'reinforce' or 'gpomdp' (default). The latter typically
         suffers from less variance

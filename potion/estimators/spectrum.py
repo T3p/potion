@@ -6,8 +6,8 @@ Created on Tue Mar  3 17:23:58 2020
 @author: matteo
 """
 import torch
-from potion.estimation.gradients import gpomdp_estimator
-from potion.estimation.offpolicy_gradients import off_gpomdp_estimator
+from potion.estimators.gradients import gpomdp_estimator
+from potion.estimators.offpolicy_gradients import off_gpomdp_estimator
 
 """
 Largest (smallest if reversed) eigenvalue of Hessian from an SFO

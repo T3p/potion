@@ -67,7 +67,7 @@ def pgpe(env, hyperpolicy, horizon, *,
     stepper: step size criterion. A constant step size is used by default
     natural: whether to use natural gradient
     action_filter: function to apply to the agent's action before feeding it to 
-        the environment, not considered in gradient estimation. By default,
+        the environment, not considered in gradient estimators. By default,
         the action is clipped to satisfy evironmental boundaries
     baseline: control variate to be used in the gradient estimator. Either
         'avg' (average reward, default), 'sugiyama' (variance-minimizing) or

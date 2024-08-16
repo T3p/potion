@@ -2,6 +2,9 @@ import pytest
 import numpy as np
 import gymnasium as gym
 
+@pytest.fixture
+def n_traj():
+    return 7
 
 @pytest.fixture
 def max_trajectory_len():
@@ -27,6 +30,10 @@ def state_d():
 def action_d():
     return 2
 
+
+@pytest.fixture
+def n_params():
+    return 6
 
 @pytest.fixture
 def discount():
@@ -124,10 +131,20 @@ def env_stochastic_reward(state_d, action_d, max_trajectory_len, horizon):
 
 
 @pytest.fixture
-def policy(action_d):
+def policy(state_d, action_d, n_params):
     class MockPolicy:
+        state_dim = state_d
+        action_dim = action_d
+        num_params = n_params
+
         def act(self, state, rng):
             return rng.normal(size=action_d)
+
+        def score(self, state, action):
+            return np.concatenate((state,
+                                   action,
+                                   np.ones(shape=state.shape[:-1] + (1, ))),
+                                  -1)
 
     return MockPolicy()
 
@@ -139,3 +156,18 @@ def policy_1d():
             return rng.normal(size=1)
 
     return MockPolicy()
+
+
+@pytest.fixture
+def batch(n_traj, max_trajectory_len, state_d, action_d, discount, horizon, rng):
+    states = rng.normal(size=(n_traj, max_trajectory_len, state_d))
+    actions = rng.normal(size=(n_traj, max_trajectory_len, action_d))
+    rewards = rng.normal(size=(n_traj, max_trajectory_len))
+    alive = np.full(shape=(n_traj, max_trajectory_len), fill_value=True)
+    alive[:, horizon:] = False
+
+    batch = []
+    for i in range(n_traj):
+        batch.append((states[i], actions[i], rewards[i], alive[i]))
+
+    return batch
