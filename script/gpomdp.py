@@ -11,7 +11,7 @@ import potion.envs # this registers the custom envs!
 from potion.policies.gaussian_policies import LinearGaussianPolicy
 from potion.policies.discrete_policies import ShallowGibbsPolicy
 from potion.common.logger import Logger
-from potion.algorithms.reinforce import reinforce
+from potion.algorithms.policy_gradient import reinforce
 import argparse
 import re
 from potion.meta.steppers import ConstantStepper, RMSprop, Adam

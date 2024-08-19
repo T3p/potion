@@ -4,10 +4,10 @@ from potion.simulation.trajectory_generators import (generate_trajectory,
                                                      blackbox_simulate_batch,
                                                      unpack,
                                                      apply_mask,
-                                                     apply_discount)
+                                                     apply_discount,
+                                                     estimate_average_return)
 import numpy as np
 import pytest
-
 
 def test_generate_trajectory_shapes(env, policy, max_trajectory_len, seed, state_d, action_d):
     traj = generate_trajectory(env, policy, max_trajectory_len, seed)
@@ -185,3 +185,15 @@ def test_apply_discount_exceptions():
         _ = apply_discount(np.ones(2), -0.1)
     with pytest.raises(ValueError):
         _ = apply_discount(np.ones(2), 1.1)
+
+
+def test_estimate_average_return(env, env_stochastic_reward, policy, n_episodes, max_trajectory_len, rng, discount,
+                                 n_jobs, horizon):
+    ret = estimate_average_return(env, policy, n_episodes, max_trajectory_len, rng, discount)
+    ret_1 = estimate_average_return(env_stochastic_reward, policy, n_episodes, max_trajectory_len, rng, discount,
+                                    parallel=False)
+    ret_2 = estimate_average_return(env_stochastic_reward, policy, n_episodes, max_trajectory_len, rng, discount,
+                                    parallel=True)
+
+    assert np.isclose(ret, - (1 - discount**horizon) / (1 - discount))
+    assert np.isclose(ret_1, ret_2)

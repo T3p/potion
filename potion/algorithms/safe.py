@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Policy Gradient algorithms with monotonic improvement guarantees
+Policy Gradient learning with monotonic improvement guarantees
 """
 
 from potion.simulation.trajectory_generators import generate_batch

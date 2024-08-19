@@ -28,12 +28,12 @@ class LQR(gym.Env):
         self.horizon = 10  # task horizon (reset is not automatic!)
         self.gamma = 0.9  # discount factor
         self.max_pos = 100 * np.ones(self.ds)  # max state for clipping
-        self.max_action = np.inf * np.ones(self.da)  # max action for clipping
+        self.max_action = 200 * np.ones(self.da)  # max action for clipping
         self.sigma_noise = 0 * np.eye(self.ds)  # std dev of environment noise
-        self.A = np.eye(self.ds)
-        self.B = np.eye(self.ds, self.da)
-        self.Q = 1 * np.eye(self.ds)
-        self.R = 1 * np.eye(self.da)
+        self.A = 1. * np.eye(self.ds)
+        self.B = 1. * np.eye(self.ds, self.da)
+        self.Q = 1. * np.eye(self.ds)
+        self.R = 1. * np.eye(self.da)
         self.timestep = 0
         self.np_random = None
 
@@ -144,7 +144,7 @@ class LQR(gym.Env):
     def computeJ(self, K, Sigma=1., n_random_x0=10000):
         """
         This function computes the discounted reward associated to the provided
-        linear controller (a = K s + \epsilon, \epsilon \sim N(0,\Sigma)).
+        linear controller (a = K s + epsilon, epsilon sim N(0,Sigma)).
         Args:
             K (matrix): the controller matrix
             Sigma (matrix): covariance matrix of the zero-mean noise added to
@@ -233,7 +233,7 @@ class LQR(gym.Env):
     def computeQFunction(self, x, u, K, Sigma, n_random_xn=100):
         """
         This function computes the Q-value of a pair (x,u) given the linear
-        controller Kx + epsilon where epsilon \sim N(0, Sigma).
+        controller Kx + epsilon where epsilon sim N(0, Sigma).
         Args:
             x (int, array): the state
             u (int, array): the action

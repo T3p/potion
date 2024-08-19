@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 import gymnasium as gym
+from potion.policies import ParametricPolicy
 
 @pytest.fixture
 def n_traj():
@@ -132,10 +133,17 @@ def env_stochastic_reward(state_d, action_d, max_trajectory_len, horizon):
 
 @pytest.fixture
 def policy(state_d, action_d, n_params):
-    class MockPolicy:
-        state_dim = state_d
-        action_dim = action_d
-        num_params = n_params
+    class MockPolicy(ParametricPolicy):
+        @property
+        def parameters(self):
+            return np.ones(self.num_params)
+
+        @property
+        def num_params(self):
+            return n_params
+
+        def set_params(self, params):
+            pass
 
         def act(self, state, rng):
             return rng.normal(size=action_d)
@@ -146,7 +154,7 @@ def policy(state_d, action_d, n_params):
                                    np.ones(shape=state.shape[:-1] + (1, ))),
                                   -1)
 
-    return MockPolicy()
+    return MockPolicy(state_d, action_d)
 
 
 @pytest.fixture

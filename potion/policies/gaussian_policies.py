@@ -1,14 +1,14 @@
 import numpy as np
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import torch
 from torch import nn
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
+from potion.policies import ParametricPolicy
 
 
-class GaussianPolicy(ABC):
+class GaussianPolicy(ParametricPolicy):
     def __init__(self, state_dim, action_dim, std_init=None, learn_std=False):
-        self._state_dim = state_dim
-        self._action_dim = action_dim
+        super().__init__(state_dim, action_dim)
         self._learn_std = learn_std
 
         # Log of standard deviation
@@ -29,14 +29,6 @@ class GaussianPolicy(ABC):
             self._n_std_params = 1
         else:
             self._n_std_params = len(self._std_params)
-
-    @property
-    def state_dim(self):
-        return self._state_dim
-
-    @property
-    def action_dim(self):
-        return self._action_dim
 
     @property
     def learn_std(self):
@@ -208,7 +200,7 @@ class LinearGaussianPolicy(GaussianPolicy):
         self._mean_params = params.reshape((self._action_dim, self._state_dim))
 
     def _mean(self, s):
-        return self._mean_params @ s
+        return s @ self._mean_params.T
 
     def _mean_score(self, s, a):
         score = np.einsum('...k,...h->...hk', s, (a - self._mean(s)) / self.std ** 2)

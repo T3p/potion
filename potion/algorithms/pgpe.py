@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-REINFORCE family of algorithms (actor-only policy gradient)
+REINFORCE family of learning (actor-only policy gradient)
 @author: Matteo Papini
 """
 

@@ -3,7 +3,6 @@ from joblib import Parallel, delayed
 from collections.abc import Sequence
 
 
-
 def generate_trajectory(env, policy, max_trajectory_len, seed):
     # Infer state and action dimensions from the environment
     ds = max(1, sum(env.observation_space.shape))
@@ -42,7 +41,7 @@ def generate_trajectory(env, policy, max_trajectory_len, seed):
         s = next_s
         t += 1
 
-    # Store terminal state (if there is one, and there is space for it)
+    # Store final state (if there is one, and there is space for it)
     if t < max_trajectory_len and s is not None:
         states[t] = s
 
@@ -56,7 +55,7 @@ def blackbox_simulate_episode(env, policy, max_trajectory_len, seed, discount=1.
     agent_rng = np.random.default_rng(agent_seed)
 
     # Seed and reset the environment
-    s, _ = env.reset(env_seed)
+    s, _ = env.reset(seed=env_seed.item())
 
     done = False
     t = 0
@@ -78,7 +77,7 @@ def blackbox_simulate_episode(env, policy, max_trajectory_len, seed, discount=1.
     return ret, t
 
 
-def generate_batch(env, policy, n_episodes, max_trajectory_len, rng, parallel=False, n_jobs=2):
+def generate_batch(env, policy, n_episodes, max_trajectory_len, rng, parallel=False, n_jobs=4):
     # A batch is a list of trajectories, a trajectory is a tuple of numpy arrays (states, actions, rewards, alive)
 
     # Generate independent seeds for the different episodes
@@ -108,6 +107,12 @@ def blackbox_simulate_batch(env, policy, n_episodes, max_trajectory_len, rng, di
     return batch
 
 
+def estimate_average_return(env, policy, n_episodes, max_trajectory_len, rng, discount=1., parallel=False, n_jobs=2):
+    batch = blackbox_simulate_batch(env, policy, n_episodes, max_trajectory_len, rng, discount, parallel, n_jobs)
+    rets, _ = zip(*batch)
+    return np.mean(rets)
+
+
 def unpack(batch):
     if not (isinstance(batch, Sequence) and isinstance(batch[0], tuple) and len(batch[0]) == 4):
         raise ValueError("batch should be a list of 4-tuples")
@@ -122,10 +127,10 @@ def apply_mask(data, mask):
     return data * mask
 
 
-def apply_discount(rewards, disc):
-    if not 0 <= disc <= 1:
+def apply_discount(rewards, discount):
+    if not 0 <= discount <= 1:
         raise ValueError("discount factor should be between zero and one")
 
     horizon = rewards.shape[-1]
-    factors = disc ** np.indices(dimensions=(horizon,))
+    factors = discount ** np.indices(dimensions=(horizon,))
     return rewards * factors
