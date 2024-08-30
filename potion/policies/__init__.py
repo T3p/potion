@@ -16,7 +16,7 @@ class Policy(ABC):
         return self._action_dim
 
     @abstractmethod
-    def act(self, state, rng):
+    def act(self, state, rng, t=None):
         pass
 
     @classmethod
@@ -26,11 +26,21 @@ class Policy(ABC):
             raise ValueError("Environment must have 1-dimensional Boxes as state space and action space. "
                              "Consider wrapping.")
         return cls(state_dim=env.observation_space.shape[0],
-                   action_dim=env.observation_space.shape[0],
+                   action_dim=env.action_space.shape[0],
                    **kwargs)
 
 
-class ParametricPolicy(Policy):
+class StochasticPolicy(Policy):
+    @abstractmethod
+    def log_pdf(self, s, a, t=None):
+        pass
+
+    @abstractmethod
+    def entropy(self, s, t=None):
+        pass
+
+
+class ParametricStochasticPolicy(StochasticPolicy):
     @property
     @abstractmethod
     def parameters(self):
@@ -44,3 +54,12 @@ class ParametricPolicy(Policy):
     @abstractmethod
     def set_params(self, params):
         pass
+
+    @abstractmethod
+    def score(self, s, a, t=None):
+        pass
+
+    @abstractmethod
+    def entropy_grad(self, s, t=None):
+        pass
+

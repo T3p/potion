@@ -7,11 +7,7 @@ class Logger(ABC):
         pass
 
     @abstractmethod
-    def submit_policy(self, policy):
-        pass
-
-    @abstractmethod
-    def submit_trajectories(self, trajectories):
+    def submit(self, trajectories, policy):
         pass
 
     @abstractmethod

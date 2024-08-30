@@ -1,288 +1,304 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import gymnasium as gym
 from gymnasium import spaces
-from gymnasium.utils import seeding
 import numpy as np
-from numbers import Number
-
+import warnings
+from potion.policies.gaussian_policies import LinearGaussianPolicy
+from potion.simulation.trajectory_generators import estimate_average_return
+from potion.policies.wrappers import Staged
 
 class LQR(gym.Env):
-    """
-    Gym environment implementing an LQR problem
-
-    s_{t+1} = A s_t + B a_t + noise
-    r_{t+1} = - s_t^T Q s_t - a_t^T R a_t
-
-    Run script to compute optimal policy parameters
-    """
     metadata = {
         'render_modes': ['human']
     }
 
-    def __init__(self):
-        self.state = None
-        self.ds = 1  # state dimension
-        self.da = 1  # action dimension
-        self.horizon = 10  # task horizon (reset is not automatic!)
-        self.gamma = 0.9  # discount factor
-        self.max_pos = 100 * np.ones(self.ds)  # max state for clipping
-        self.max_action = 200 * np.ones(self.da)  # max action for clipping
-        self.sigma_noise = 0 * np.eye(self.ds)  # std dev of environment noise
-        self.A = 1. * np.eye(self.ds)
-        self.B = 1. * np.eye(self.ds, self.da)
-        self.Q = 1. * np.eye(self.ds)
-        self.R = 1. * np.eye(self.da)
-        self.timestep = 0
-        self.np_random = None
+    def __init__(self,
+                 A=1.,
+                 B=1.,
+                 Q=1.,
+                 R=1.,
+                 Q_final=0.,
+                 M_mix=0.,
+                 init_mean=0.,
+                 init_std=1.,
+                 state_bounds=(-100., 100.),
+                 action_bounds=(-100, 100.),
+                 noise_std=0.,
+                 horizon=None):
 
-        # Gym attributes
-        self.viewer = None
-        self.action_space = spaces.Box(low=-self.max_action,
-                                       high=self.max_action,
-                                       dtype=float)
-        self.observation_space = spaces.Box(low=-self.max_pos,
-                                            high=self.max_pos,
+        # A matrix
+        if np.isscalar(A):
+            A = A * np.eye(1)
+        if A.ndim != 2 or A.shape[0] != A.shape[1]:
+            raise ValueError("A must be a square matrix")
+        self.A = A
+        self.ds = A.shape[0]  # state dimension
+
+        # B matrix
+        if np.isscalar(B):
+            B = B * np.ones(self.ds)[..., None]
+        if B.ndim == 1 and B.shape[0] == self.ds:
+            B = B[..., None]
+        if B.ndim != 2 or B.shape[0] != self.ds:
+            raise ValueError("Bad shape: B should be a {}xk matrix".format(self.ds))
+        self.B = B
+        self.da = B.shape[1]
+
+        # M_mix matrix
+        if np.isscalar(M_mix):
+            if self.da == self.ds:
+                M_mix = M_mix * np.ones((self.da, self.ds))
+            elif np.isclose(M_mix, 0.):
+                M_mix = np.zeros((self.da, self.ds))
+        if M_mix.ndim != 2 or M_mix.shape[0] != self.da or M_mix.shape[1] != self.ds:
+            raise ValueError("Bad shape: B should be a {}x{} matrix".format(self.da, self.ds))
+        self.M_mix = M_mix
+
+        # Controllability
+        powers = [B]
+        for _ in range(self.ds - 1):
+            powers.append(A @ powers[-1])
+        C = np.concatenate(powers, axis=-1)
+        if np.linalg.matrix_rank(C) < self.ds:
+            warnings.warn("The system is not controllable!", UserWarning)
+
+        # Q matrix
+        if np.isscalar(Q):
+            Q = Q * np.eye(self.ds)
+        if Q.ndim != 2 or Q.shape[0] != self.ds or Q.shape[1] != self.ds:
+            raise ValueError("Bad shape: Q should be a {}x{} matrix".format(self.ds, self.ds))
+        if not (np.allclose(Q, Q.T) and np.all(np.linalg.eigvals(Q)) > 0):
+            raise ValueError("Q matrix should symmetric positive definite")
+        self.Q = Q
+
+        # R matrix
+        if np.isscalar(R):
+            R = R * np.eye(self.da)
+        if R.ndim != 2 or R.shape[0] != self.da or R.shape[1] != self.da:
+            raise ValueError("Bad shape: R should be a {}x{} matrix".format(self.da, self.da))
+        if not (np.allclose(R, R.T) and np.all(np.linalg.eigvals(R)) > 0):
+            raise ValueError("R matrix should symmetric positive definite")
+        self.R = R
+
+        # Q final matrix
+        if np.isscalar(Q_final):
+            Q_final = Q_final * np.eye(self.ds)
+        if Q_final.ndim != 2 or Q_final.shape[0] != self.ds or Q_final.shape[1] != self.ds:
+            raise ValueError("Bad shape: Q_final should be a {}x{} matrix".format(self.ds, self.ds))
+        if not (np.allclose(Q_final, Q_final.T) and np.all(np.linalg.eigvals(Q_final)) >= 0):
+            raise ValueError("Q_final matrix should symmetric positive semi-definite")
+        self.Q_final = Q_final
+
+        # State space
+        if state_bounds is None:
+            min_state = -np.inf
+            max_state = np.inf
+        elif not isinstance(state_bounds, tuple):
+            min_state = -state_bounds
+            max_state = state_bounds
+        else:
+            min_state = state_bounds[0]
+            max_state = state_bounds[1]
+
+        if min_state is None:
+            min_state = -np.inf
+        elif np.isscalar(min_state):
+            min_state = min_state * np.ones(self.ds)
+        if min_state.ndim != 1 or min_state.shape[0] != self.ds:
+            raise ValueError("Bad shape: min state should be a {}-dimensional vector".format(self.ds))
+        self.min_s = min_state
+
+        if max_state is None:
+            max_state = np.inf
+        elif np.isscalar(max_state):
+            max_state = max_state * np.ones(self.ds)
+        if max_state.ndim != 1 or max_state.shape[0] != self.ds:
+            raise ValueError("Bad shape: max state should be a {}-dimensional vector".format(self.ds))
+        if np.any(max_state < min_state):
+            raise ValueError("Given state upper bound is below given state lower bound")
+        self.max_s = max_state
+
+        self.observation_space = spaces.Box(low=min_state,
+                                            high=max_state,
                                             dtype=float)
 
-    def step(self, action, render=False):
-        u = np.clip(np.ravel(np.atleast_1d(action)), -self.max_action, self.max_action)
-        noise = np.dot(self.sigma_noise, self.np_random.standard_normal(self.ds))
-        xn = np.clip(np.dot(self.A, self.state.T) + np.dot(self.B, u) + noise, -self.max_pos, self.max_pos)
-        cost = np.dot(self.state,
-                      np.dot(self.Q, self.state)) + \
-               np.dot(u, np.dot(self.R, u))
+        # Initial State
+        if np.isscalar(init_mean):
+            init_mean = init_mean * np.ones(self.ds)
+        if isinstance(init_mean, list):
+            for i in range(len(init_mean)):
+                if np.isscalar(init_mean[i]):
+                    init_mean[i] = init_mean[i] * np.ones(self.ds)
+        self.init_mean = init_mean
+        if np.isscalar(init_std):
+            init_std = init_std * np.ones(self.ds)
+        self.init_std = init_std
 
-        self.state = xn.ravel()
-        self.timestep += 1
+        # Action space
+        if action_bounds is None:
+            min_action = -np.inf
+            max_action = np.inf
+        elif not isinstance(action_bounds, tuple):
+            min_action = -action_bounds
+            max_action = action_bounds
+        else:
+            min_action = action_bounds[0]
+            max_action = action_bounds[1]
+
+        if min_action is None:
+            min_action = -np.inf
+        elif np.isscalar(min_action):
+            min_action = min_action * np.ones(self.da)
+        if min_action.ndim != 1 or min_action.shape[0] != self.da:
+            raise ValueError("Bad shape: min action should be a {}-dimensional vector".format(self.da))
+        self.min_a = min_action
+
+        if max_action is None:
+            max_action = np.inf
+        elif np.isscalar(max_action):
+            max_action = max_action * np.ones(self.da)
+        if max_action.ndim != 1 or max_action.shape[0] != self.da:
+            raise ValueError("Bad shape: max action should be a {}-dimensional vector".format(self.da))
+        if np.any(max_action < min_action):
+            raise ValueError("Given action upper bound is below given action lower bound")
+        self.max_a = max_action
+
+        self.action_space = spaces.Box(low=min_action,
+                                       high=max_action,
+                                       dtype=float)
+
+        # Noise
+        if np.isscalar(noise_std):
+            noise_std = noise_std * np.ones(self.ds)
+        self.noise_std = noise_std
+
+        # Horizon
+        self.horizon = horizon
+
+        # Initializations
+        self.state = None
+        self.rng = None
+        self.viewer = None
+        self.t = 0
+
+    def step(self, action, render=False):
+        a = np.clip(action, self.min_a, self.max_a)
+        cost = np.dot(self.state, self.Q @ self.state) + np.dot(a, self.R @ a) + 2 * np.dot(a, self.M_mix @ self.state)
+        noise = self.noise_std * self.rng.normal(size=self.ds)
+        s = self.A @ self.state + self.B @ action + noise
+        s = np.clip(s, self.min_s, self.max_s)
+
+        self.t += 1
+        self.state = s
 
         terminated = False
-        truncated = (self.timestep >= self.horizon)
+        truncated = self.horizon is not None and self.t >= self.horizon
+        if self.t == self.horizon:
+            cost += np.dot(self.state, self.Q_final @ self.state)
 
-        return self.get_state(), -cost.item(), terminated, truncated, dict()
+        return self.state, -cost, terminated, truncated, dict()
 
     def reset(self, seed=None, options=None):
-        """
-        By default, uniform initialization
-        if options is not None, options["state"] can be used to reset to a specific state
-        """
-        self.timestep = 0
-        self.np_random, _ = seeding.np_random(seed)
+        self.t = 0
+        self.rng = np.random.default_rng(seed)
 
         if options is not None and "state" in options:
             self.state = np.array(options["state"])
         else:
-            self.state = np.array(self.np_random.uniform(low=-1. * np.ones(self.ds),
-                                                         high=1. * np.ones(self.ds)))
+            if isinstance(self.init_mean, list):
+                mean_state = self.rng.choice(self.init_mean)
+            else:
+                mean_state = self.init_mean
+            self.state = mean_state + self.rng.normal(size=self.ds) * self.init_std
 
-        return self.get_state(), dict()
-
-    def get_state(self):
-        return np.array(self.state)
+        return self.state, dict()
 
     def render(self, mode='human', close=False):
-        print(np.array2string(self.get_state()))
+        print(np.array2string(self.state))
 
-    def _computeP2(self, K):
-        """
-        This function computes the Riccati equation associated to the LQG
-        problem.
-        Args:
-            K (matrix): the matrix associated to the linear controller a = K s
+    def discounted_P_matrix(self, discount, max_iterations=100):
+        P = self.Q  # dxd
+        for it in range(max_iterations):
+            inverse = np.linalg.inv(self.R + discount * self.B.T @ P @ self.B)
+            M = self.M_mix + discount * self.B.T @ P @ self.A
+            P_next = self.Q + discount * self.A.T @ P @ self.A - M.T @ inverse @ M
+            if np.allclose(P_next, P):
+                return P_next
+            P = P_next
 
-        Returns:
-            P (matrix): the Riccati Matrix
-
-        """
-        I = np.eye(self.Q.shape[0], self.Q.shape[1])
-        if np.array_equal(self.A, I) and np.array_equal(self.B, I):
-            P = (self.Q + np.dot(K.T, np.dot(self.R, K))) / (I - self.gamma *
-                                                             (I + 2 * K + K **
-                                                              2))
-        else:
-            tolerance = 0.0001
-            converged = False
-            P = np.eye(self.Q.shape[0], self.Q.shape[1])
-            while not converged:
-                Pnew = self.Q + self.gamma * np.dot(self.A.T,
-                                                    np.dot(P, self.A)) + \
-                       self.gamma * np.dot(K.T, np.dot(self.B.T,
-                                                       np.dot(P, self.A))) + \
-                       self.gamma * np.dot(self.A.T,
-                                           np.dot(P, np.dot(self.B, K))) + \
-                       self.gamma * np.dot(K.T,
-                                           np.dot(self.B.T,
-                                                  np.dot(P, np.dot(self.B,
-                                                                   K)))) + \
-                       np.dot(K.T, np.dot(self.R, K))
-                converged = np.max(np.abs(P - Pnew)) < tolerance
-                P = Pnew
+        warnings.warn("Computation of P matrix did not converge")
         return P
 
-    def computeOptimalK(self):
-        """
-        This function computes the optimal linear controller associated to the
-        LQG problem (a = K * s).
+    def discounted_optimal_gain(self, discount, max_iterations=100):
+        P = self.discounted_P_matrix(discount, max_iterations)
+        inverse = np.linalg.inv(self.R + discount * self.B.T @ P @ self.B)
+        return - inverse @ (self.M_mix + discount * self.B.T @ P @ self.A)
 
-        Returns:
-            K (matrix): the optimal controller
+    def discounted_optimal_return(self, discount, policy_std=0., max_iterations=100):
+        # only works with scalar stds
+        P = self.discounted_P_matrix(discount, max_iterations)
 
-        """
-        P = np.eye(self.Q.shape[0], self.Q.shape[1])
-        for i in range(100):
-            K = -self.gamma * np.dot(np.linalg.inv(
-                self.R + self.gamma * (np.dot(self.B.T, np.dot(P, self.B)))),
-                np.dot(self.B.T, np.dot(P, self.A)))
-            P = self._computeP2(K)
-        K = -self.gamma * np.dot(np.linalg.inv(self.R + self.gamma *
-                                               (np.dot(self.B.T,
-                                                       np.dot(P, self.B)))),
-                                 np.dot(self.B.T, np.dot(P, self.A)))
-        return K
+        if isinstance(self.init_mean, list):
+            init_term = np.mean([self._init_term(P, s, self.init_std) for s in self.init_mean])
+        else:
+            init_term = self._init_term(P, self.init_mean, self.init_std)
+        state_noise_term = discount * np.trace(np.diag(self.noise_std**2) @ P) / (1. - discount)
+        action_noise_term = np.trace((self.R + discount * self.B.T @ P @ self.B) * policy_std**2) / (1. - discount)
+        noise_term = state_noise_term + action_noise_term
 
-    def computeJ(self, K, Sigma=1., n_random_x0=10000):
-        """
-        This function computes the discounted reward associated to the provided
-        linear controller (a = K s + epsilon, epsilon sim N(0,Sigma)).
-        Args:
-            K (matrix): the controller matrix
-            Sigma (matrix): covariance matrix of the zero-mean noise added to
-                            the controller action
-            n_random_x0: the number of samples to draw in order to average over
-                         the initial state
+        return - init_term - noise_term
 
-        Returns:
-            J (float): The discounted reward
+    def P_matrices(self, horizon, discount=1.):
+        if horizon == 0:
+            return [self.Q_final]
+        next_Ps = self.P_matrices(horizon - 1, discount)
+        P_next = next_Ps[0]
+        M = self.M_mix + discount * self.B.T @ P_next @ self.A
+        inverse = np.linalg.inv(self.R + discount * self.B.T @ P_next @ self.B)
+        P = self.Q + discount * (self.A.T @ P_next @ self.A) - (M.T @ inverse @ M)
+        return [P] + next_Ps
 
-        """
-        if isinstance(K, Number):
-            K = np.array([K]).reshape(1, 1)
-        if isinstance(Sigma, Number):
-            Sigma = np.array([Sigma]).reshape(1, 1)
+    def optimal_gains(self, horizon, discount=1.):
+        Ps = self.P_matrices(horizon, discount)
+        inverses = [np.linalg.inv(self.R + discount * self.B.T @ Ps[h + 1] @ self.B) for h in range(horizon)]
+        return [- inverses[h] @ (self.M_mix + discount * self.B.T @ Ps[h + 1] @ self.A) for h in range(horizon)]
 
-        P = self._computeP2(K)
-        temp = np.dot(
-            Sigma, (self.R + self.gamma * np.dot(self.B.T,
-                                                 np.dot(P, self.B))))
-        temp = np.trace(temp) if np.ndim(temp) > 1 else temp
-        W = (1 / (1 - self.gamma)) * temp
+    @staticmethod
+    def _init_term(P, mean, std):
+        return np.dot(mean, P @ mean) + np.matrix.trace(P @ np.diag(std ** 2))
 
-        # Closed-form expectation in the scalar case:
-        if np.size(K) == 1:
-            return min(0, np.array(-self.max_pos ** 2 * P / 3 - W).item())
+    def optimal_return(self, horizon, policy_std=0., discount=1.):
+        # only works with scalar stds
+        Ps = self.P_matrices(horizon, discount)
 
-        # Monte Carlo estimators for higher dimensions
-        J = 0.0
-        for i in range(n_random_x0):
-            self.reset()
-            x0 = self.get_state()
-            J -= np.dot(x0.T, np.dot(P, x0)) \
-                 + W
-        J /= n_random_x0
-        return min(0., J)
+        if isinstance(self.init_mean, list):
+            init_term = np.mean([self._init_term(Ps[0], s, self.init_std) for s in self.init_mean])
+        else:
+            init_term = self._init_term(Ps[0], self.init_mean, self.init_std)
+        state_noise_term = sum(np.trace(discount * np.diag(self.noise_std**2) @ Ps[h+1]) for h in range(horizon))
+        action_noise_term = sum(np.trace((self.R + discount * self.B.T @ Ps[h+1] @ self.B) * policy_std**2)
+                                for h in range(horizon))
+        noise_term = state_noise_term + action_noise_term
 
-    def grad_K(self, K, Sigma):
-        """
-        Policy gradient (wrt K) of Gaussian linear policy with mean K s
-        and covariance Sigma.
-        Scalar case only
-        """
-        I = np.eye(self.Q.shape[0], self.Q.shape[1])
-        if not np.array_equal(self.A, I) or not np.array_equal(self.B, I):
-            raise NotImplementedError
-        if not isinstance(K, Number) or not isinstance(Sigma, Number):
-            raise NotImplementedError
-        theta = np.array(K).item()
-        sigma = np.array(Sigma).item()
-
-        den = 1 - self.gamma * (1 + 2 * theta + theta ** 2)
-        dePdeK = 2 * (theta * self.R / den + self.gamma * (self.Q + theta ** 2 * self.R) * (1 + theta) / den ** 2)
-        return (- dePdeK * (self.max_pos ** 2 / 3 + self.gamma * sigma / (1 - self.gamma))).item()
-
-    def grad_Sigma(self, K, Sigma=None):
-        """
-        Policy gradient wrt (adaptive) covariance Sigma
-        """
-        I = np.eye(self.Q.shape[0], self.Q.shape[1])
-        if not np.array_equal(self.A, I) or not np.array_equal(self.B, I):
-            raise NotImplementedError
-        if not isinstance(K, Number) or not isinstance(Sigma, Number):
-            raise NotImplementedError
-
-        K = np.array(K)
-        P = self._computeP2(K)
-        return (-(self.R + self.gamma * P) / (1 - self.gamma)).item()
-
-    def grad_mixed(self, K, Sigma=None):
-        """
-        Mixed-derivative policy gradient for K and Sigma
-        """
-        I = np.eye(self.Q.shape[0], self.Q.shape[1])
-        if not np.array_equal(self.A, I) or not np.array_equal(self.B, I):
-            raise NotImplementedError
-        if not isinstance(K, Number) or not isinstance(Sigma, Number):
-            raise NotImplementedError
-        theta = np.array(K).item()
-
-        den = 1 - self.gamma * (1 + 2 * theta + theta ** 2)
-        dePdeK = 2 * (theta * self.R / den + self.gamma * (self.Q + theta ** 2 * self.R) * (1 + theta) / den ** 2)
-
-        return (-dePdeK * self.gamma / (1 - self.gamma)).item()
-
-    def computeQFunction(self, x, u, K, Sigma, n_random_xn=100):
-        """
-        This function computes the Q-value of a pair (x,u) given the linear
-        controller Kx + epsilon where epsilon sim N(0, Sigma).
-        Args:
-            x (int, array): the state
-            u (int, array): the action
-            K (matrix): the controller matrix
-            Sigma (matrix): covariance matrix of the zero-mean noise added to
-            the controller action
-            n_random_xn: the number of samples to draw in order to average over
-            the next state
-
-        Returns:
-            Qfun (float): The Q-value in the given pair (x,u) under the given
-            controller
-
-        """
-        if isinstance(x, Number):
-            x = np.array([x])
-        if isinstance(u, Number):
-            u = np.array([u])
-        if isinstance(K, Number):
-            K = np.array([K]).reshape(1, 1)
-        if isinstance(Sigma, Number):
-            Sigma = np.array([Sigma]).reshape(1, 1)
-
-        P = self._computeP2(K)
-        Qfun = 0
-        for i in range(n_random_xn):
-            noise = self.np_random.standard_normal() * self.sigma_noise
-            action_noise = self.np_random.multivariate_normal(
-                np.zeros(Sigma.shape[0]), Sigma, 1)
-            nextstate = np.dot(self.A, x) + np.dot(self.B,
-                                                   u + action_noise) + noise
-            Qfun -= np.dot(x.T, np.dot(self.Q, x)) + \
-                    np.dot(u.T, np.dot(self.R, u)) + \
-                    self.gamma * np.dot(nextstate.T, np.dot(P, nextstate)) + \
-                    (self.gamma / (1 - self.gamma)) * \
-                    np.trace(np.dot(Sigma,
-                                    self.R + self.gamma *
-                                    np.dot(self.B.T, np.dot(P, self.B))))
-        Qfun = np.array(Qfun).item() / n_random_xn
-        return Qfun
+        return - init_term - noise_term
 
 
-if __name__ == '__main__':
-    """
-    Compute optimal parameters K for Gaussian policy with mean Ks
-    and covariance matrix sigma_controller (1 by default)
-    """
-    env = LQR()
-    sigma_controller = 1 * np.ones(env.da)
-    theta_star = env.computeOptimalK()
-    print('theta^* = ', theta_star)
-    print('J^* = ', env.computeJ(theta_star, sigma_controller))
+if __name__ == "__main__":
+    horizon = 100
+    env = LQR(init_mean=1., init_std=0.)
+    discount = 0.9
+    policy_std = 0.2
+    seed = 42
+    optimal_gain = env.discounted_optimal_gain(discount)
+    print(optimal_gain)
+    print(env.discounted_optimal_return(discount, policy_std))
+
+    optimal_param = optimal_gain.ravel()
+    pol = LinearGaussianPolicy.make(env, std_init=policy_std)
+    pol.set_params(optimal_param)
+    ret2 = estimate_average_return(env, pol,
+                                   n_episodes=1000,
+                                   horizon=None,
+                                   discount=discount,
+                                   rng=np.random.default_rng(seed))
+    print("Simulated optimal:")
+    print(ret2)

@@ -1,4 +1,5 @@
 from gymnasium.envs.registration import register
+from .lqr import LQR
 
 register(
     id='LQR-v0',

@@ -1,4 +1,6 @@
-from potion.simulation.trajectory_generators import apply_discount, apply_mask, blackbox_simulate_episode
+from potion.simulation.trajectory_generators import (apply_discount, apply_mask,
+                                                     blackbox_simulate_episode,
+                                                     blackbox_simulate_infinite_trajectory)
 import numpy as np
 import pandas as pd
 import os
@@ -10,10 +12,7 @@ class SilentLogger(Logger):
     def initialize(self, env, policy, max_trajectory_len, discount, rng):
         pass
 
-    def submit_policy(self, policy):
-        pass
-
-    def submit_trajectories(self, trajectories):
+    def submit(self, trajectories, policy):
         pass
 
     def close(self):
@@ -38,12 +37,15 @@ class EpisodicPerformanceLogger(Logger):
         self.buffer = []
         self.blank = True
 
-    def initialize(self, env, policy, max_trajectory_len, discount, rng):
+    def initialize(self, env, policy, horizon, discount, rng):
         self.policy = policy
         if not self.discount:
             self.discount = discount
         seed = rng.bit_generator.seed_seq.generate_state(1)[0]
-        ret, _ = blackbox_simulate_episode(env, policy, max_trajectory_len, seed, self.discount)
+        if horizon is not None:
+            ret, _ = blackbox_simulate_episode(env, policy, horizon, seed, self.discount)
+        else:
+            ret, _ = blackbox_simulate_infinite_trajectory(env, policy, self.discount, seed)
         record = {"tot_trajectories": 0, "return": ret}
         self.buffer.append(record)
         if self.verbose:
@@ -53,10 +55,7 @@ class EpisodicPerformanceLogger(Logger):
                 print(">> Policy parameters: ", self.policy.parameters)
             print()
 
-    def submit_policy(self, policy):
-        self.policy = policy
-
-    def submit_trajectories(self, trajectories):
+    def submit(self, trajectories, policy):
         for traj in trajectories:
             self.tot_traj += 1
             if self.tot_traj % self.log_every == 0:
@@ -68,9 +67,9 @@ class EpisodicPerformanceLogger(Logger):
                 self.buffer.append(record)
                 if self.verbose:
                     print(">> Episodic Performance Logger")
-                    print(">> Policy learned with {} trajectories obtained return {}".format(self.tot_traj, ret))
+                    print(">> Policy after {} trajectories obtained return {}".format(self.tot_traj, ret))
                     if self.log_params:
-                        print(">> Policy parameters: ", self.policy.parameters)
+                        print(">> Policy parameters: ", policy.parameters)
 
             if self.tot_traj % self.save_every == 0:
                 self.save()

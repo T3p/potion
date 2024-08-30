@@ -3,10 +3,10 @@ from abc import abstractmethod
 import torch
 from torch import nn
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
-from potion.policies import ParametricPolicy
+from potion.policies import ParametricStochasticPolicy
 
 
-class GaussianPolicy(ParametricPolicy):
+class GaussianPolicy(ParametricStochasticPolicy):
     def __init__(self, state_dim, action_dim, std_init=None, learn_std=False):
         super().__init__(state_dim, action_dim)
         self._learn_std = learn_std
@@ -100,13 +100,13 @@ class GaussianPolicy(ParametricPolicy):
             raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
         return self._mean(s)
 
-    def act(self, s, rng):
+    def act(self, s, rng, t=None):
         if s.shape[-1] != self.state_dim:
             raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
-        noise = rng.normal(self.action_dim)
+        noise = rng.normal(size=self.action_dim)
         return self.mean(s) + noise * self.std
 
-    def log_pdf(self, s, a):
+    def log_pdf(self, s, a, t=None):
         if s.shape[-1] != self.state_dim:
             raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
         if a.shape[-1] != self.action_dim:
@@ -116,7 +116,7 @@ class GaussianPolicy(ParametricPolicy):
         log_p = -((a - self.mean(s)) ** 2) / (2 * self.std ** 2) - self._std_params - 0.5 * np.log(2 * np.pi)
         return np.sum(log_p, -1)
 
-    def score(self, s, a):
+    def score(self, s, a, t=None):
         if s.shape[-1] != self.state_dim:
             raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
         if a.shape[-1] != self.action_dim:
@@ -128,13 +128,13 @@ class GaussianPolicy(ParametricPolicy):
         else:
             return self._mean_score(s, a)
 
-    def entropy(self, s):
+    def entropy(self, s, t=None):
         if s.shape[-1] != self.state_dim:
             raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
         ent = self._std_params + 0.5 * (1. + np.log(2 * np.pi)) * np.ones(self.action_dim)
         return np.sum(ent, -1) * np.ones(s.shape[:-1])
 
-    def entropy_grad(self, s):
+    def entropy_grad(self, s, t=None):
         if s.shape[-1] != self.state_dim:
             raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
         if self._learn_std:

@@ -1,6 +1,7 @@
 import numpy as np
 from potion.simulation.trajectory_generators import unpack, apply_mask, apply_discount
 import warnings
+from potion.policies.wrappers import Staged
 
 
 def reinforce_estimator(batch, discount, policy, baseline="average", average=True):
@@ -71,3 +72,40 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True):
         return np.mean(grad_samples, axis=0)  # d
     else:
         return grad_samples
+
+
+def nonstationary_pg_estimator(batch, discount, policy, baseline="average", average=True):
+    if baseline not in ["average", "peters", "zero", None]:
+        warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
+
+    states, actions, rewards, alive = unpack(batch)  # NxHxS, NxHxA, NxH, NxH
+
+    if not states.shape[-1] == policy.state_dim:
+        raise ValueError("Bad shape: state dimension does not match that of given policy")
+    if not actions.shape[-1] == policy.action_dim:
+        raise ValueError("Bad shape: action dimension does not match that of given policy")
+
+    scores = policy.score(states, actions)  # NxHxd
+    scores = apply_mask(scores, alive)  # NxHxd
+    rewards = apply_mask(rewards, alive)
+    disc_rewards = apply_discount(rewards, discount)  # NxH
+    returns_to_go = np.cumsum(disc_rewards[:, ::-1], 1)[:, ::-1]  # NxH
+    #print(states[0], actions[0], scores[0], returns_to_go[0])
+
+    if baseline == 'average':
+        baseline = np.mean(returns_to_go, 0, keepdims=True)[..., None]  # NxHx1
+    elif baseline == 'peters':
+        baseline = np.mean(scores ** 2 * returns_to_go[..., None], 0) / np.mean(scores ** 2, 0,
+                                                                                keepdims=True)  # NxHxd
+    else:
+        baseline = np.zeros((1, 1, 1))  # 1x1x1
+    baseline[baseline != baseline] = 0.  # replaces nan with zero
+    values = returns_to_go[..., None] - baseline  # NxHxd or NxHx1
+
+    grad_samples = scores * values
+    grad_samples = np.reshape(grad_samples, (grad_samples.shape[0], -1))
+
+    if average:
+        return np.mean(grad_samples, 0)  # Hd
+    else:
+        return grad_samples  # NxHd

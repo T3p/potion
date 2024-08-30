@@ -1,5 +1,5 @@
 from potion.simulation.trajectory_generators import generate_batch
-from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator
+from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
 from potion.evaluation.loggers import EpisodicPerformanceLogger
 import numpy as np
 import warnings
@@ -31,20 +31,24 @@ def reinforce(env, policy, *,
         if verbose:
             print("\nIteration {} of {} running...".format(it, max_iterations))
         # Collect trajectories
-        batch = generate_batch(env, policy, batch_size, horizon, rng,
+        batch = generate_batch(env, policy, batch_size, horizon,
+                               rng=rng,
+                               discount=discount,
                                parallel=(n_jobs > 1),
                                n_jobs=n_jobs)
         # Log
-        logger.submit_trajectories(batch)
-        logger.submit_policy(policy)
+        logger.submit(batch, policy)
 
         # Estimate policy gradient
-        if estimator not in ["reinforce", "gpomdp"]:
+        estimator_discount = discount if horizon is not None else 1.
+        if estimator not in ["reinforce", "gpomdp", "nonstationary"]:
             warnings.warn("Unknown gradient estimator: will default to gpomdp", UserWarning)
         if estimator == "reinforce":
-            gradient = reinforce_estimator(batch, discount, policy, baseline)
+            gradient = reinforce_estimator(batch, estimator_discount, policy, baseline)
+        elif estimator == "nonstationary":
+            gradient = nonstationary_pg_estimator(batch, estimator_discount, policy, baseline)
         else:
-            gradient = gpomdp_estimator(batch, discount, policy, baseline)
+            gradient = gpomdp_estimator(batch, estimator_discount, policy, baseline)
 
         # Compute update vector
         if callable(step_size):
@@ -58,6 +62,7 @@ def reinforce(env, policy, *,
         policy.set_params(new_params)
 
         if verbose:
+            print("GRADIENT = ", gradient)
             print("Iteration {} of {} completed!".format(it, max_iterations))
             print("Gradient norm = {}".format(np.linalg.norm(gradient)))
             print("Parameter delta norm = {}".format(np.linalg.norm(delta)))
