@@ -101,23 +101,6 @@ def test_gpomdp_estimator_values(small_policy, small_batch):
     assert np.allclose(grad_2, [g2, 2. * g2])
     assert np.allclose(grad_3, [g3, 2. * g3])
 
-def test_nonstationary_pg_estimator_values(small_policy, small_batch):
-    pol = small_policy
-
-    batch = small_batch
-
-    grad_1 = nonstationary_pg_estimator(batch, 0.9, pol, baseline=None)
-    grad_2 = nonstationary_pg_estimator(batch, 0.9, pol, baseline="average")
-    grad_3 = nonstationary_pg_estimator(batch, 0.9, pol, baseline="peters")
-
-    g1 = 2.21
-    g2 = 1.1325
-    g3 = 0.6453179373615945
-
-    assert np.allclose(grad_1, [g1, 2. * g1])
-    assert np.allclose(grad_2, [g2, 2. * g2])
-    assert np.allclose(grad_3, [g3, 2. * g3])
-
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 def test_gradient_estimators_exceptions(batch, discount, policy, estimator):

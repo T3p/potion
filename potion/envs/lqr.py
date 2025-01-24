@@ -16,8 +16,8 @@ class LQR(gym.Env):
                  B=1.,
                  Q=1.,
                  R=1.,
-                 Q_final=0.,
-                 M_mix=0.,
+                 Q_final=0.,  # cost at terminal state
+                 M_mix=0.,  # keep it zero for now
                  init_mean=0.,
                  init_std=1.,
                  state_bounds=(-100., 100.),
@@ -238,14 +238,61 @@ class LQR(gym.Env):
         P = self.discounted_P_matrix(discount, max_iterations)
 
         if isinstance(self.init_mean, list):
-            init_term = np.mean([self._init_term(P, s, self.init_std) for s in self.init_mean])
+            init_term = - np.mean([self._init_term(P, s, self.init_std) for s in self.init_mean])
         else:
-            init_term = self._init_term(P, self.init_mean, self.init_std)
-        state_noise_term = discount * np.trace(np.diag(self.noise_std**2) @ P) / (1. - discount)
-        action_noise_term = np.trace((self.R + discount * self.B.T @ P @ self.B) * policy_std**2) / (1. - discount)
+            init_term = - self._init_term(P, self.init_mean, self.init_std)
+
+        state_noise_term = - discount * np.trace(np.diag(self.noise_std ** 2) @ P) / (1. - discount)
+        action_noise_term = - np.trace((self.R + discount * self.B.T @ P @ self.B) * policy_std ** 2) / (1. - discount)
         noise_term = state_noise_term + action_noise_term
 
-        return - init_term - noise_term
+        return init_term + noise_term
+
+    def _discounted_P_K_matrix(self, K, discount, max_iterations):
+        if not np.allclose(self.M_mix, 0.):
+            raise NotImplementedError  # TODO
+        P = self.Q  # dxd
+        for it in range(max_iterations):
+            pi_term = (discount * K @ self.B.T @ P @ self.A
+                       + discount * self.A.T @ P @ self.B @ K.T
+                       + discount * K @ self.B.T @ P @ self.B @ K.T
+                       + K @ self.R @ K.T)
+            P_next = self.Q + discount * self.A.T @ P @ self.A + pi_term
+            if np.allclose(P_next, P):
+                return P_next
+            P = P_next
+
+        warnings.warn("Computation of P matrix did not converge")
+        return P
+
+    def discounted_v(self, state, policy_param, discount, policy_std=0., max_iterations=100):
+        # policy_param must be a ds x da matrix (TODO reshaping)
+        P = self._discounted_P_K_matrix(policy_param, discount, max_iterations)
+        state_term = - np.dot(state, P @ state)
+
+        state_noise_term = - discount * np.trace(np.diag(self.noise_std ** 2) @ P) / (1. - discount)
+        action_noise_term = - np.trace((self.R + discount * self.B.T @ P @ self.B) * policy_std ** 2) / (1. - discount)
+        noise_term = state_noise_term + action_noise_term
+
+        return state_term + noise_term
+
+    def discounted_q(self, state, action, policy_param, discount, policy_std=0., max_iterations=100):
+        # policy_param must be a ds x da matrix (TODO reshaping)
+        P = self._discounted_P_K_matrix(policy_param, discount, max_iterations)
+        Q_11 = self.Q + discount * self.A.T @ P @ self.A
+        Q_12 = discount * self.A.T @ P @ self.B
+        Q_21 = discount * self.B.T @ P @ self.A
+        Q_22 = self.R + discount * self.B.T @ P @ self.B
+        state_action_term = - (np.dot(state, Q_11 @ state)
+                                + np.dot(state, Q_12 @ action)
+                                + np.dot(action, Q_21 @ state)
+                                + np.dot(action, Q_22 @ action))
+
+        state_noise_term = - discount * np.trace(np.diag(self.noise_std ** 2) @ P) / (1. - discount)
+        action_noise_term = - discount * np.trace((self.R + discount * self.B.T @ P @ self.B) * policy_std ** 2) / (1. - discount)
+        noise_term = state_noise_term + action_noise_term
+
+        return state_action_term + noise_term
 
     def P_matrices(self, horizon, discount=1.):
         if horizon == 0:
@@ -261,6 +308,7 @@ class LQR(gym.Env):
         Ps = self.P_matrices(horizon, discount)
         inverses = [np.linalg.inv(self.R + discount * self.B.T @ Ps[h + 1] @ self.B) for h in range(horizon)]
         return [- inverses[h] @ (self.M_mix + discount * self.B.T @ Ps[h + 1] @ self.A) for h in range(horizon)]
+
 
     @staticmethod
     def _init_term(P, mean, std):
@@ -284,7 +332,9 @@ class LQR(gym.Env):
 
 if __name__ == "__main__":
     horizon = 100
-    env = LQR(init_mean=1., init_std=0.)
+    env = LQR(A = np.eye(2),
+              B = np.eye(2),
+              init_mean=1., init_std=0.)
     discount = 0.9
     policy_std = 0.2
     seed = 42
@@ -302,3 +352,16 @@ if __name__ == "__main__":
                                    rng=np.random.default_rng(seed))
     print("Simulated optimal:")
     print(ret2)
+
+    # Value functions
+    s = 1 * np.ones(2)
+    a = s @ optimal_gain
+    K = optimal_gain
+
+    print("V:")
+    v = env.discounted_v(s, K, discount, policy_std)
+    print(v)
+
+    print("Q:")
+    q = env.discounted_q(s, a, K, discount, policy_std)
+    print(q)
