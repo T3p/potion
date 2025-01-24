@@ -1,6 +1,32 @@
 import numpy as np
 import pytest
-from potion.estimators.gradients import reinforce_estimator, gpomdp_estimator
+from potion.estimators.gradients import reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator
+
+
+@pytest.fixture
+def small_policy():
+    class MockPolicy:
+        state_dim = 1
+        action_dim = 1
+        num_params = 2
+
+        def score(self, s, a):
+            x = np.array([[[-0.3], [0.5]],
+                          [[1.], [-1.5]]])
+            return np.concatenate((x, 2. * x), -1)
+    return MockPolicy()
+
+@pytest.fixture
+def small_batch(small_policy):
+    return [(np.ones((2, small_policy.state_dim)),
+              np.ones((2, small_policy.action_dim)),
+              np.array([1., -1.]),
+              np.array([True, True])),
+             (np.ones((2, small_policy.state_dim)),
+              np.ones((2, small_policy.action_dim)),
+              np.array([4., -2.]),
+              np.array([True, True]))
+             ]
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator))
@@ -15,7 +41,7 @@ def test_gradient_estimators_shapes(batch, discount, policy, n_traj, n_params, e
     assert grad_samples.shape == (n_traj, n_params)
 
 
-@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator))
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 @pytest.mark.parametrize("baseline", (None, "average", "peters"))
 def test_gradient_estimators_invariance(batch, discount, policy, n_traj, estimator, baseline):
     grad = estimator(batch, discount, policy, baseline=baseline, average=True)
@@ -40,28 +66,10 @@ def test_gradient_estimators_invariance(batch, discount, policy, n_traj, estimat
     assert np.allclose(samples_3, samples[::-1, :])
 
 
-def test_reinforce_estimator_values():
-    class MockPolicy:
-        state_dim = 1
-        action_dim = 1
-        num_params = 2
+def test_reinforce_estimator_values(small_policy, small_batch):
+    pol = small_policy
 
-        def score(self, s, a):
-            x = np.array([[[-0.3], [0.5]],
-                          [[1.], [-1.5]]])
-            return np.concatenate((x, 2. * x), -1)
-
-    pol = MockPolicy()
-
-    batch = [(np.ones((2, pol.state_dim)),
-              np.ones((2, pol.action_dim)),
-              np.array([1., -1.]),
-              np.array([True, True])),
-             (np.ones((2, pol.state_dim)),
-              np.ones((2, pol.action_dim)),
-              np.array([4., -2.]),
-              np.array([True, True]))
-             ]
+    batch = small_batch
 
     grad_1 = reinforce_estimator(batch, 0.9, pol, baseline=None)
     grad_2 = reinforce_estimator(batch, 0.9, pol, baseline="average")
@@ -76,28 +84,10 @@ def test_reinforce_estimator_values():
     assert np.allclose(grad_3, [g3, 2. * g3])
 
 
-def test_gpomdp_estimator_values():
-    class MockPolicy:
-        state_dim = 1
-        action_dim = 1
-        num_params = 2
+def test_gpomdp_estimator_values(small_policy, small_batch):
+    pol = small_policy
 
-        def score(self, s, a):
-            x = np.array([[[-0.3], [0.5]],
-                          [[1.], [-1.5]]])
-            return np.concatenate((x, 2. * x), -1)
-
-    pol = MockPolicy()
-
-    batch = [(np.ones((2, pol.state_dim)),
-              np.ones((2, pol.action_dim)),
-              np.array([1., -1.]),
-              np.array([True, True])),
-             (np.ones((2, pol.state_dim)),
-              np.ones((2, pol.action_dim)),
-              np.array([4., -2.]),
-              np.array([True, True]))
-             ]
+    batch = small_batch
 
     grad_1 = gpomdp_estimator(batch, 0.9, pol, baseline=None)
     grad_2 = gpomdp_estimator(batch, 0.9, pol, baseline="average")
@@ -111,8 +101,25 @@ def test_gpomdp_estimator_values():
     assert np.allclose(grad_2, [g2, 2. * g2])
     assert np.allclose(grad_3, [g3, 2. * g3])
 
+def test_nonstationary_pg_estimator_values(small_policy, small_batch):
+    pol = small_policy
 
-@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator))
+    batch = small_batch
+
+    grad_1 = nonstationary_pg_estimator(batch, 0.9, pol, baseline=None)
+    grad_2 = nonstationary_pg_estimator(batch, 0.9, pol, baseline="average")
+    grad_3 = nonstationary_pg_estimator(batch, 0.9, pol, baseline="peters")
+
+    g1 = 2.21
+    g2 = 1.1325
+    g3 = 0.6453179373615945
+
+    assert np.allclose(grad_1, [g1, 2. * g1])
+    assert np.allclose(grad_2, [g2, 2. * g2])
+    assert np.allclose(grad_3, [g3, 2. * g3])
+
+
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 def test_gradient_estimators_exceptions(batch, discount, policy, estimator):
     batch_1 = [(np.ones((2, policy.state_dim + 1)),
                np.ones((2, policy.action_dim)),
@@ -134,7 +141,7 @@ def test_gradient_estimators_exceptions(batch, discount, policy, estimator):
         _ = estimator(batch_2, discount, policy)
 
 
-@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator))
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 @pytest.mark.parametrize("baseline", (None, "average", "peters"))
 def test_gradient_estimators_masking(batch, discount, policy, horizon, estimator, baseline):
     grad = estimator(batch, discount, policy, baseline=baseline)

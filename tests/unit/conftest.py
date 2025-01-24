@@ -1,11 +1,13 @@
 import pytest
 import numpy as np
 import gymnasium as gym
-from potion.policies import ParametricStochasticPolicy
+from potion.policies import Policy, ParametricStochasticPolicy
+
 
 @pytest.fixture
 def n_traj():
     return 7
+
 
 @pytest.fixture
 def max_trajectory_len():
@@ -35,6 +37,7 @@ def action_d():
 @pytest.fixture
 def n_params():
     return 6
+
 
 @pytest.fixture
 def discount():
@@ -133,7 +136,10 @@ def env_stochastic_reward(state_d, action_d, max_trajectory_len, horizon):
 
 @pytest.fixture
 def policy(state_d, action_d, n_params):
-    class MockStochasticPolicy(ParametricStochasticPolicy):
+    class MockStochasticPolicy:
+        state_dim = state_d
+        action_dim = action_d
+
         @property
         def parameters(self):
             return np.ones(self.num_params)
@@ -145,22 +151,22 @@ def policy(state_d, action_d, n_params):
         def set_params(self, params):
             pass
 
-        def act(self, state, rng):
+        def act(self, state, rng, t=None):
             return rng.normal(size=action_d)
 
-        def score(self, state, action):
+        def score(self, state, action, t=None):
             return np.concatenate((state,
                                    action,
                                    np.ones(shape=state.shape[:-1] + (1, ))),
                                   -1)
 
-    return MockStochasticPolicy(state_d, action_d)
+    return MockStochasticPolicy()
 
 
 @pytest.fixture
 def policy_1d():
-    class MockPolicy:
-        def act(self, state, rng):
+    class MockPolicy():
+        def act(self, state, rng, t=None):
             return rng.normal(size=1)
 
     return MockPolicy()

@@ -90,13 +90,13 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
     rewards = apply_mask(rewards, alive)
     disc_rewards = apply_discount(rewards, discount)  # NxH
     returns_to_go = np.cumsum(disc_rewards[:, ::-1], 1)[:, ::-1]  # NxH
-    #print(states[0], actions[0], scores[0], returns_to_go[0])
 
     if baseline == 'average':
         baseline = np.mean(returns_to_go, 0, keepdims=True)[..., None]  # NxHx1
     elif baseline == 'peters':
-        baseline = np.mean(scores ** 2 * returns_to_go[..., None], 0) / np.mean(scores ** 2, 0,
-                                                                                keepdims=True)  # NxHxd
+        denominator = np.mean(scores ** 2, 0, keepdims=True)
+        denominator[np.isclose(denominator, 0)] = 1.
+        baseline = np.mean(scores ** 2 * returns_to_go[..., None], 0) / denominator  # NxHxd
     else:
         baseline = np.zeros((1, 1, 1))  # 1x1x1
     baseline[baseline != baseline] = 0.  # replaces nan with zero

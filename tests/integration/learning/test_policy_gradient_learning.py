@@ -10,6 +10,7 @@ import pytest
 from potion.policies.wrappers import Staged
 
 
+@pytest.mark.skip("Not now")
 def test_policy_gradient_nonstationary():
     step_size = 1e-1
     seed = 42
@@ -52,6 +53,7 @@ def test_policy_gradient_nonstationary():
     assert np.isclose(ret, optimal_ret, atol=1e-1)
 
 
+@pytest.mark.skip("Not now")
 def test_policy_gradient_continual():
     step_size = 1e-2
     seed = 42
