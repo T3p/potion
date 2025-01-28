@@ -294,6 +294,14 @@ class LQR(gym.Env):
 
         return state_action_term + noise_term
 
+    def q_representation(self, state, action):
+        if state.shape != (self.ds,) or action.shape != (self.da,):
+            raise ValueError("Invalid state or action shape")
+        x = np.concatenate((state, action))
+        A = np.outer(x, x)
+        triu = A[np.triu_indices(self.ds + self.da)]
+        return np.concatenate((np.ones(1), triu))
+
     def P_matrices(self, horizon, discount=1.):
         if horizon == 0:
             return [self.Q_final]
@@ -365,3 +373,6 @@ if __name__ == "__main__":
     print("Q:")
     q = env.discounted_q(s, a, K, discount, policy_std)
     print(q)
+
+    print("phi(s,a)")
+    print(env.q_representation(s, a))
