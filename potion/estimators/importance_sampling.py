@@ -13,12 +13,12 @@ def importance_weights(batch, policy, target_params, normalize=False, clip=None)
     states, actions, _, mask, _ = unpack(batch) #NxHx*
     
     #Proposal log-probability
-    proposal = policy.log_pdf(states, actions) #NxH
+    proposal = policy.log_prob(states, actions) #NxH
         
     #Target log-probability
     params = policy.get_flat()
     policy.set_from_flat(target_params)
-    target = policy.log_pdf(states, actions) #NxH
+    target = policy.log_prob(states, actions) #NxH
         
     #Restore proposal
     policy.set_from_flat(params)

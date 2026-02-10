@@ -44,11 +44,11 @@ def off_gpomdp_estimator(batch, disc, policy, target_params,
         
         #Behavioral
         behavioral_params = policy.get_flat()
-        behavioral_logps = policy.log_pdf(states, actions) #NxH
+        behavioral_logps = policy.log_prob(states, actions) #NxH
         
         #Target
         policy.set_from_flat(target_params)
-        target_logps = policy.log_pdf(states, actions) * mask #NxH
+        target_logps = policy.log_prob(states, actions) * mask #NxH
         cm_logps = torch.cumsum(target_logps, 1) #NxH
         
         log_iws = torch.cumsum((target_logps - behavioral_logps) * mask, 1) #NxH
@@ -89,11 +89,11 @@ def _shallow_off_gpomdp_estimator(batch, disc, policy, target_params,
         
         #Behavioral
         behavioral_params = policy.get_flat()
-        behavioral_logps = policy.log_pdf(states, actions) #NxH
+        behavioral_logps = policy.log_prob(states, actions) #NxH
         
         #Target
         policy.set_from_flat(target_params)
-        target_logps = policy.log_pdf(states, actions) #NxH
+        target_logps = policy.log_prob(states, actions) #NxH
         scores = policy.score(states, actions) #NxHxM
         
         #restore (behavioral) policy
@@ -160,11 +160,11 @@ def off_reinforce_estimator(batch, disc, policy, target_params,
         
         #Behavioral
         behavioral_params = policy.get_flat()
-        behavioral_logps = policy.log_pdf(states, actions) #NxH
+        behavioral_logps = policy.log_prob(states, actions) #NxH
         
         #Target
         policy.set_from_flat(target_params)
-        target_logps = policy.log_pdf(states, actions) * mask #NxH
+        target_logps = policy.log_prob(states, actions) * mask #NxH
     
         log_iws = torch.sum((target_logps - behavioral_logps) * mask, 1) #N
         stabilizers, _ = torch.max(log_iws, dim=0, keepdim=True) #N
@@ -213,11 +213,11 @@ def _shallow_off_reinforce_estimator(batch, disc, policy, target_params,
         
         #Behavioral
         behavioral_params = policy.get_flat()
-        behavioral_logps = policy.log_pdf(states, actions) #NxH
+        behavioral_logps = policy.log_prob(states, actions) #NxH
         
         #Target
         policy.set_from_flat(target_params)
-        target_logps = policy.log_pdf(states, actions) #NxH
+        target_logps = policy.log_prob(states, actions) #NxH
         scores = policy.score(states, actions) #NxHxM
         
         #restore (behavioral) policy

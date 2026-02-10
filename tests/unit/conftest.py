@@ -185,3 +185,8 @@ def batch(n_traj, max_trajectory_len, state_d, action_d, discount, horizon, rng)
         batch.append((states[i], actions[i], rewards[i], alive[i]))
 
     return batch
+
+
+@pytest.fixture
+def num_actions():
+    return 2

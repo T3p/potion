@@ -52,9 +52,9 @@ class Staged(ParametricStochasticPolicy):
         self._select(t)
         return self.base_policy.entropy_grad(s, t)
 
-    def log_pdf(self, s, a, t=None):
+    def log_prob(self, s, a, t=None):
         self._select(t)
-        return self.base_policy.log_pdf(s, a, t)
+        return self.base_policy.log_prob(s, a, t)
 
     def entropy(self, s, t=None):
         self._select(t)

@@ -9,7 +9,7 @@ import torch
 import gymnasium as gym
 import potion.envs # this registers the custom envs!
 from potion.policies.gaussian_policies import LinearGaussianPolicy
-from potion.policies.discrete_policies import ShallowGibbsPolicy
+from potion.policies.softmax_policies import SoftmaxPolicy
 from potion.common.logger import Logger
 from potion.algorithms.policy_gradient import reinforce
 import argparse
@@ -58,8 +58,8 @@ args = parser.parse_args()
 env = gym.make(args.env)
 
 if type(env.action_space) is Discrete:
-    policy = ShallowGibbsPolicy(env, 
-                                temp=1.)
+    policy = SoftmaxPolicy(env,
+                           temp=1.)
 else:
     m = sum(env.observation_space.shape)
     d = sum(env.action_space.shape)

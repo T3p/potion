@@ -46,8 +46,8 @@ def test_linear_gaussian_policy_1d(linear_gaussian_policy_1d, rng):
     action_1 = pol.act(one, rng)
     action_2 = pol.act(one, rng)
     std = pol.std
-    log_pdf_10 = pol.log_pdf(one, zero)
-    log_pdf_11 = pol.log_pdf(one, one)
+    log_pdf_10 = pol.log_prob(one, zero)
+    log_pdf_11 = pol.log_prob(one, one)
     score_10 = pol.score(one, zero)
     score_11 = pol.score(one, one)
     entropy = pol.entropy(one)
@@ -86,8 +86,8 @@ def test_linear_gaussian_policy_default(linear_gaussian_policy, rng, state_d, ac
     action_1 = pol.act(s_1, rng)
     action_2 = pol.act(s_1, rng)
     std = pol.std
-    log_pdf_10 = pol.log_pdf(s_1, a_0)
-    log_pdf_11 = pol.log_pdf(s_1, a_1)
+    log_pdf_10 = pol.log_prob(s_1, a_0)
+    log_pdf_11 = pol.log_prob(s_1, a_1)
     score_10 = pol.score(s_1, a_0)
     score_11 = pol.score(s_1, a_1)
     entropy = pol.entropy(s_1)
@@ -142,7 +142,7 @@ def test_linear_gaussian_policy(rng):
     a = np.array([0.5, -1., 2.])
     params = pol.parameters
     mean = pol.mean(s)
-    log_pdf = pol.log_pdf(s, a)
+    log_pdf = pol.log_prob(s, a)
     score = pol.score(s, a)
     entropy = pol.entropy(s)
     entropy_grad = pol.entropy_grad(s)
@@ -182,7 +182,7 @@ def test_linear_adaptive_gaussian_policy(rng):
     assert np.allclose(pol1.parameters, [0., -1., 2., 1., 0.5, 0., np.log(0.5), np.log(2.), 0.])
     assert np.allclose(pol1.mean(s), np.array([-2., 3., 0.25]))
     assert np.allclose(pol1.mean(c1 * s1 + c2 * s2), c1 * pol1.mean(s1) + c2 * pol1.mean(s2))
-    assert np.allclose(pol1.log_pdf(s, a), -0.5 * np.log(2 * np.pi) * 3 - np.log(0.5) - np.log(2.) - 14.5 - 49. / 32)
+    assert np.allclose(pol1.log_prob(s, a), -0.5 * np.log(2 * np.pi) * 3 - np.log(0.5) - np.log(2.) - 14.5 - 49. / 32)
     assert np.allclose(pol1.score(s, a), np.array([5., 20., -0.5, -2., 7. / 8, 3.5, 24., 3., 33. / 16]))
     assert np.allclose(pol1.entropy(s), 1.5 * (np.log(2 * np.pi) + 1) + np.log(0.5) + np.log(2.))
     assert np.allclose(pol1.entropy_grad(s), np.concatenate((np.zeros(6), np.ones(3)), axis=-1))
@@ -190,7 +190,7 @@ def test_linear_adaptive_gaussian_policy(rng):
     assert pol2.parameters.shape == (7,)
     assert pol2.num_params == 7 and pol2.num_mean_params + pol2.num_std_params == pol2.num_params
     assert np.allclose(pol2.parameters, [0., -1., 2., 1., 0.5, 0., np.log(0.5)])
-    assert np.allclose(pol2.log_pdf(s, a), -0.5 * np.log(2 * np.pi) * 3 - 3 * np.log(0.5) - 50.625)
+    assert np.allclose(pol2.log_prob(s, a), -0.5 * np.log(2 * np.pi) * 3 - 3 * np.log(0.5) - 50.625)
     assert np.allclose(pol2.score(s, a), np.array([5., 20., -8., -32., 3.5, 14., 24. + 63 + 45. / 4]))
     assert np.allclose(pol2.entropy(s), 1.5 * (np.log(2 * np.pi) + 1) + 3 * np.log(0.5))
     assert np.allclose(pol2.entropy_grad(s), np.concatenate((np.zeros(6), 3 * np.ones(1)), axis=-1))
@@ -198,7 +198,7 @@ def test_linear_adaptive_gaussian_policy(rng):
     assert pol3.parameters.shape == (2,)
     assert pol3.num_params == 2 and pol3.num_mean_params + pol3.num_std_params == pol3.num_params
     assert np.allclose(pol3.parameters, [0., np.log(0.5)])
-    assert np.allclose(pol3.log_pdf(x, x), -0.5 * np.log(2 * np.pi) - np.log(0.5) - 0.5)
+    assert np.allclose(pol3.log_prob(x, x), -0.5 * np.log(2 * np.pi) - np.log(0.5) - 0.5)
     assert np.allclose(pol3.score(x, x), np.array([1., 0.]))
     assert np.allclose(pol3.entropy(x), 0.5 * (np.log(2 * np.pi) + 1) + np.log(0.5))
     assert np.allclose(pol3.entropy_grad(x), np.concatenate((np.zeros(1), np.ones(1)), axis=-1))
@@ -368,11 +368,11 @@ def test_gaussian_exceptions(linear_gaussian_policy_1d, linear_gaussian_policy, 
         _ = pol4.act(bad_s, rng)
 
     with pytest.raises(ValueError):
-        _ = pol4.log_pdf(bad_s, a)
+        _ = pol4.log_prob(bad_s, a)
     with pytest.raises(ValueError):
-        _ = pol4.log_pdf(s, bad_a)
+        _ = pol4.log_prob(s, bad_a)
     with pytest.raises(ValueError):
-        _ = pol4.log_pdf(batch_s, batch_a)
+        _ = pol4.log_prob(batch_s, batch_a)
 
     with pytest.raises(ValueError):
         _ = pol4.score(bad_s, a)

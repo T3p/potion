@@ -30,6 +30,10 @@ class GaussianPolicy(ParametricStochasticPolicy):
         else:
             self._n_std_params = len(self._std_params)
 
+    def _check_action(self, a):
+        if a.shape[-1] != self.action_dim:
+            raise ValueError("Bad shape: expected %d-dimensional action(s)" % self.action_dim)
+
     @property
     def learn_std(self):
         return self._learn_std
@@ -48,10 +52,6 @@ class GaussianPolicy(ParametricStochasticPolicy):
     @property
     def num_std_params(self):
         return self._n_std_params
-
-    @property
-    def num_params(self):
-        return len(self.parameters)
 
     @property
     def std(self):
@@ -96,47 +96,37 @@ class GaussianPolicy(ParametricStochasticPolicy):
         self._std_params = np.log(std)
 
     def mean(self, s):
-        if s.shape[-1] != self.state_dim:
-            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        self.check_state(s)
         return self._mean(s)
 
     def act(self, s, rng, t=None):
-        if s.shape[-1] != self.state_dim:
-            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        self.check_state(s)
         noise = rng.normal(size=self.action_dim)
         return self.mean(s) + noise * self.std
 
-    def log_pdf(self, s, a, t=None):
-        if s.shape[-1] != self.state_dim:
-            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
-        if a.shape[-1] != self.action_dim:
-            raise ValueError("Bad shape: expected %d-dimensional action(s)" % self.action_dim)
-        if not s.shape[:-1] == a.shape[:-1]:
-            raise ValueError("Bad shape: all state and action dimensions should match except the last")
+    def log_prob(self, s, a, t=None):
+        self.check_state(s)
+        self._check_action(a)
+        self.check_matching(s, a)
         log_p = -((a - self.mean(s)) ** 2) / (2 * self.std ** 2) - self._std_params - 0.5 * np.log(2 * np.pi)
         return np.sum(log_p, -1)
 
     def score(self, s, a, t=None):
-        if s.shape[-1] != self.state_dim:
-            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
-        if a.shape[-1] != self.action_dim:
-            raise ValueError("Bad shape: expected %d-dimensional action(s)" % self.action_dim)
-        if not s.shape[:-1] == a.shape[:-1]:
-            raise ValueError("Bad shape: all state and action dimensions should match except the last")
+        self.check_state(s)
+        self._check_action(a)
+        self.check_matching(s, a)
         if self._learn_std:
             return np.concatenate((self._mean_score(s, a), self._log_std_score(s, a)), axis=-1)
         else:
             return self._mean_score(s, a)
 
     def entropy(self, s, t=None):
-        if s.shape[-1] != self.state_dim:
-            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        self.check_state(s)
         ent = self._std_params + 0.5 * (1. + np.log(2 * np.pi)) * np.ones(self.action_dim)
         return np.sum(ent, -1) * np.ones(s.shape[:-1])
 
     def entropy_grad(self, s, t=None):
-        if s.shape[-1] != self.state_dim:
-            raise ValueError("Bad shape: expected %d-dimensional state(s)" % self.state_dim)
+        self.check_state(s)
         if self._learn_std:
             std_score = np.ones(s.shape[:-1] + (self._action_dim,))
             if np.isscalar(self._std_params):
@@ -178,13 +168,14 @@ class LinearGaussianPolicy(GaussianPolicy):
 
         if mean_params_init is not None:
             if np.isscalar(mean_params_init):
-                self._mean_params = mean_params_init + np.zeros((self._action_dim, self._state_dim))
-            elif mean_params_init.ndim == 1 and len(mean_params_init) == self._action_dim * self._state_dim:
-                self._mean_params = mean_params_init.reshape((self._action_dim, self._state_dim))
+                self._mean_params = mean_params_init + np.zeros((self.action_dim, self.state_dim))
+            elif mean_params_init.ndim == 1 and len(mean_params_init) == self.action_dim * self.state_dim:
+                self._mean_params = mean_params_init.reshape((self.action_dim, self.state_dim))
             else:
-                if mean_params_init.shape != (self._action_dim, self._state_dim):
-                    raise ValueError("Bad shape: mean_init should be a scalar, a 1d array "
-                                     "of size state_dim * action_dim, or a 2d array of size state_dim times action_dim")
+                if mean_params_init.shape != (self.action_dim, self.state_dim):
+                    raise ValueError("Bad shape: mean_init should be a scalar, "
+                                     "a 1d array of size action_dim * state_dim, "
+                                     "or a 2d array of size state_dim times action_dim")
                 self._mean_params = mean_params_init
         else:
             self._mean_params = np.zeros((self._action_dim, self._state_dim))
