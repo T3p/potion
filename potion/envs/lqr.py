@@ -2,9 +2,6 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import warnings
-from potion.policies.gaussian_policies import LinearGaussianPolicy
-from potion.simulation.trajectory_generators import estimate_average_return
-from potion.policies.wrappers import Staged
 
 class LQR(gym.Env):
     metadata = {
@@ -338,41 +335,3 @@ class LQR(gym.Env):
         return - init_term - noise_term
 
 
-if __name__ == "__main__":
-    horizon = 100
-    env = LQR(A = np.eye(2),
-              B = np.eye(2),
-              init_mean=1., init_std=0.)
-    discount = 0.9
-    policy_std = 0.2
-    seed = 42
-    optimal_gain = env.discounted_optimal_gain(discount)
-    print(optimal_gain)
-    print(env.discounted_optimal_return(discount, policy_std))
-
-    optimal_param = optimal_gain.ravel()
-    pol = LinearGaussianPolicy.make(env, std_init=policy_std)
-    pol.set_params(optimal_param)
-    ret2 = estimate_average_return(env, pol,
-                                   n_episodes=1000,
-                                   horizon=None,
-                                   discount=discount,
-                                   rng=np.random.default_rng(seed))
-    print("Simulated optimal:")
-    print(ret2)
-
-    # Value functions
-    s = 1 * np.ones(2)
-    a = s @ optimal_gain
-    K = optimal_gain
-
-    print("V:")
-    v = env.discounted_v(s, K, discount, policy_std)
-    print(v)
-
-    print("Q:")
-    q = env.discounted_q(s, a, K, discount, policy_std)
-    print(q)
-
-    print("phi(s,a)")
-    print(env.q_representation(s, a))
