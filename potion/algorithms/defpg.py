@@ -38,9 +38,10 @@ def _generate_defensive_batch(env, policy, snapshot_params, defensive_parameter,
     n_snapshot = n_episodes - n_current
 
     # generate_batch derives episode seeds from its RNG's seed sequence. Use
-    # independent child RNGs so the two mixture components do not reuse seeds.
-    current_rng = np.random.default_rng(rng.integers(0, 2**63))
-    snapshot_rng = np.random.default_rng(rng.integers(0, 2**63))
+    # independent child seed sequences so the two components do not reuse seeds.
+    current_seed_seq, snapshot_seed_seq = rng.bit_generator.seed_seq.spawn(2)
+    current_rng = np.random.default_rng(current_seed_seq)
+    snapshot_rng = np.random.default_rng(snapshot_seed_seq)
 
     batch = []
     if n_current:

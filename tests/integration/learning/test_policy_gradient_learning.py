@@ -135,7 +135,7 @@ def test_svrpg():
 
 @pytest.mark.skip("Not now")
 def test_def_svrpg():
-    step_size = 1e-2
+    step_size = 5e-3
     seed = 42
     discount = 0.9
     policy_std = 0.2
