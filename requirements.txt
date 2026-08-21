@@ -1,14 +1,11 @@
 gym==0.26.2
 gymnasium==0.29.1
 joblib==1.4.2
-matplotlib==3.9.0
 numpy==1.26.4
 pandas==2.2.2
--e git+https://github.com/T3p/potion.git@df3fe88f3191a62606b96094eb704d6cb5e049fd#egg=potion
 scipy==1.13.1
-tensorboardX==2.6.2.2
 torch==2.3.0
 
 pytest~=8.2.1
+pytest-mock~=3.15.1
 setuptools~=70.0.0
-jax~=0.4.29
