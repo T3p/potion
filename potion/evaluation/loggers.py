@@ -59,7 +59,7 @@ class EpisodicPerformanceLogger(Logger):
         for traj in trajectories:
             self.tot_traj += 1
             if self.tot_traj % self.log_every == 0:
-                _, _, rewards, alive = traj
+                _, _, rewards, alive, _ = traj
                 rewards = apply_mask(rewards, alive)
                 discounted_rewards = apply_discount(rewards, self.discount)
                 ret = np.sum(discounted_rewards)

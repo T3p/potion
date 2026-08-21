@@ -154,6 +154,9 @@ def policy(state_d, action_d, n_params):
         def act(self, state, rng, t=None):
             return rng.normal(size=action_d)
 
+        def log_prob(self, state, action, t=None):
+            return -np.sum(action ** 2, axis=-1) - (0 if t is None else t)
+
         def score(self, state, action, t=None):
             return np.concatenate((state,
                                    action,
@@ -169,6 +172,9 @@ def policy_1d():
         def act(self, state, rng, t=None):
             return rng.normal(size=1)
 
+        def log_prob(self, state, action, t=None):
+            return -np.sum(action ** 2, axis=-1) - (0 if t is None else t)
+
     return MockPolicy()
 
 
@@ -179,10 +185,11 @@ def batch(n_traj, max_trajectory_len, state_d, action_d, discount, horizon, rng)
     rewards = rng.normal(size=(n_traj, max_trajectory_len))
     alive = np.full(shape=(n_traj, max_trajectory_len), fill_value=True)
     alive[:, horizon:] = False
+    logps = rng.normal(size=(n_traj, max_trajectory_len))
 
     batch = []
     for i in range(n_traj):
-        batch.append((states[i], actions[i], rewards[i], alive[i]))
+        batch.append((states[i], actions[i], rewards[i], alive[i], logps[i]))
 
     return batch
 

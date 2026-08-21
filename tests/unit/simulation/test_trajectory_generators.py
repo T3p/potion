@@ -12,29 +12,45 @@ import pytest
 def test_generate_trajectory_shapes(env, policy, max_trajectory_len, seed, state_d, action_d):
     traj = generate_trajectory(env, policy, max_trajectory_len, seed)
 
-    # A trajectory is a tuple (states, actions, rewards, alive)
-    assert len(traj) == 4
-    states, actions, rewards, alive = traj
+    # A trajectory is a tuple (states, actions, rewards, alive, logps)
+    assert len(traj) == 5
+    states, actions, rewards, alive, logps = traj
     assert states.shape == (max_trajectory_len, state_d)
     assert actions.shape == (max_trajectory_len, action_d)
     assert rewards.shape == (max_trajectory_len,)
     assert alive.shape == (max_trajectory_len,)
+    assert logps.shape == (max_trajectory_len,)
+
+    expected_logps = np.array([
+        policy.log_prob(state, action, t)
+        for t, (state, action) in enumerate(zip(states, actions))
+    ])
+    assert np.allclose(logps[alive], expected_logps[alive])
+    assert np.allclose(logps[~alive], 0.)
 
 
 def test_generate_trajectory_1d(env_1d, policy_1d, max_trajectory_len, seed):
     traj = generate_trajectory(env_1d, policy_1d, max_trajectory_len, seed)
 
-    # A trajectory is a tuple (states, actions, rewards, alive)
-    assert len(traj) == 4
-    states, actions, rewards, alive = traj
+    # A trajectory is a tuple (states, actions, rewards, alive, logps)
+    assert len(traj) == 5
+    states, actions, rewards, alive, logps = traj
     assert states.shape == (max_trajectory_len, 1)
     assert actions.shape == (max_trajectory_len, 1)
     assert rewards.shape == (max_trajectory_len,)
     assert alive.shape == (max_trajectory_len,)
+    assert logps.shape == (max_trajectory_len,)
+
+    expected_logps = np.array([
+        policy_1d.log_prob(state, action, t)
+        for t, (state, action) in enumerate(zip(states, actions))
+    ])
+    assert np.allclose(logps[alive], expected_logps[alive])
+    assert np.allclose(logps[~alive], 0.)
 
 
 def test_generate_trajectory_alive(env, policy, max_trajectory_len, seed, horizon):
-    _, _, _, alive = generate_trajectory(env, policy, max_trajectory_len, seed)
+    _, _, _, alive, _ = generate_trajectory(env, policy, max_trajectory_len, seed)
 
     for i in range(horizon):
         assert alive[i]
@@ -55,18 +71,19 @@ def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len
     rng_clone = np.random.default_rng(seed_clone)
 
     seq_batch = generate_batch(env, policy, n_episodes, max_trajectory_len, rng, parallel=False)
-    seq_states_1, _, _, _ = seq_batch[0]
-    seq_states_2, _, _, _ = seq_batch[1]
+    seq_states_1, _, _, _, _ = seq_batch[0]
+    seq_states_2, _, _, _, _ = seq_batch[1]
 
     # What if we parallelized instead?
     par_batch = generate_batch(env, policy, n_episodes, max_trajectory_len, rng_clone, parallel=True, n_jobs=n_jobs)
-    par_states_1, _, _, _ = par_batch[0]
-    par_states_2, _, _, _ = par_batch[1]
+    par_states_1, _, _, _, _ = par_batch[0]
+    par_states_2, _, _, _, _ = par_batch[1]
 
     assert len(seq_batch) == n_episodes
     assert tuple(x.shape for x in seq_batch[0]) == (
         (max_trajectory_len, state_d),
         (max_trajectory_len, action_d),
+        (max_trajectory_len,),
         (max_trajectory_len,),
         (max_trajectory_len,),
     )
@@ -76,6 +93,7 @@ def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len
     assert tuple(x.shape for x in par_batch[0]) == (
         (max_trajectory_len, state_d),
         (max_trajectory_len, action_d),
+        (max_trajectory_len,),
         (max_trajectory_len,),
         (max_trajectory_len,),
     )
@@ -120,12 +138,27 @@ def test_blackbox_simulate_batch(env_stochastic_reward, policy, n_episodes, max_
 
 def test_unpack(env, policy, max_trajectory_len, rng, state_d, action_d):
     b = generate_batch(env, policy, n_episodes=7, max_trajectory_len=max_trajectory_len, rng=rng, parallel=False)
-    states, actions, rewards, alive = unpack(b)
+    states, actions, rewards, alive, logps = unpack(b)
 
     assert states.shape == (7, max_trajectory_len, state_d)
     assert actions.shape == (7, max_trajectory_len, action_d)
     assert rewards.shape == (7, max_trajectory_len)
     assert alive.shape == (7, max_trajectory_len)
+    assert logps.shape == (7, max_trajectory_len)
+
+
+def test_generate_continual_batch_logps(env, policy, rng, discount):
+    batch = generate_batch(env, policy, n_episodes=1, max_trajectory_len=None, rng=rng, discount=discount)
+
+    states, actions, _, alive, logps = batch[0]
+    expected_logps = np.array([
+        policy.log_prob(state, action, t)
+        for t, (state, action) in enumerate(zip(states, actions))
+    ])
+
+    assert logps.shape == alive.shape
+    assert np.allclose(logps[alive], expected_logps[alive])
+    assert np.allclose(logps[~alive], 0.)
 
 
 def test_unpack_exceptions():
@@ -135,6 +168,8 @@ def test_unpack_exceptions():
         _ = unpack([np.ones((2, 2))])
     with pytest.raises(ValueError):
         _ = unpack([(np.ones((2, 2)), )])
+    with pytest.raises(ValueError):
+        _ = unpack([(np.ones(2),) * 4])
 
 
 def test_apply_mask():

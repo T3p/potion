@@ -14,6 +14,7 @@ def generate_trajectory(env, policy, max_trajectory_len, seed):
     actions = np.zeros((max_trajectory_len, da), dtype=float)
     rewards = np.zeros(max_trajectory_len, dtype=float)
     alive = np.full(max_trajectory_len, False)
+    logps = np.zeros(max_trajectory_len, dtype=float)
 
     # Generate independent seeds for environment and agent (low collision probability)
     seed_seq = np.random.SeedSequence(seed)
@@ -40,6 +41,7 @@ def generate_trajectory(env, policy, max_trajectory_len, seed):
         actions[t] = a
         rewards[t] = r
         alive[t] = True  # Mark episode as not yet finished
+        logps[t] = np.asarray(policy.log_prob(s, a, t)).item()
 
         s = next_s
         t += 1
@@ -48,7 +50,7 @@ def generate_trajectory(env, policy, max_trajectory_len, seed):
     if t < max_trajectory_len and s is not None:
         states[t] = s
 
-    return states, actions, rewards, alive
+    return states, actions, rewards, alive, logps
 
 
 def blackbox_simulate_episode(env, policy, max_trajectory_len, seed, discount=1.):
@@ -81,7 +83,7 @@ def blackbox_simulate_episode(env, policy, max_trajectory_len, seed, discount=1.
 
 
 def generate_batch(env, policy, n_episodes, max_trajectory_len, rng, discount=None, parallel=False, n_jobs=4):
-    # A batch is a list of trajectories, a trajectory is a tuple of numpy arrays (states, actions, rewards, alive)
+    # A batch is a list of trajectories. Each trajectory contains states, actions, rewards, alive flags, and logps.
 
     if max_trajectory_len is None:
         max_trajectory_len = int(2. / (1. - discount))
@@ -124,8 +126,8 @@ def estimate_average_return(env, policy, n_episodes, horizon, rng, discount=1., 
 
 
 def unpack(batch):
-    if not (isinstance(batch, Sequence) and isinstance(batch[0], tuple) and len(batch[0]) == 4):
-        raise ValueError("batch should be a list of 4-tuples")
+    if not (isinstance(batch, Sequence) and isinstance(batch[0], tuple) and len(batch[0]) == 5):
+        raise ValueError("batch should be a list of 5-tuples")
     return (np.stack(x) for x in zip(*batch))
 
 
@@ -156,6 +158,7 @@ def simulate_infinite_trajectory(env, policy, discount, seed, max_trajectory_len
     actions = np.zeros((max_trajectory_len, da), dtype=float)
     rewards = np.zeros(max_trajectory_len, dtype=float)
     alive = np.full(max_trajectory_len, False)
+    logps = np.zeros(max_trajectory_len, dtype=float)
 
     # Generate independent seeds for environment and agent (low collision probability)
     seed_seq = np.random.SeedSequence(seed)
@@ -182,6 +185,7 @@ def simulate_infinite_trajectory(env, policy, discount, seed, max_trajectory_len
         actions[t] = a
         rewards[t] = r
         alive[t] = t < random_horizon  # Mark episode as not yet finished
+        logps[t] = np.asarray(policy.log_prob(s, a, t)).item()
 
         s = next_s
         t += 1
@@ -190,11 +194,11 @@ def simulate_infinite_trajectory(env, policy, discount, seed, max_trajectory_len
     if t < max_trajectory_len and s is not None:
         states[t] = s
 
-    return states, actions, rewards, alive
+    return states, actions, rewards, alive, logps
 
 
 def generate_batch_continual(env, policy, n_episodes, discount, rng, max_trajectory_len, parallel=False, n_jobs=4):
-    # A batch is a list of trajectories, a trajectory is a tuple of numpy arrays (states, actions, rewards, alive)
+    # A batch is a list of trajectories. Each trajectory contains states, actions, rewards, alive flags, and logps.
     # Generate independent seeds for the different episodes
     seeds = rng.bit_generator.seed_seq.generate_state(n_episodes)
 

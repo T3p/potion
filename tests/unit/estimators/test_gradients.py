@@ -21,11 +21,13 @@ def small_batch(small_policy):
     return [(np.ones((2, small_policy.state_dim)),
               np.ones((2, small_policy.action_dim)),
               np.array([1., -1.]),
-              np.array([True, True])),
+              np.array([True, True]),
+              np.zeros(2)),
              (np.ones((2, small_policy.state_dim)),
               np.ones((2, small_policy.action_dim)),
               np.array([4., -2.]),
-              np.array([True, True]))
+              np.array([True, True]),
+              np.zeros(2))
              ]
 
 
@@ -51,7 +53,8 @@ def test_gradient_estimators_invariance(batch, discount, policy, n_traj, estimat
         batch_2.append((batch[i][0],
                        batch[i][1],
                        2. * batch[i][2],  # double rewards
-                       batch[i][3]))
+                       batch[i][3],
+                       batch[i][4]))
 
     grad_2 = estimator(batch_2, discount, policy, baseline=baseline, average=True)
 
@@ -107,12 +110,14 @@ def test_gradient_estimators_exceptions(batch, discount, policy, estimator):
     batch_1 = [(np.ones((2, policy.state_dim + 1)),
                np.ones((2, policy.action_dim)),
                np.array([1., -1.]),
-               np.array([True, True]))]
+               np.array([True, True]),
+               np.zeros(2))]
 
     batch_2 = [(np.ones((2, policy.state_dim)),
                np.ones((2, policy.action_dim - 1)),
                np.array([1., -1.]),
-               np.array([True, True]))]
+               np.array([True, True]),
+               np.zeros(2))]
 
     with pytest.warns(UserWarning):
         _ = estimator(batch, discount, policy, baseline="xyz")
@@ -130,11 +135,11 @@ def test_gradient_estimators_masking(batch, discount, policy, horizon, estimator
 
     batch_1 = []
     for i in range(len(batch)):
-        s, a, r, al = batch[i]
+        s, a, r, al, logps = batch[i]
         s[horizon:] = -100. * np.ones(policy.state_dim)
         a[horizon:] = 200. * np.ones(policy.action_dim)
         r[horizon:] = -150.
-        batch_1.append((s, a, r, al))
+        batch_1.append((s, a, r, al, logps))
 
     grad_1 = estimator(batch_1, discount, policy, baseline="peters")
 

@@ -8,7 +8,7 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
-    states, actions, rewards, alive = unpack(batch)  # NxHxS, NxHxA, NxH, NxH
+    states, actions, rewards, alive, _logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
 
     if not states.shape[-1] == policy.state_dim:
         raise ValueError("Bad shape: state dimension does not match that of given policy")
@@ -43,7 +43,7 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True):
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
-    states, actions, rewards, alive = unpack(batch)  # NxHxS, NxHxA, NxH, NxH
+    states, actions, rewards, alive, _logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
 
     if not states.shape[-1] == policy.state_dim:
         raise ValueError("Bad shape: state dimension does not match that of given policy")
@@ -78,7 +78,7 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
-    states, actions, rewards, alive = unpack(batch)  # NxHxS, NxHxA, NxH, NxH
+    states, actions, rewards, alive, _logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
 
     if not states.shape[-1] == policy.state_dim:
         raise ValueError("Bad shape: state dimension does not match that of given policy")
