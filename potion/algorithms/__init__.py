@@ -1,1 +1,1 @@
-from potion.algorithms.policy_gradient import reinforce
+from potion.algorithms.reinforce import reinforce

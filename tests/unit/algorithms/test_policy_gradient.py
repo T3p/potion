@@ -7,15 +7,15 @@ from unittest.mock import MagicMock
 
 
 def test_reinforce_estimator_call(env, policy, n_params, mocker):
-    m = mocker.patch("potion.algorithms.policy_gradient.reinforce_estimator", return_value=np.ones(n_params))
+    m = mocker.patch("potion.algorithms.reinforce.reinforce_estimator", return_value=np.ones(n_params))
     reinforce(env, policy, max_iterations=1, estimator="reinforce", logger=SilentLogger())
     m.assert_called()
 
-    m = mocker.patch("potion.algorithms.policy_gradient.gpomdp_estimator", return_value=np.ones(n_params))
+    m = mocker.patch("potion.algorithms.reinforce.gpomdp_estimator", return_value=np.ones(n_params))
     reinforce(env, policy, max_iterations=1, estimator="gpomdp", logger=SilentLogger())
     m.assert_called()
 
-    m = mocker.patch("potion.algorithms.policy_gradient.nonstationary_pg_estimator", return_value=np.ones(n_params))
+    m = mocker.patch("potion.algorithms.reinforce.nonstationary_pg_estimator", return_value=np.ones(n_params))
     reinforce(env, policy, max_iterations=1, estimator="nonstationary", logger=SilentLogger())
     m.assert_called()
 
@@ -27,4 +27,3 @@ def test_reinforce_adaptive_step_call(env, policy, n_params):
     adaptive_step = MagicMock(return_value=np.ones(n_params))
     reinforce(env, policy, max_iterations=1, estimator="reinforce", step_size=adaptive_step, logger=SilentLogger())
     adaptive_step.assert_called()
-
