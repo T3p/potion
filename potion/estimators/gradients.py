@@ -1,14 +1,27 @@
 import numpy as np
 from potion.simulation.trajectory_generators import unpack, apply_mask, apply_discount
 import warnings
-from potion.policies.wrappers import Staged
 
 
-def reinforce_estimator(batch, discount, policy, baseline="average", average=True):
+def _importance_weights(states, actions, alive, behavior_logps, policy):
+    if behavior_logps.shape != alive.shape:
+        raise ValueError("Bad shape: behavior log probabilities should match alive flags")
+
+    target_logps = np.zeros_like(behavior_logps, dtype=float)
+    for t in range(states.shape[1]):
+        active = alive[:, t]
+        if np.any(active):
+            target_logps[active, t] = policy.log_prob(states[active, t], actions[active, t], t)
+
+    log_ratios = apply_mask(target_logps - behavior_logps, alive)
+    return np.exp(np.sum(log_ratios, axis=1))
+
+
+def reinforce_estimator(batch, discount, policy, baseline="average", average=True, off_policy=False):
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
-    states, actions, rewards, alive, _logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
+    states, actions, rewards, alive, logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
 
     if not states.shape[-1] == policy.state_dim:
         raise ValueError("Bad shape: state dimension does not match that of given policy")
@@ -33,17 +46,20 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
     values = returns[..., None] - baseline  # Nxd or Nx1
 
     grad_samples = cum_scores * values  # Nxd
+    if off_policy:
+        weights = _importance_weights(states, actions, alive, logps, policy)
+        grad_samples = weights[..., None] * grad_samples
     if average:
         return np.mean(grad_samples, 0)  # d
     else:
         return grad_samples  # Nxd
 
 
-def gpomdp_estimator(batch, discount, policy, baseline='average', average=True):
+def gpomdp_estimator(batch, discount, policy, baseline='average', average=True, off_policy=False):
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
-    states, actions, rewards, alive, _logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
+    states, actions, rewards, alive, logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
 
     if not states.shape[-1] == policy.state_dim:
         raise ValueError("Bad shape: state dimension does not match that of given policy")
@@ -68,17 +84,20 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True):
     values = disc_rewards[..., None] - baseline  # NxHxd or NxHx1
 
     grad_samples = np.sum(cum_scores * values, axis=1)  # Nxd
+    if off_policy:
+        weights = _importance_weights(states, actions, alive, logps, policy)
+        grad_samples = weights[..., None] * grad_samples
     if average:
         return np.mean(grad_samples, axis=0)  # d
     else:
         return grad_samples
 
 
-def nonstationary_pg_estimator(batch, discount, policy, baseline="average", average=True):
+def nonstationary_pg_estimator(batch, discount, policy, baseline="average", average=True, off_policy=False):
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
-    states, actions, rewards, alive, _logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
+    states, actions, rewards, alive, logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
 
     if not states.shape[-1] == policy.state_dim:
         raise ValueError("Bad shape: state dimension does not match that of given policy")
@@ -104,6 +123,9 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
 
     grad_samples = scores * values
     grad_samples = np.reshape(grad_samples, (grad_samples.shape[0], -1))
+    if off_policy:
+        weights = _importance_weights(states, actions, alive, logps, policy)
+        grad_samples = weights[..., None] * grad_samples
 
     if average:
         return np.mean(grad_samples, 0)  # Hd

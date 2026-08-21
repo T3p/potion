@@ -37,6 +37,9 @@ class Staged(ParametricStochasticPolicy):
         self._select(t)
         return self.base_policy.act(state, rng, t)
 
+    def _check_action(self, a):
+        return self.base_policy._check_action(a)
+
     def score(self, s, a, t=None):
         if t is None and s.ndim > 1:
             scores = []

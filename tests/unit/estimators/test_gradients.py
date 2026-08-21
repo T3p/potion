@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 from potion.estimators.gradients import reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator
+from potion.policies.gaussian_policies import LinearGaussianPolicy
+from potion.policies.wrappers import Staged
 
 
 @pytest.fixture
@@ -14,6 +16,9 @@ def small_policy():
             x = np.array([[[-0.3], [0.5]],
                           [[1.], [-1.5]]])
             return np.concatenate((x, 2. * x), -1)
+
+        def log_prob(self, s, a, t=None):
+            return np.zeros(s.shape[:-1])
     return MockPolicy()
 
 @pytest.fixture
@@ -119,6 +124,12 @@ def test_gradient_estimators_exceptions(batch, discount, policy, estimator):
                np.array([True, True]),
                np.zeros(2))]
 
+    batch_3 = [(np.ones((2, policy.state_dim)),
+               np.ones((2, policy.action_dim)),
+               np.array([1., -1.]),
+               np.array([True, True]),
+               np.zeros(3))]
+
     with pytest.warns(UserWarning):
         _ = estimator(batch, discount, policy, baseline="xyz")
 
@@ -127,6 +138,9 @@ def test_gradient_estimators_exceptions(batch, discount, policy, estimator):
 
     with pytest.raises(ValueError):
         _ = estimator(batch_2, discount, policy)
+
+    with pytest.raises(ValueError):
+        _ = estimator(batch_3, discount, policy, off_policy=True)
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
@@ -144,3 +158,79 @@ def test_gradient_estimators_masking(batch, discount, policy, horizon, estimator
     grad_1 = estimator(batch_1, discount, policy, baseline="peters")
 
     assert np.allclose(grad_1, grad)
+
+
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
+def test_gradient_estimators_off_policy_weights(small_batch, small_policy, estimator):
+    weights = np.array([2., 0.5])
+    weighted_batch = []
+    for trajectory, weight in zip(small_batch, weights):
+        states, actions, rewards, alive, _ = trajectory
+        behavior_logps = np.array([-np.log(weight), 0.])
+        weighted_batch.append((states, actions, rewards, alive, behavior_logps))
+
+    on_policy_samples = estimator(small_batch, 0.9, small_policy, baseline=None, average=False)
+    ignored_logps_samples = estimator(weighted_batch, 0.9, small_policy, baseline=None, average=False)
+    off_policy_samples = estimator(
+        weighted_batch, 0.9, small_policy, baseline=None, average=False, off_policy=True
+    )
+    off_policy_grad = estimator(weighted_batch, 0.9, small_policy, baseline=None, off_policy=True)
+
+    assert np.allclose(ignored_logps_samples, on_policy_samples)
+    assert np.allclose(off_policy_samples, weights[..., None] * on_policy_samples)
+    assert np.allclose(off_policy_grad, np.mean(off_policy_samples, axis=0))
+
+
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
+def test_gradient_estimators_off_policy_masking(batch, discount, policy, estimator):
+    target_logps = np.zeros((len(batch), len(batch[0][3])))
+    for t in range(target_logps.shape[1]):
+        states_t = np.stack([trajectory[0][t] for trajectory in batch])
+        actions_t = np.stack([trajectory[1][t] for trajectory in batch])
+        target_logps[:, t] = policy.log_prob(states_t, actions_t, t)
+
+    matched_batch = []
+    for trajectory, trajectory_logps in zip(batch, target_logps):
+        states, actions, rewards, alive, _ = trajectory
+        trajectory_logps[~alive] = 1e6
+        matched_batch.append((states, actions, rewards, alive, trajectory_logps))
+
+    on_policy_grad = estimator(batch, discount, policy, baseline=None)
+    off_policy_grad = estimator(matched_batch, discount, policy, baseline=None, off_policy=True)
+
+    assert np.allclose(off_policy_grad, on_policy_grad)
+
+
+def test_nonstationary_off_policy_weights_staged_policy():
+    horizon = 2
+    policy = Staged(LinearGaussianPolicy(1, 1), horizon=horizon)
+    states = np.ones((2, horizon, 1))
+    actions = np.array([[[0.5], [-0.5]], [[1.], [0.]]])
+    rewards = np.array([[1., 2.], [3., 4.]])
+    alive = np.ones((2, horizon), dtype=bool)
+    weights = np.array([2., 0.5])
+
+    target_logps = np.empty((2, horizon))
+    for t in range(horizon):
+        target_logps[:, t] = policy.log_prob(states[:, t], actions[:, t], t)
+    behavior_logps = target_logps - np.log(weights)[..., None] / horizon
+
+    on_policy_batch = [
+        (state, action, reward, alive_flags, target_logp)
+        for state, action, reward, alive_flags, target_logp
+        in zip(states, actions, rewards, alive, target_logps)
+    ]
+    off_policy_batch = [
+        (state, action, reward, alive_flags, behavior_logp)
+        for state, action, reward, alive_flags, behavior_logp
+        in zip(states, actions, rewards, alive, behavior_logps)
+    ]
+
+    on_policy_samples = nonstationary_pg_estimator(
+        on_policy_batch, 0.9, policy, baseline=None, average=False
+    )
+    off_policy_samples = nonstationary_pg_estimator(
+        off_policy_batch, 0.9, policy, baseline=None, average=False, off_policy=True
+    )
+
+    assert np.allclose(off_policy_samples, weights[..., None] * on_policy_samples)
