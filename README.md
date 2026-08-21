@@ -1,4 +1,4 @@
-[![Python application](https://github.com/T3p/potion/actions/workflows/python-app.yml/badge.svg)](https://github.com/T3p/potion/actions/workflows/python-app.yml)
+
 
 # POlicy optimizaTION
 
