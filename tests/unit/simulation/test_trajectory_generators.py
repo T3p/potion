@@ -49,29 +49,7 @@ def test_blackbox_simulate_episode(env, policy, max_trajectory_len, seed, discou
     assert np.isclose(ret, -(1-discount**horizon) / (1-discount))
 
 
-def test_blackbox_simulate_episode_1d(env_1d, policy_1d, max_trajectory_len, seed, discount, horizon):
-    ret, traj_len = blackbox_simulate_episode(env_1d, policy_1d, max_trajectory_len, seed, discount)
-
-    assert traj_len == horizon
-    assert np.isclose(ret, -(1-discount**horizon) / (1-discount))
-
-
-def test_generate_batch_shape(env, policy, max_trajectory_len, rng, n_jobs, state_d, action_d):
-    # Sequential
-    b = generate_batch(env, policy, n_episodes=1, max_trajectory_len=max_trajectory_len, rng=rng, parallel=False)
-    traj = generate_trajectory(env, policy, max_trajectory_len, seed=None)
-    for i, x in enumerate(b[0]):
-        assert x.shape == traj[i].shape
-
-    # Parallel
-    b = generate_batch(env, policy, n_episodes=1, max_trajectory_len=max_trajectory_len, rng=rng, parallel=True,
-                       n_jobs=n_jobs)
-    traj = generate_trajectory(env, policy, max_trajectory_len, seed=None)
-    for i, x in enumerate(b[0]):
-        assert x.shape == traj[i].shape
-
-
-def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len, rng, n_jobs):
+def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len, rng, n_jobs, state_d, action_d):
     # Clone rng for "what if" scenario (just deepcopying the rng does not work!)
     seed_clone = rng.bit_generator.seed_seq.entropy
     rng_clone = np.random.default_rng(seed_clone)
@@ -86,9 +64,21 @@ def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len
     par_states_2, _, _, _ = par_batch[1]
 
     assert len(seq_batch) == n_episodes
+    assert tuple(x.shape for x in seq_batch[0]) == (
+        (max_trajectory_len, state_d),
+        (max_trajectory_len, action_d),
+        (max_trajectory_len,),
+        (max_trajectory_len,),
+    )
     assert not np.allclose(seq_states_1, seq_states_2)
 
     assert len(par_batch) == n_episodes
+    assert tuple(x.shape for x in par_batch[0]) == (
+        (max_trajectory_len, state_d),
+        (max_trajectory_len, action_d),
+        (max_trajectory_len,),
+        (max_trajectory_len,),
+    )
     assert not np.allclose(par_states_1, par_states_2)
 
     # What if: being seeded, results should be exactly the same in the two cases

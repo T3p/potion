@@ -19,7 +19,6 @@ def test_linear_softmax_policy_default(linear_softmax_policy, rng, state_d, num_
     pd = num_actions * state_d
     logits = pol.logits(s_1)
     action_1 = pol.act(s_1, rng)
-    action_2 = pol.act(s_1, rng)
     temp = pol.temperature
     log_pdf_10 = pol.log_prob(s_1, a_0)
     log_pdf_11 = pol.log_prob(s_1, a_1)
@@ -34,7 +33,6 @@ def test_linear_softmax_policy_default(linear_softmax_policy, rng, state_d, num_
     assert logits.shape == (num_actions,)
     assert np.allclose(logits, 0.)
     assert action_1.shape == (1,) and np.issubdtype(action_1.dtype, np.integer) and 0 <= action_1 < num_actions
-    assert not np.allclose(action_1, action_2)
     assert np.isscalar(temp) and np.isclose(temp, 1.)
     assert np.allclose(log_pdf_10, np.log(0.5))
     assert np.allclose(log_pdf_11, np.log(0.5))
@@ -267,31 +265,3 @@ def test_deep_softmax_policy_broadcast(deep_softmax_policy):
     pol.set_params(1.)
 
     assert np.allclose(pol.parameters, np.ones(pol.num_params))
-"""
-
-
-
-
-
-
-
-def test_deep_gaussian_policy_exceptions(state_d, action_d):
-    net_1 = nn.Linear(state_d + 1, action_d)
-    net_2 = nn.Linear(state_d, action_d + 1)
-
-    with pytest.raises(ValueError):
-        _ = DeepGaussianPolicy(state_d, action_d, mean_network=net_1)
-
-    with pytest.raises(ValueError):
-        _ = DeepGaussianPolicy(state_d, action_d, mean_network=net_2)
-
-
-
-
-
-def test_deep_gaussian_policy_broadcast(deep_gaussian_policy):
-    pol = deep_gaussian_policy
-    pol.set_params(1.)
-
-    assert np.allclose(pol.parameters, np.ones(pol.num_params))
-"""

@@ -251,7 +251,7 @@ def test_linear_gaussian_policy_setters(linear_gaussian_policy_1d, linear_gaussi
 
     assert pol3.parameters.shape == pol2.parameters.shape
     assert np.allclose(pol3.parameters, pol2.parameters)
-    assert pol3.std.shape == pol3.std.shape
+    assert pol3.std.shape == pol2.std.shape
     assert np.allclose(pol3.std, pol2.std)
 
     assert pol4.parameters.shape == (pd + 1,)
@@ -285,8 +285,8 @@ def test_linear_gaussian_policy_setters(linear_gaussian_policy_1d, linear_gaussi
 
     assert np.allclose(pol11.parameters, 2.)
     assert pol11.parameters.shape == (state_d * action_d + action_d,)
-    assert np.allclose(pol10.mean(np.ones(state_d)), 2. * state_d)
-    assert np.allclose(pol10.std, np.exp(2.))
+    assert np.allclose(pol11.mean(np.ones(state_d)), 2. * state_d)
+    assert np.allclose(pol11.std, np.exp(2.))
 
 
 def test_gaussian_exceptions(linear_gaussian_policy_1d, linear_gaussian_policy, linear_adaptive_gaussian_policy,

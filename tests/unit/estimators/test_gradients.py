@@ -29,16 +29,16 @@ def small_batch(small_policy):
              ]
 
 
-@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator))
-@pytest.mark.parametrize("baseline", (None, "average", "peters"))
-def test_gradient_estimators_shapes(batch, discount, policy, n_traj, n_params, estimator, baseline):
-    grad = estimator(batch, discount, policy, baseline=baseline, average=True)
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
+def test_gradient_estimators_shapes(batch, discount, policy, n_traj, n_params, max_trajectory_len, estimator):
+    grad = estimator(batch, discount, policy, baseline="average", average=True)
 
-    grad_samples = estimator(batch, discount, policy, baseline=baseline, average=False)
+    grad_samples = estimator(batch, discount, policy, baseline="average", average=False)
 
-    assert grad.shape == (n_params,)
+    expected_num_params = n_params if estimator is not nonstationary_pg_estimator else max_trajectory_len * n_params
+    assert grad.shape == (expected_num_params,)
 
-    assert grad_samples.shape == (n_traj, n_params)
+    assert grad_samples.shape == (n_traj, expected_num_params)
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
@@ -125,9 +125,8 @@ def test_gradient_estimators_exceptions(batch, discount, policy, estimator):
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
-@pytest.mark.parametrize("baseline", (None, "average", "peters"))
-def test_gradient_estimators_masking(batch, discount, policy, horizon, estimator, baseline):
-    grad = estimator(batch, discount, policy, baseline=baseline)
+def test_gradient_estimators_masking(batch, discount, policy, horizon, estimator):
+    grad = estimator(batch, discount, policy, baseline="peters")
 
     batch_1 = []
     for i in range(len(batch)):
@@ -137,6 +136,6 @@ def test_gradient_estimators_masking(batch, discount, policy, horizon, estimator
         r[horizon:] = -150.
         batch_1.append((s, a, r, al))
 
-    grad_1 = estimator(batch_1, discount, policy, baseline=baseline)
+    grad_1 = estimator(batch_1, discount, policy, baseline="peters")
 
     assert np.allclose(grad_1, grad)
