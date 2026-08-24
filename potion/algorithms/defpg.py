@@ -16,15 +16,20 @@ def _trajectory_log_probabilities(batch, policy):
 
 
 def _defensive_importance_weights(current_logps, snapshot_logps, defensive_parameter):
-    if not 0. < defensive_parameter < 1.:
-        raise ValueError("defensive parameter should be strictly between zero and one")
+    if not 0. <= defensive_parameter < 1.:
+        raise ValueError(
+            "defensive parameter should be greater than or equal to zero and less than one"
+        )
     if current_logps.shape != snapshot_logps.shape:
         raise ValueError("current and snapshot log probabilities should have the same shape")
 
-    log_mixture = np.logaddexp(
-        np.log(defensive_parameter) + current_logps,
-        np.log1p(-defensive_parameter) + snapshot_logps,
-    )
+    if defensive_parameter == 0.:
+        log_mixture = current_logps
+    else:
+        log_mixture = np.logaddexp(
+            np.log1p(-defensive_parameter) + current_logps,
+            np.log(defensive_parameter) + snapshot_logps,
+        )
     current_weights = np.exp(current_logps - log_mixture)
     snapshot_weights = np.exp(snapshot_logps - log_mixture)
     return current_weights, snapshot_weights
@@ -32,10 +37,19 @@ def _defensive_importance_weights(current_logps, snapshot_logps, defensive_param
 
 def _generate_defensive_batch(env, policy, snapshot_params, defensive_parameter,
                               n_episodes, horizon, discount, rng, n_jobs):
+    # At zero the mixture is exactly the current policy. Preserve SVRPG's RNG
+    # consumption as well as its sampling distribution.
+    if defensive_parameter == 0.:
+        return generate_batch(env, policy, n_episodes, horizon,
+                              rng=rng,
+                              discount=discount,
+                              parallel=(n_jobs > 1),
+                              n_jobs=n_jobs)
+
     current_params = policy.parameters.copy()
-    draw_current = rng.random(n_episodes) < defensive_parameter
-    n_current = np.count_nonzero(draw_current)
-    n_snapshot = n_episodes - n_current
+    draw_snapshot = rng.random(n_episodes) < defensive_parameter
+    n_snapshot = np.count_nonzero(draw_snapshot)
+    n_current = n_episodes - n_snapshot
 
     # generate_batch derives episode seeds from its RNG's seed sequence. Use
     # independent child seed sequences so the two components do not reuse seeds.
@@ -71,7 +85,7 @@ def def_svrpg(env, policy, *,
               discount=1.,
               step_size=1e-4,
               batch_size=100,
-              mini_batch_size=22,
+              mini_batch_size=10,
               epoch_length=10,
               max_iterations=1000,
               max_trajectories=None,
@@ -85,8 +99,10 @@ def def_svrpg(env, policy, *,
     """Run defensive SVRPG until an iteration or trajectory limit is met."""
     if max_iterations is None and max_trajectories is None:
         raise ValueError("max_iterations and max_trajectories cannot both be None")
-    if not 0. < defensive_parameter < 1.:
-        raise ValueError("defensive parameter should be strictly between zero and one")
+    if not 0. <= defensive_parameter < 1.:
+        raise ValueError(
+            "defensive parameter should be greater than or equal to zero and less than one"
+        )
 
     rng = np.random.default_rng(seed)
 
@@ -143,30 +159,45 @@ def def_svrpg(env, policy, *,
             total_trajectories += len(batch)
             logger.submit(batch, policy)
 
-            # Evaluate each trajectory under both policies. The component that
-            # generated it is irrelevant: both weights use the mixture density.
             current_params = policy.parameters.copy()
-            current_logps = _trajectory_log_probabilities(batch, policy)
             current_gradient_samples = gradient_estimator(
                 batch, estimator_discount, policy, baseline, average=False
             )
+
+            if defensive_parameter > 0.:
+                # Evaluate each trajectory under both policies. The component
+                # that generated it is irrelevant: both weights use the
+                # mixture density.
+                current_logps = _trajectory_log_probabilities(batch, policy)
+
             try:
                 policy.set_params(snapshot_params)
-                snapshot_logps = _trajectory_log_probabilities(batch, policy)
-                snapshot_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline, average=False
-                )
+                if defensive_parameter == 0.:
+                    snapshot_gradient_samples = gradient_estimator(
+                        batch, estimator_discount, policy, baseline,
+                        average=False, off_policy=True
+                    )
+                else:
+                    snapshot_logps = _trajectory_log_probabilities(batch, policy)
+                    snapshot_gradient_samples = gradient_estimator(
+                        batch, estimator_discount, policy, baseline, average=False
+                    )
             finally:
                 policy.set_params(current_params)
 
-            current_weights, snapshot_weights = _defensive_importance_weights(
-                current_logps, snapshot_logps, defensive_parameter
-            )
-            correction = np.mean(
-                current_weights[..., None] * current_gradient_samples
-                - snapshot_weights[..., None] * snapshot_gradient_samples,
-                axis=0,
-            )
+            if defensive_parameter == 0.:
+                correction = np.mean(
+                    current_gradient_samples - snapshot_gradient_samples, axis=0
+                )
+            else:
+                current_weights, snapshot_weights = _defensive_importance_weights(
+                    current_logps, snapshot_logps, defensive_parameter
+                )
+                correction = np.mean(
+                    current_weights[..., None] * current_gradient_samples
+                    - snapshot_weights[..., None] * snapshot_gradient_samples,
+                    axis=0,
+                )
             gradient = snapshot_gradient + correction
 
             # Compute update vector
@@ -201,7 +232,7 @@ def def_srvrpg(env, policy, *,
                discount=1.,
                step_size=1e-4,
                batch_size=100,
-               mini_batch_size=22,
+               mini_batch_size=10,
                epoch_length=10,
                max_iterations=1000,
                max_trajectories=None,
@@ -215,8 +246,10 @@ def def_srvrpg(env, policy, *,
     """Run defensive SRVR-PG until an iteration or trajectory limit is met."""
     if max_iterations is None and max_trajectories is None:
         raise ValueError("max_iterations and max_trajectories cannot both be None")
-    if not 0. < defensive_parameter < 1.:
-        raise ValueError("defensive parameter should be strictly between zero and one")
+    if not 0. <= defensive_parameter < 1.:
+        raise ValueError(
+            "defensive parameter should be greater than or equal to zero and less than one"
+        )
 
     rng = np.random.default_rng(seed)
 
@@ -286,27 +319,39 @@ def def_srvrpg(env, policy, *,
             logger.submit(batch, policy)
 
             current_params = policy.parameters.copy()
-            current_logps = _trajectory_log_probabilities(batch, policy)
             current_gradient_samples = gradient_estimator(
                 batch, estimator_discount, policy, baseline, average=False
             )
+            if defensive_parameter > 0.:
+                current_logps = _trajectory_log_probabilities(batch, policy)
             try:
                 policy.set_params(previous_params)
-                previous_logps = _trajectory_log_probabilities(batch, policy)
-                previous_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline, average=False
-                )
+                if defensive_parameter == 0.:
+                    previous_gradient_samples = gradient_estimator(
+                        batch, estimator_discount, policy, baseline,
+                        average=False, off_policy=True
+                    )
+                else:
+                    previous_logps = _trajectory_log_probabilities(batch, policy)
+                    previous_gradient_samples = gradient_estimator(
+                        batch, estimator_discount, policy, baseline, average=False
+                    )
             finally:
                 policy.set_params(current_params)
 
-            current_weights, previous_weights = _defensive_importance_weights(
-                current_logps, previous_logps, defensive_parameter
-            )
-            gradient = gradient + np.mean(
-                current_weights[..., None] * current_gradient_samples
-                - previous_weights[..., None] * previous_gradient_samples,
-                axis=0,
-            )
+            if defensive_parameter == 0.:
+                gradient = gradient + np.mean(
+                    current_gradient_samples - previous_gradient_samples, axis=0
+                )
+            else:
+                current_weights, previous_weights = _defensive_importance_weights(
+                    current_logps, previous_logps, defensive_parameter
+                )
+                gradient = gradient + np.mean(
+                    current_weights[..., None] * current_gradient_samples
+                    - previous_weights[..., None] * previous_gradient_samples,
+                    axis=0,
+                )
 
             if callable(step_size):
                 delta = step_size(gradient)
@@ -336,7 +381,7 @@ def def_stormpg(env, policy, *,
                 discount=1.,
                 step_size=1e-4,
                 batch_size=100,
-                mini_batch_size=22,
+                mini_batch_size=10,
                 momentum_parameter=0.9,
                 max_iterations=1000,
                 max_trajectories=None,
@@ -352,8 +397,10 @@ def def_stormpg(env, policy, *,
         raise ValueError("max_iterations and max_trajectories cannot both be None")
     if not 0. < momentum_parameter < 1.:
         raise ValueError("momentum parameter should be strictly between zero and one")
-    if not 0. < defensive_parameter < 1.:
-        raise ValueError("defensive parameter should be strictly between zero and one")
+    if not 0. <= defensive_parameter < 1.:
+        raise ValueError(
+            "defensive parameter should be greater than or equal to zero and less than one"
+        )
 
     rng = np.random.default_rng(seed)
 
@@ -424,28 +471,40 @@ def def_stormpg(env, policy, *,
         logger.submit(batch, policy)
 
         current_params = policy.parameters.copy()
-        current_logps = _trajectory_log_probabilities(batch, policy)
         current_gradient_samples = gradient_estimator(
             batch, estimator_discount, policy, baseline, average=False
         )
+        if defensive_parameter > 0.:
+            current_logps = _trajectory_log_probabilities(batch, policy)
         try:
             policy.set_params(previous_params)
-            previous_logps = _trajectory_log_probabilities(batch, policy)
-            previous_gradient_samples = gradient_estimator(
-                batch, estimator_discount, policy, baseline, average=False
-            )
+            if defensive_parameter == 0.:
+                previous_gradient_samples = gradient_estimator(
+                    batch, estimator_discount, policy, baseline,
+                    average=False, off_policy=True
+                )
+            else:
+                previous_logps = _trajectory_log_probabilities(batch, policy)
+                previous_gradient_samples = gradient_estimator(
+                    batch, estimator_discount, policy, baseline, average=False
+                )
         finally:
             policy.set_params(current_params)
 
-        current_weights, previous_weights = _defensive_importance_weights(
-            current_logps, previous_logps, defensive_parameter
-        )
         decay = 1. - momentum_parameter
-        gradient = decay * gradient + np.mean(
-            current_weights[..., None] * current_gradient_samples
-            - decay * previous_weights[..., None] * previous_gradient_samples,
-            axis=0,
-        )
+        if defensive_parameter == 0.:
+            gradient = np.mean(current_gradient_samples, axis=0) + decay * (
+                gradient - np.mean(previous_gradient_samples, axis=0)
+            )
+        else:
+            current_weights, previous_weights = _defensive_importance_weights(
+                current_logps, previous_logps, defensive_parameter
+            )
+            gradient = decay * gradient + np.mean(
+                current_weights[..., None] * current_gradient_samples
+                - decay * previous_weights[..., None] * previous_gradient_samples,
+                axis=0,
+            )
 
     # Cleanup
     logger.close()
@@ -456,7 +515,7 @@ def def_pagepg(env, policy, *,
                discount=1.,
                step_size=1e-4,
                batch_size=100,
-               mini_batch_size=22,
+               mini_batch_size=10,
                refresh_probability=0.8,
                max_iterations=1000,
                max_trajectories=None,
@@ -472,8 +531,10 @@ def def_pagepg(env, policy, *,
         raise ValueError("max_iterations and max_trajectories cannot both be None")
     if not 0. < refresh_probability <= 1.:
         raise ValueError("refresh probability should be greater than zero and at most one")
-    if not 0. < defensive_parameter < 1.:
-        raise ValueError("defensive parameter should be strictly between zero and one")
+    if not 0. <= defensive_parameter < 1.:
+        raise ValueError(
+            "defensive parameter should be greater than or equal to zero and less than one"
+        )
 
     rng = np.random.default_rng(seed)
 
@@ -555,27 +616,43 @@ def def_pagepg(env, policy, *,
             logger.submit(batch, policy)
 
             current_params = policy.parameters.copy()
-            current_logps = _trajectory_log_probabilities(batch, policy)
             current_gradient_samples = gradient_estimator(
                 batch, estimator_discount, policy, baseline, average=False
             )
+            if defensive_parameter > 0.:
+                current_logps = _trajectory_log_probabilities(batch, policy)
             try:
                 policy.set_params(previous_params)
-                previous_logps = _trajectory_log_probabilities(batch, policy)
-                previous_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline, average=False
-                )
+                if defensive_parameter == 0.:
+                    previous_gradient_samples = gradient_estimator(
+                        batch, estimator_discount, policy, baseline,
+                        average=False, off_policy=True
+                    )
+                else:
+                    previous_logps = _trajectory_log_probabilities(batch, policy)
+                    previous_gradient_samples = gradient_estimator(
+                        batch, estimator_discount, policy, baseline, average=False
+                    )
             finally:
                 policy.set_params(current_params)
 
-            current_weights, previous_weights = _defensive_importance_weights(
-                current_logps, previous_logps, defensive_parameter
-            )
-            gradient = gradient + np.mean(
-                current_weights[..., None] * current_gradient_samples
-                - previous_weights[..., None] * previous_gradient_samples,
-                axis=0,
-            )
+            if defensive_parameter == 0.:
+                gradient = gradient + np.mean(
+                    current_gradient_samples - previous_gradient_samples, axis=0
+                )
+            else:
+                current_weights, previous_weights = _defensive_importance_weights(
+                    current_logps, previous_logps, defensive_parameter
+                )
+                gradient = gradient + np.mean(
+                    current_weights[..., None] * current_gradient_samples
+                    - previous_weights[..., None] * previous_gradient_samples,
+                    axis=0,
+                )
 
     # Cleanup
     logger.close()
+
+
+# Short public name for defensive PAGE-PG.
+def_pg = def_pagepg

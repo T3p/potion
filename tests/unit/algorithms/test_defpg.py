@@ -1,9 +1,19 @@
 import numpy as np
 import pytest
 
-from potion.algorithms import def_svrpg, def_srvrpg, def_stormpg, def_pagepg
+from potion.algorithms import (
+    def_pagepg,
+    def_srvrpg,
+    def_stormpg,
+    def_svrpg,
+    pagepg,
+    srvrpg,
+    stormpg,
+    svrpg,
+)
 from potion.algorithms.defpg import _defensive_importance_weights
 from potion.evaluation.loggers import SilentLogger
+from potion.policies.gaussian_policies import LinearGaussianPolicy
 
 
 def test_defensive_importance_weights():
@@ -21,13 +31,87 @@ def test_defensive_importance_weights():
     assert np.all(snapshot_weights <= 2.)
 
 
-@pytest.mark.parametrize("defensive_parameter", [0., 1., -0.1, 1.1])
+@pytest.mark.parametrize("defensive_parameter", [1., -0.1, 1.1])
 def test_def_svrpg_rejects_invalid_defensive_parameter(env, policy, defensive_parameter):
     with pytest.raises(ValueError):
         def_svrpg(env, policy,
                   defensive_parameter=defensive_parameter,
                   logger=SilentLogger(),
                   verbose=False)
+
+
+def test_def_svrpg_with_zero_defensive_parameter_matches_svrpg(env):
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    svrpg_policy = LinearGaussianPolicy(state_dim, action_dim)
+    def_svrpg_policy = LinearGaussianPolicy(state_dim, action_dim)
+    arguments = {
+        "horizon": 3,
+        "discount": 0.9,
+        "step_size": 1e-3,
+        "batch_size": 5,
+        "mini_batch_size": 3,
+        "epoch_length": 2,
+        "max_iterations": 2,
+        "estimator": "gpomdp",
+        "baseline": "zero",
+        "seed": 123,
+        "n_jobs": 1,
+        "verbose": False,
+    }
+
+    svrpg(env, svrpg_policy, logger=SilentLogger(), **arguments)
+    def_svrpg(
+        env,
+        def_svrpg_policy,
+        defensive_parameter=0.,
+        logger=SilentLogger(),
+        **arguments,
+    )
+
+    np.testing.assert_array_equal(def_svrpg_policy.parameters, svrpg_policy.parameters)
+
+
+@pytest.mark.parametrize(
+    "algorithm, defensive_algorithm, algorithm_arguments",
+    [
+        (srvrpg, def_srvrpg, {"epoch_length": 3}),
+        (stormpg, def_stormpg, {"momentum_parameter": 0.7}),
+        (pagepg, def_pagepg, {"refresh_probability": 0.2}),
+    ],
+    ids=["srvrpg", "stormpg", "pagepg"],
+)
+def test_defensive_algorithm_with_zero_parameter_matches_regular_algorithm(
+        env, algorithm, defensive_algorithm, algorithm_arguments):
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    regular_policy = LinearGaussianPolicy(state_dim, action_dim)
+    defensive_policy = LinearGaussianPolicy(state_dim, action_dim)
+    arguments = {
+        "horizon": 3,
+        "discount": 0.9,
+        "step_size": 1e-3,
+        "batch_size": 5,
+        "mini_batch_size": 3,
+        "max_iterations": 3,
+        "estimator": "gpomdp",
+        "baseline": "zero",
+        "seed": 123,
+        "n_jobs": 1,
+        "verbose": False,
+        **algorithm_arguments,
+    }
+
+    algorithm(env, regular_policy, logger=SilentLogger(), **arguments)
+    defensive_algorithm(
+        env,
+        defensive_policy,
+        defensive_parameter=0.,
+        logger=SilentLogger(),
+        **arguments,
+    )
+
+    np.testing.assert_array_equal(defensive_policy.parameters, regular_policy.parameters)
 
 
 def test_def_svrpg_gradient_correction(env, policy, n_params, mocker):
@@ -111,7 +195,7 @@ def test_def_svrpg_rejects_missing_stopping_criterion(env, policy):
                   verbose=False)
 
 
-@pytest.mark.parametrize("defensive_parameter", [0., 1., -0.1, 1.1])
+@pytest.mark.parametrize("defensive_parameter", [1., -0.1, 1.1])
 def test_def_srvrpg_rejects_invalid_defensive_parameter(env, policy, defensive_parameter):
     with pytest.raises(ValueError):
         def_srvrpg(env, policy,
@@ -211,7 +295,7 @@ def test_def_stormpg_rejects_invalid_momentum_parameter(env, policy, momentum_pa
                     verbose=False)
 
 
-@pytest.mark.parametrize("defensive_parameter", [0., 1., -0.1, 1.1])
+@pytest.mark.parametrize("defensive_parameter", [1., -0.1, 1.1])
 def test_def_stormpg_rejects_invalid_defensive_parameter(env, policy, defensive_parameter):
     with pytest.raises(ValueError):
         def_stormpg(env, policy,
@@ -312,7 +396,7 @@ def test_def_pagepg_rejects_invalid_refresh_probability(env, policy, refresh_pro
                    verbose=False)
 
 
-@pytest.mark.parametrize("defensive_parameter", [0., 1., -0.1, 1.1])
+@pytest.mark.parametrize("defensive_parameter", [1., -0.1, 1.1])
 def test_def_pagepg_rejects_invalid_defensive_parameter(env, policy, defensive_parameter):
     with pytest.raises(ValueError):
         def_pagepg(env, policy,
