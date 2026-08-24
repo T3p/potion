@@ -51,7 +51,11 @@ def pagepg(env, policy, *,
     estimator_discount = discount if horizon is not None else 1.
 
     # Estimate the initial gradient using a large batch.
-    batch = generate_batch(env, policy, batch_size, horizon,
+    initial_batch_size = (
+        batch_size if max_trajectories is None
+        else min(batch_size, max_trajectories)
+    )
+    batch = generate_batch(env, policy, initial_batch_size, horizon,
                            rng=rng,
                            discount=discount,
                            parallel=(n_jobs > 1),
@@ -87,7 +91,11 @@ def pagepg(env, policy, *,
 
         if rng.random() < refresh_probability:
             # Large-batch refresh at the updated policy.
-            batch = generate_batch(env, policy, batch_size, horizon,
+            next_batch_size = (
+                batch_size if max_trajectories is None
+                else min(batch_size, max_trajectories - total_trajectories)
+            )
+            batch = generate_batch(env, policy, next_batch_size, horizon,
                                    rng=rng,
                                    discount=discount,
                                    parallel=(n_jobs > 1),
@@ -97,7 +105,11 @@ def pagepg(env, policy, *,
             gradient = gradient_estimator(batch, estimator_discount, policy, baseline)
         else:
             # Recursive correction between the updated and preceding policies.
-            batch = generate_batch(env, policy, mini_batch_size, horizon,
+            next_batch_size = (
+                mini_batch_size if max_trajectories is None
+                else min(mini_batch_size, max_trajectories - total_trajectories)
+            )
+            batch = generate_batch(env, policy, next_batch_size, horizon,
                                    rng=rng,
                                    discount=discount,
                                    parallel=(n_jobs > 1),

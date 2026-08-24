@@ -106,7 +106,7 @@ def test_pagepg_trajectory_budget_counts_refresh_batches(env, policy, n_params, 
            logger=SilentLogger(),
            verbose=False)
 
-    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 7]
+    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 3]
     assert adaptive_step.call_count == 2
 
 
