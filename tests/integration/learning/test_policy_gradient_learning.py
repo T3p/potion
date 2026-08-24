@@ -1,5 +1,5 @@
 from potion.algorithms import (reinforce, svrpg, def_svrpg, srvrpg, def_srvrpg,
-                               stormpg, def_stormpg)
+                               stormpg, def_stormpg, pagepg, def_pagepg)
 import gymnasium as gym
 import potion.envs
 from potion.policies.gaussian_policies import LinearGaussianPolicy
@@ -319,6 +319,86 @@ def test_def_stormpg():
                 seed=seed,
                 logger=EpisodicOnlineLogger(path=None, log_every=100, log_params=True),
                 verbose=True)
+
+    ret = estimate_average_return(env, policy,
+                                  n_episodes=1000,
+                                  horizon=None,
+                                  discount=discount,
+                                  rng=np.random.default_rng(seed))
+
+    optimal_param = env.discounted_optimal_gain(discount).ravel()
+    optimal_ret = env.discounted_optimal_return(discount, policy_std)
+
+    print("RESULT:")
+    print(policy.parameters, ret)
+
+    print("OPTIMAL:")
+    print(optimal_param, optimal_ret)
+
+    assert np.allclose(policy.parameters, optimal_param, atol=1e-1)
+    assert np.isclose(ret, optimal_ret, atol=1e-1)
+
+
+@pytest.mark.skip("Not now")
+def test_pagepg():
+    step_size = 1e-2
+    seed = 42
+    discount = 0.9
+    policy_std = 0.2
+    env = potion.envs.LQR(init_mean=1., init_std=0.)
+    policy = LinearGaussianPolicy.make(env, std_init=policy_std)
+    pagepg(env, policy,
+           step_size=step_size,
+           batch_size=100,
+           mini_batch_size=22,
+           horizon=None,
+           discount=discount,
+           estimator="gpomdp",
+           baseline="peters",
+           max_iterations=50,
+           seed=seed,
+           logger=EpisodicOnlineLogger(path=None, log_every=100, log_params=True),
+           verbose=True)
+
+    ret = estimate_average_return(env, policy,
+                                  n_episodes=1000,
+                                  horizon=None,
+                                  discount=discount,
+                                  rng=np.random.default_rng(seed))
+
+    optimal_param = env.discounted_optimal_gain(discount).ravel()
+    optimal_ret = env.discounted_optimal_return(discount, policy_std)
+
+    print("RESULT:")
+    print(policy.parameters, ret)
+
+    print("OPTIMAL:")
+    print(optimal_param, optimal_ret)
+
+    assert np.allclose(policy.parameters, optimal_param, atol=1e-1)
+    assert np.isclose(ret, optimal_ret, atol=1e-1)
+
+
+@pytest.mark.skip("Not now")
+def test_def_pagepg():
+    step_size = 1e-2
+    seed = 42
+    discount = 0.9
+    policy_std = 0.2
+    env = potion.envs.LQR(init_mean=1., init_std=0.)
+    policy = LinearGaussianPolicy.make(env, std_init=policy_std)
+    def_pagepg(env, policy,
+               step_size=step_size,
+               batch_size=100,
+               mini_batch_size=22,
+               horizon=None,
+               discount=discount,
+               estimator="gpomdp",
+               baseline="peters",
+               max_iterations=50,
+               seed=seed,
+               logger=EpisodicOnlineLogger(path=None, log_every=100, log_params=True),
+               verbose=True)
 
     ret = estimate_average_return(env, policy,
                                   n_episodes=1000,

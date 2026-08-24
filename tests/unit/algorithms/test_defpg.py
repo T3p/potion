@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from potion.algorithms import def_svrpg, def_srvrpg, def_stormpg
+from potion.algorithms import def_svrpg, def_srvrpg, def_stormpg, def_pagepg
 from potion.algorithms.defpg import _defensive_importance_weights
 from potion.evaluation.loggers import SilentLogger
 
@@ -301,3 +301,120 @@ def test_def_stormpg_rejects_missing_stopping_criterion(env, policy):
                     max_trajectories=None,
                     logger=SilentLogger(),
                     verbose=False)
+
+
+@pytest.mark.parametrize("refresh_probability", [0., -0.1, 1.1])
+def test_def_pagepg_rejects_invalid_refresh_probability(env, policy, refresh_probability):
+    with pytest.raises(ValueError):
+        def_pagepg(env, policy,
+                   refresh_probability=refresh_probability,
+                   logger=SilentLogger(),
+                   verbose=False)
+
+
+@pytest.mark.parametrize("defensive_parameter", [0., 1., -0.1, 1.1])
+def test_def_pagepg_rejects_invalid_defensive_parameter(env, policy, defensive_parameter):
+    with pytest.raises(ValueError):
+        def_pagepg(env, policy,
+                   defensive_parameter=defensive_parameter,
+                   logger=SilentLogger(),
+                   verbose=False)
+
+
+def test_def_pagepg_recursive_gradient_and_default_probability(env, policy, n_params, mocker):
+    rng = mocker.Mock()
+    rng.random.return_value = 0.9
+    mocker.patch("potion.algorithms.defpg.np.random.default_rng", return_value=rng)
+    generate_batch = mocker.patch(
+        "potion.algorithms.defpg.generate_batch",
+        return_value=[None] * 7,
+    )
+    defensive_batch = mocker.patch(
+        "potion.algorithms.defpg._generate_defensive_batch",
+        return_value=[None] * 2,
+    )
+    mocker.patch(
+        "potion.algorithms.defpg._trajectory_log_probabilities",
+        side_effect=[np.zeros(2), np.zeros(2), np.zeros(2), np.zeros(2)],
+    )
+    estimator = mocker.patch(
+        "potion.algorithms.defpg.gpomdp_estimator",
+        side_effect=[np.ones(n_params),
+                     3. * np.ones((2, n_params)),
+                     2. * np.ones((2, n_params)),
+                     3. * np.ones((2, n_params)),
+                     2. * np.ones((2, n_params))],
+    )
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    def_pagepg(env, policy,
+               batch_size=7,
+               mini_batch_size=2,
+               max_iterations=3,
+               step_size=adaptive_step,
+               logger=SilentLogger(),
+               verbose=False)
+
+    assert generate_batch.call_args.args[2] == 7
+    assert [call.args[3] for call in defensive_batch.call_args_list] == [0.5, 0.5]
+    expected_gradients = [1., 2., 3.]
+    for call, expected in zip(adaptive_step.call_args_list, expected_gradients):
+        assert np.allclose(call.args[0], expected * np.ones(n_params))
+    assert rng.random.call_count == 2
+
+
+def test_def_pagepg_large_batch_refresh(env, policy, n_params, mocker):
+    generate_batch = mocker.patch(
+        "potion.algorithms.defpg.generate_batch",
+        side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
+    )
+    estimator = mocker.patch(
+        "potion.algorithms.defpg.gpomdp_estimator",
+        side_effect=[np.ones(n_params), 5. * np.ones(n_params)],
+    )
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    def_pagepg(env, policy,
+               batch_size=7,
+               refresh_probability=1.,
+               max_iterations=2,
+               step_size=adaptive_step,
+               logger=SilentLogger(),
+               verbose=False)
+
+    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 7]
+    assert np.allclose(adaptive_step.call_args_list[0].args[0], np.ones(n_params))
+    assert np.allclose(adaptive_step.call_args_list[1].args[0], 5. * np.ones(n_params))
+
+
+def test_def_pagepg_trajectory_budget_counts_refresh_batches(env, policy, n_params, mocker):
+    generate_batch = mocker.patch(
+        "potion.algorithms.defpg.generate_batch",
+        side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
+    )
+    mocker.patch(
+        "potion.algorithms.defpg.gpomdp_estimator",
+        return_value=np.zeros(n_params),
+    )
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    def_pagepg(env, policy,
+               batch_size=7,
+               refresh_probability=1.,
+               max_iterations=None,
+               max_trajectories=10,
+               step_size=adaptive_step,
+               logger=SilentLogger(),
+               verbose=False)
+
+    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 7]
+    assert adaptive_step.call_count == 2
+
+
+def test_def_pagepg_rejects_missing_stopping_criterion(env, policy):
+    with pytest.raises(ValueError):
+        def_pagepg(env, policy,
+                   max_iterations=None,
+                   max_trajectories=None,
+                   logger=SilentLogger(),
+                   verbose=False)
