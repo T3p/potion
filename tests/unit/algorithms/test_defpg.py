@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from potion.algorithms import def_svrpg, def_srvrpg
+from potion.algorithms import def_svrpg, def_srvrpg, def_stormpg
 from potion.algorithms.defpg import _defensive_importance_weights
 from potion.evaluation.loggers import SilentLogger
 
@@ -200,3 +200,104 @@ def test_def_srvrpg_rejects_missing_stopping_criterion(env, policy):
                    max_trajectories=None,
                    logger=SilentLogger(),
                    verbose=False)
+
+
+@pytest.mark.parametrize("momentum_parameter", [0., 1., -0.1, 1.1])
+def test_def_stormpg_rejects_invalid_momentum_parameter(env, policy, momentum_parameter):
+    with pytest.raises(ValueError):
+        def_stormpg(env, policy,
+                    momentum_parameter=momentum_parameter,
+                    logger=SilentLogger(),
+                    verbose=False)
+
+
+@pytest.mark.parametrize("defensive_parameter", [0., 1., -0.1, 1.1])
+def test_def_stormpg_rejects_invalid_defensive_parameter(env, policy, defensive_parameter):
+    with pytest.raises(ValueError):
+        def_stormpg(env, policy,
+                    defensive_parameter=defensive_parameter,
+                    logger=SilentLogger(),
+                    verbose=False)
+
+
+def test_def_stormpg_momentum_gradient(env, policy, n_params, mocker):
+    generate_batch = mocker.patch(
+        "potion.algorithms.defpg.generate_batch",
+        return_value=[None] * 7,
+    )
+    defensive_batch = mocker.patch(
+        "potion.algorithms.defpg._generate_defensive_batch",
+        return_value=[None] * 2,
+    )
+    mocker.patch(
+        "potion.algorithms.defpg._trajectory_log_probabilities",
+        side_effect=[np.zeros(2), np.zeros(2), np.zeros(2), np.zeros(2)],
+    )
+    estimator = mocker.patch(
+        "potion.algorithms.defpg.gpomdp_estimator",
+        side_effect=[np.ones(n_params),
+                     3. * np.ones((2, n_params)),
+                     2. * np.ones((2, n_params)),
+                     3. * np.ones((2, n_params)),
+                     2. * np.ones((2, n_params))],
+    )
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    def_stormpg(env, policy,
+                batch_size=7,
+                mini_batch_size=2,
+                momentum_parameter=0.5,
+                max_iterations=3,
+                step_size=adaptive_step,
+                logger=SilentLogger(),
+                verbose=False)
+
+    assert generate_batch.call_args.args[2] == 7
+    assert [call.args[3] for call in defensive_batch.call_args_list] == [0.5, 0.5]
+    expected_gradients = [1., 2.5, 3.25]
+    for call, expected in zip(adaptive_step.call_args_list, expected_gradients):
+        assert np.allclose(call.args[0], expected * np.ones(n_params))
+
+
+def test_def_stormpg_trajectory_budget_counts_all_training_batches(env, policy, n_params, mocker):
+    generate_batch = mocker.patch(
+        "potion.algorithms.defpg.generate_batch",
+        side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
+    )
+    defensive_batch = mocker.patch(
+        "potion.algorithms.defpg._generate_defensive_batch",
+        side_effect=lambda env, policy, previous_params, defensive_parameter,
+        n_episodes, horizon, discount, rng, n_jobs: [None] * n_episodes,
+    )
+    mocker.patch(
+        "potion.algorithms.defpg._trajectory_log_probabilities",
+        side_effect=lambda batch, policy: np.zeros(len(batch)),
+    )
+    estimator = mocker.patch("potion.algorithms.defpg.gpomdp_estimator")
+    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
+        np.zeros((len(batch), n_params))
+        if kwargs.get("average") is False else np.zeros(n_params)
+    )
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    def_stormpg(env, policy,
+                batch_size=7,
+                mini_batch_size=2,
+                max_iterations=None,
+                max_trajectories=10,
+                step_size=adaptive_step,
+                logger=SilentLogger(),
+                verbose=False)
+
+    assert generate_batch.call_args.args[2] == 7
+    assert [call.args[4] for call in defensive_batch.call_args_list] == [2, 2]
+    assert adaptive_step.call_count == 3
+
+
+def test_def_stormpg_rejects_missing_stopping_criterion(env, policy):
+    with pytest.raises(ValueError):
+        def_stormpg(env, policy,
+                    max_iterations=None,
+                    max_trajectories=None,
+                    logger=SilentLogger(),
+                    verbose=False)
