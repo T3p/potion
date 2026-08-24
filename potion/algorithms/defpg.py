@@ -1,6 +1,6 @@
 from potion.simulation.trajectory_generators import generate_batch, unpack, apply_mask
 from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
-from potion.evaluation.loggers import EpisodicPerformanceLogger
+from potion.evaluation.loggers import EpisodicOnlineLogger
 import numpy as np
 import warnings
 
@@ -74,14 +74,17 @@ def def_svrpg(env, policy, *,
               mini_batch_size=22,
               epoch_length=10,
               max_iterations=1000,
+              max_trajectories=None,
               defensive_parameter=0.5,
               estimator='gpomdp',
               baseline='average',
               seed=None,
-              logger=EpisodicPerformanceLogger(),
+              logger=EpisodicOnlineLogger(),
               n_jobs=1,
               verbose=True):
-    """Defensive-importance-sampling variant of SVRPG."""
+    """Run defensive SVRPG until an iteration or trajectory limit is met."""
+    if max_iterations is None and max_trajectories is None:
+        raise ValueError("max_iterations and max_trajectories cannot both be None")
     if not 0. < defensive_parameter < 1.:
         raise ValueError("defensive parameter should be strictly between zero and one")
 
@@ -106,9 +109,12 @@ def def_svrpg(env, policy, *,
 
     # Learning loop
     it = 1
-    while it <= max_iterations:
+    total_trajectories = 0
+    while ((max_iterations is None or it <= max_iterations)
+           and (max_trajectories is None or total_trajectories < max_trajectories)):
         if verbose:
-            print("\nIteration {} of {} running...".format(it, max_iterations))
+            iteration = "{} of {}".format(it, max_iterations) if max_iterations is not None else str(it)
+            print("\nIteration {} running...".format(iteration))
 
         snapshot_params = policy.parameters.copy()
 
@@ -118,11 +124,13 @@ def def_svrpg(env, policy, *,
                                         discount=discount,
                                         parallel=(n_jobs > 1),
                                         n_jobs=n_jobs)
+        total_trajectories += len(snapshot_batch)
         logger.submit(snapshot_batch, policy)
         snapshot_gradient = gradient_estimator(snapshot_batch, estimator_discount, policy, baseline)
 
         epoch = 1
-        while epoch <= epoch_length:
+        while (epoch <= epoch_length
+               and (max_trajectories is None or total_trajectories < max_trajectories)):
             if verbose:
                 print("Epoch {} of {} running...".format(epoch, epoch_length))
 
@@ -132,6 +140,7 @@ def def_svrpg(env, policy, *,
                 env, policy, snapshot_params, defensive_parameter,
                 mini_batch_size, horizon, discount, rng, n_jobs
             )
+            total_trajectories += len(batch)
             logger.submit(batch, policy)
 
             # Evaluate each trajectory under both policies. The component that
@@ -172,7 +181,6 @@ def def_svrpg(env, policy, *,
             policy.set_params(new_params)
 
             if verbose:
-                print("GRADIENT = ", gradient)
                 print("Epoch {} of {} completed!".format(epoch, epoch_length))
                 print("Gradient norm = {}".format(np.linalg.norm(gradient)))
                 print("Parameter delta norm = {}".format(np.linalg.norm(delta)))
@@ -180,7 +188,7 @@ def def_svrpg(env, policy, *,
             epoch += 1
 
         if verbose:
-            print("Iteration {} of {} completed!".format(it, max_iterations))
+            print("Iteration {} completed!".format(iteration))
         # Next iteration
         it += 1
 

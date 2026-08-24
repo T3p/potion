@@ -8,6 +8,9 @@ from potion.simulation.trajectory_generators import (generate_trajectory,
                                                      estimate_average_return)
 import numpy as np
 import pytest
+import gymnasium as gym
+
+from potion.policies.softmax_policies import LinearSoftmaxPolicy
 
 def test_generate_trajectory_shapes(env, policy, max_trajectory_len, seed, state_d, action_d):
     traj = generate_trajectory(env, policy, max_trajectory_len, seed)
@@ -27,6 +30,25 @@ def test_generate_trajectory_shapes(env, policy, max_trajectory_len, seed, state
     ])
     assert np.allclose(logps[alive], expected_logps[alive])
     assert np.allclose(logps[~alive], 0.)
+
+
+def test_generate_trajectory_preserves_discrete_action_dtype(seed):
+    class DiscreteEnv(gym.Env):
+        observation_space = gym.spaces.Box(low=-1., high=1., shape=(2,), dtype=float)
+        action_space = gym.spaces.Discrete(2)
+
+        def reset(self, seed=None, options=None):
+            return np.zeros(2), {}
+
+        def step(self, action):
+            assert self.action_space.contains(action)
+            return np.zeros(2), 1., True, False, {}
+
+    policy = LinearSoftmaxPolicy(state_dim=2, num_actions=2)
+
+    _, actions, _, _, _ = generate_trajectory(DiscreteEnv(), policy, 2, seed)
+
+    assert np.issubdtype(actions.dtype, np.integer)
 
 
 def test_generate_trajectory_1d(env_1d, policy_1d, max_trajectory_len, seed):
@@ -65,6 +87,9 @@ def test_blackbox_simulate_episode(env, policy, max_trajectory_len, seed, discou
     assert np.isclose(ret, -(1-discount**horizon) / (1-discount))
 
 
+@pytest.mark.filterwarnings(
+    "ignore:This process .* is multi-threaded.*:DeprecationWarning:joblib.*"
+)
 def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len, rng, n_jobs, state_d, action_d):
     # Clone rng for "what if" scenario (just deepcopying the rng does not work!)
     seed_clone = rng.bit_generator.seed_seq.entropy

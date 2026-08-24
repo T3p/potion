@@ -1,6 +1,6 @@
 from potion.simulation.trajectory_generators import generate_batch
 from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
-from potion.evaluation.loggers import EpisodicPerformanceLogger
+from potion.evaluation.loggers import EpisodicOnlineLogger
 import numpy as np
 import warnings
 
@@ -11,12 +11,17 @@ def reinforce(env, policy, *,
               step_size=1e-4,
               batch_size=100,
               max_iterations=1000,
+              max_trajectories=None,
               estimator='gpomdp',
               baseline='average',
               seed=None,
-              logger=EpisodicPerformanceLogger(),
+              logger=EpisodicOnlineLogger(),
               n_jobs=1,
               verbose=True):
+    """Run policy-gradient training until an iteration or trajectory limit is met."""
+    if max_iterations is None and max_trajectories is None:
+        raise ValueError("max_iterations and max_trajectories cannot both be None")
+
     rng = np.random.default_rng(seed)
 
     if verbose:
@@ -27,15 +32,19 @@ def reinforce(env, policy, *,
 
     # Learning loop
     it = 1
-    while it <= max_iterations:
+    total_trajectories = 0
+    while ((max_iterations is None or it <= max_iterations)
+           and (max_trajectories is None or total_trajectories < max_trajectories)):
         if verbose:
-            print("\nIteration {} of {} running...".format(it, max_iterations))
+            iteration = "{} of {}".format(it, max_iterations) if max_iterations is not None else str(it)
+            print("\nIteration {} running...".format(iteration))
         # Collect trajectories
         batch = generate_batch(env, policy, batch_size, horizon,
                                rng=rng,
                                discount=discount,
                                parallel=(n_jobs > 1),
                                n_jobs=n_jobs)
+        total_trajectories += len(batch)
         # Log
         logger.submit(batch, policy)
 
@@ -62,8 +71,7 @@ def reinforce(env, policy, *,
         policy.set_params(new_params)
 
         if verbose:
-            print("GRADIENT = ", gradient)
-            print("Iteration {} of {} completed!".format(it, max_iterations))
+            print("Iteration {} completed!".format(iteration))
             print("Gradient norm = {}".format(np.linalg.norm(gradient)))
             print("Parameter delta norm = {}".format(np.linalg.norm(delta)))
         # Next iteration

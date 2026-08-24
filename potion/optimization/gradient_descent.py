@@ -13,9 +13,8 @@ class Adam:
 
     def __call__(self, grad):
         self._t += 1
-        self.m = self._beta_1 * self._m + (1 - self._beta_1) * grad
-        self.v = self._beta_2 * self._v + (1 - self._beta_2) * grad**2
-        m_hat = self.m / (1 - self._beta_1**self._t)
-        v_hat = self.v / (1 - self._beta_2**self._t)
+        self._m = self._beta_1 * self._m + (1 - self._beta_1) * grad
+        self._v = self._beta_2 * self._v + (1 - self._beta_2) * grad**2
+        m_hat = self._m / (1 - self._beta_1**self._t)
+        v_hat = self._v / (1 - self._beta_2**self._t)
         return self._alpha * m_hat / (np.sqrt(v_hat) + self._eps)
-

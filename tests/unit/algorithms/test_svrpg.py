@@ -59,3 +59,38 @@ def test_svrpg_unknown_estimator_defaults_to_gpomdp(env, policy, mocker):
               verbose=False)
 
     assert estimator.call_count == 3
+
+
+def test_svrpg_trajectory_budget_counts_all_training_batches(env, policy, n_params, mocker):
+    generate_batch = mocker.patch(
+        "potion.algorithms.svrpg.generate_batch",
+        side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
+    )
+    estimator = mocker.patch("potion.algorithms.svrpg.gpomdp_estimator")
+    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
+        np.zeros((len(batch), n_params))
+        if kwargs.get("average") is False else np.zeros(n_params)
+    )
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    svrpg(env, policy,
+          batch_size=7,
+          mini_batch_size=2,
+          epoch_length=10,
+          max_iterations=None,
+          max_trajectories=10,
+          step_size=adaptive_step,
+          logger=SilentLogger(),
+          verbose=False)
+
+    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 2, 2]
+    assert adaptive_step.call_count == 2
+
+
+def test_svrpg_rejects_missing_stopping_criterion(env, policy):
+    with pytest.raises(ValueError):
+        svrpg(env, policy,
+              max_iterations=None,
+              max_trajectories=None,
+              logger=SilentLogger(),
+              verbose=False)

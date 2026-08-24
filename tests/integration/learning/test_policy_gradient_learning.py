@@ -2,7 +2,7 @@ from potion.algorithms import reinforce, svrpg, def_svrpg
 import gymnasium as gym
 import potion.envs
 from potion.policies.gaussian_policies import LinearGaussianPolicy
-from potion.evaluation.loggers import SilentLogger, EpisodicPerformanceLogger
+from potion.evaluation.loggers import SilentLogger, EpisodicOnlineLogger
 from potion.simulation.trajectory_generators import estimate_average_return
 import numpy as np
 from potion.optimization.gradient_descent import Adam
@@ -28,7 +28,7 @@ def test_policy_gradient_nonstationary():
               baseline="peters",
               max_iterations=100,
               seed=seed,
-              logger=EpisodicPerformanceLogger(path=None, log_every=100, log_params=True),
+              logger=EpisodicOnlineLogger(path=None, log_every=100, log_params=True),
               verbose=True)
 
     ret = estimate_average_return(env, policy,
@@ -70,7 +70,7 @@ def test_policy_gradient_continual():
               baseline="peters",
               max_iterations=100,
               seed=seed,
-              logger=EpisodicPerformanceLogger(path=None, log_every=100, log_params=True),
+              logger=EpisodicOnlineLogger(path=None, log_every=100, log_params=True),
               verbose=True)
 
     ret = estimate_average_return(env, policy,
@@ -111,7 +111,7 @@ def test_svrpg():
           baseline="peters",
           max_iterations=10,
           seed=seed,
-          logger=EpisodicPerformanceLogger(path=None, log_every=100, log_params=True),
+          logger=EpisodicOnlineLogger(path=None, log_every=100, log_params=True),
           verbose=True)
 
     ret = estimate_average_return(env, policy,
@@ -152,7 +152,7 @@ def test_def_svrpg():
               baseline="peters",
               max_iterations=10,
               seed=seed,
-              logger=EpisodicPerformanceLogger(path=None, log_every=100, log_params=True),
+              logger=EpisodicOnlineLogger(path=None, log_every=100, log_params=True),
               verbose=True)
 
     ret = estimate_average_return(env, policy,

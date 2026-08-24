@@ -28,11 +28,12 @@ def test_linear_softmax_policy_default(linear_softmax_policy, rng, state_d, num_
     entropy_grad = pol.entropy_grad(s_1)
 
     assert sd == state_d
+    assert pol.action_dim == 1
     assert na == num_actions
     assert np.allclose(pol.parameters, 0.)
     assert logits.shape == (num_actions,)
     assert np.allclose(logits, 0.)
-    assert action_1.shape == (1,) and np.issubdtype(action_1.dtype, np.integer) and 0 <= action_1 < num_actions
+    assert isinstance(action_1, int) and 0 <= action_1 < num_actions
     assert np.isscalar(temp) and np.isclose(temp, 1.)
     assert np.allclose(log_pdf_10, np.log(0.5))
     assert np.allclose(log_pdf_11, np.log(0.5))
@@ -94,6 +95,36 @@ def test_linear_softmax_policy(rng):
     assert np.allclose(entropy, - (np.exp(-4.) * (-4.) + np.exp(6.) * 6. + np.exp(0.5) * 0.5) / Z + np.log(Z))
     assert np.allclose(entropy_grad, - (np.exp(-4.) * (-4.) * score_0 + np.exp(6.) * 6. * score_1
                                         + np.exp(0.5) * 0.5 * score_2) / Z)
+
+
+def test_linear_softmax_policy_batched_outputs_match_individual_calls(rng):
+    pol = LinearSoftmaxPolicy(
+        2,
+        3,
+        params_init=np.array([[0., -1.], [2., 1.], [0.5, 0.]]),
+        temperature=0.5,
+    )
+    states = rng.normal(size=(2, 3, pol.state_dim))
+    actions = rng.integers(pol.num_actions, size=(2, 3, 1))
+
+    expected_probs = np.empty(states.shape[:-1] + (pol.num_actions,))
+    expected_log_probs = np.empty(states.shape[:-1])
+    expected_entropy = np.empty(states.shape[:-1])
+    expected_scores = np.empty(states.shape[:-1] + (pol.num_params,))
+    expected_entropy_grads = np.empty_like(expected_scores)
+    for index in np.ndindex(states.shape[:-1]):
+        expected_probs[index] = pol._probs(states[index])
+        expected_log_probs[index] = pol.log_prob(states[index], actions[index])
+        expected_entropy[index] = pol.entropy(states[index])
+        expected_scores[index] = pol.score(states[index], actions[index])
+        expected_entropy_grads[index] = pol.entropy_grad(states[index])
+
+    assert np.allclose(pol._probs(states), expected_probs)
+    assert np.allclose(np.sum(pol._probs(states), axis=-1), 1.)
+    assert np.allclose(pol.log_prob(states, actions), expected_log_probs)
+    assert np.allclose(pol.entropy(states), expected_entropy)
+    assert np.allclose(pol.score(states, actions), expected_scores)
+    assert np.allclose(pol.entropy_grad(states), expected_entropy_grads)
 
 
 def test_linear_softmax_policy_setters(linear_softmax_policy, state_d, num_actions):
@@ -234,7 +265,7 @@ def test_deep_softmax_policy_nn(state_d, num_actions, deep_softmax_policy, rng):
     score = pol.score(s, a)
     entropy_grad = pol.entropy_grad(s)
 
-    assert isinstance(played, np.ndarray) and played.shape == (1,)
+    assert isinstance(played, int) and 0 <= played < num_actions
 
     assert isinstance(score, np.ndarray) and score.shape == (pol.num_params,)
     assert not np.isnan(score).any()
@@ -243,6 +274,32 @@ def test_deep_softmax_policy_nn(state_d, num_actions, deep_softmax_policy, rng):
     assert isinstance(entropy_grad, np.ndarray) and entropy_grad.shape == (pol.num_params,)
     assert not np.isnan(entropy_grad).any()
     assert not np.allclose(entropy_grad, 0.)
+
+
+def test_deep_softmax_policy_batched_gradients(state_d, num_actions, deep_softmax_policy, rng):
+    pol = deep_softmax_policy
+    states = rng.normal(size=(2, 3, state_d))
+    actions = rng.integers(num_actions, size=(2, 3, 1))
+
+    scores = pol.score(states, actions)
+    log_probs = pol.log_prob(states, actions)
+    entropy_grads = pol.entropy_grad(states)
+
+    expected_log_probs = np.empty(states.shape[:-1])
+    expected_scores = np.empty_like(scores)
+    expected_entropy_grads = np.empty_like(entropy_grads)
+    for i in range(states.shape[0]):
+        for j in range(states.shape[1]):
+            expected_log_probs[i, j] = pol.log_prob(states[i, j], actions[i, j])
+            expected_scores[i, j] = pol.score(states[i, j], actions[i, j])
+            expected_entropy_grads[i, j] = pol.entropy_grad(states[i, j])
+
+    assert scores.shape == (2, 3, pol.num_params)
+    assert log_probs.shape == (2, 3)
+    assert entropy_grads.shape == (2, 3, pol.num_params)
+    assert np.allclose(log_probs, expected_log_probs, rtol=1e-5, atol=1e-6)
+    assert np.allclose(scores, expected_scores, rtol=1e-5, atol=1e-6)
+    assert np.allclose(entropy_grads, expected_entropy_grads, rtol=1e-5, atol=1e-6)
 
 
 def test_deep_softmax_policy_exceptions(state_d, num_actions, deep_softmax_policy):

@@ -64,3 +64,48 @@ def test_def_svrpg_gradient_correction(env, policy, n_params, mocker):
     assert defensive_batch.call_args.args[3] == 0.5
     assert estimator.call_count == 3
     assert np.allclose(adaptive_step.call_args.args[0], 2. * np.ones(n_params))
+
+
+def test_def_svrpg_trajectory_budget_counts_all_training_batches(env, policy, n_params, mocker):
+    generate_batch = mocker.patch(
+        "potion.algorithms.defpg.generate_batch",
+        side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
+    )
+    defensive_batch = mocker.patch(
+        "potion.algorithms.defpg._generate_defensive_batch",
+        side_effect=lambda env, policy, snapshot_params, defensive_parameter,
+        n_episodes, horizon, discount, rng, n_jobs: [None] * n_episodes,
+    )
+    mocker.patch(
+        "potion.algorithms.defpg._trajectory_log_probabilities",
+        side_effect=lambda batch, policy: np.zeros(len(batch)),
+    )
+    estimator = mocker.patch("potion.algorithms.defpg.gpomdp_estimator")
+    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
+        np.zeros((len(batch), n_params))
+        if kwargs.get("average") is False else np.zeros(n_params)
+    )
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    def_svrpg(env, policy,
+              batch_size=7,
+              mini_batch_size=2,
+              epoch_length=10,
+              max_iterations=None,
+              max_trajectories=10,
+              step_size=adaptive_step,
+              logger=SilentLogger(),
+              verbose=False)
+
+    assert generate_batch.call_args.args[2] == 7
+    assert [call.args[4] for call in defensive_batch.call_args_list] == [2, 2]
+    assert adaptive_step.call_count == 2
+
+
+def test_def_svrpg_rejects_missing_stopping_criterion(env, policy):
+    with pytest.raises(ValueError):
+        def_svrpg(env, policy,
+                  max_iterations=None,
+                  max_trajectories=None,
+                  logger=SilentLogger(),
+                  verbose=False)

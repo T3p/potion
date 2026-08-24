@@ -11,7 +11,7 @@ def generate_trajectory(env, policy, max_trajectory_len, seed):
 
     # Prepare storage
     states = np.zeros((max_trajectory_len, ds), dtype=float)
-    actions = np.zeros((max_trajectory_len, da), dtype=float)
+    actions = np.zeros((max_trajectory_len, da), dtype=env.action_space.dtype)
     rewards = np.zeros(max_trajectory_len, dtype=float)
     alive = np.full(max_trajectory_len, False)
     logps = np.zeros(max_trajectory_len, dtype=float)
@@ -155,7 +155,7 @@ def simulate_infinite_trajectory(env, policy, discount, seed, max_trajectory_len
 
     # Prepare storage
     states = np.zeros((max_trajectory_len, ds), dtype=float)
-    actions = np.zeros((max_trajectory_len, da), dtype=float)
+    actions = np.zeros((max_trajectory_len, da), dtype=env.action_space.dtype)
     rewards = np.zeros(max_trajectory_len, dtype=float)
     alive = np.full(max_trajectory_len, False)
     logps = np.zeros(max_trajectory_len, dtype=float)

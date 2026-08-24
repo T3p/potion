@@ -74,7 +74,8 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True, 
     n_k[n_k == 0] = 1
 
     if baseline == 'average':
-        baseline = (np.sum(disc_rewards, axis=0, keepdims=True) / n_k)[..., None]  # NxHx1
+        #baseline = (np.sum(disc_rewards, axis=0, keepdims=True) / n_k)[..., None]  # NxHx1
+        baseline = np.average(disc_rewards, axis=0, keepdims=True)[..., None]   # NxHx1
     elif baseline == 'peters':
         denominator = np.sum(cum_scores ** 2, axis=0, keepdims=True)
         denominator[np.isclose(denominator, 0)] = 1.
