@@ -84,8 +84,8 @@ def test_reinforce_estimator_values(small_policy, small_batch):
     grad_3 = reinforce_estimator(batch, 0.9, pol, baseline="peters")
 
     g1 = -0.54
-    g2 = -0.3675
-    g3 = -0.25344827586206903
+    g2 = -0.735
+    g3 = -0.735
 
     assert np.allclose(grad_1, [g1, 2. * g1])
     assert np.allclose(grad_2, [g2, 2. * g2])
@@ -102,8 +102,8 @@ def test_gpomdp_estimator_values(small_policy, small_batch):
     grad_3 = gpomdp_estimator(batch, 0.9, pol, baseline="peters")
 
     g1 = 2.21
-    g2 = 1.1325
-    g3 = 0.6453179373615945
+    g2 = 2.265
+    g3 = 2.265
 
     assert np.allclose(grad_1, [g1, 2. * g1])
     assert np.allclose(grad_2, [g2, 2. * g2])
@@ -234,3 +234,141 @@ def test_nonstationary_off_policy_weights_staged_policy():
     )
 
     assert np.allclose(off_policy_samples, weights[..., None] * on_policy_samples)
+
+
+class _BernoulliPolicy:
+    state_dim = 1
+    action_dim = 1
+
+    def __init__(self, probability):
+        self.probability = probability
+
+    def score(self, states, actions):
+        return actions - self.probability
+
+    def log_prob(self, states, actions, t=None):
+        actions = np.asarray(actions)[..., 0]
+        return np.where(
+            actions == 1.,
+            np.log(self.probability),
+            np.log1p(-self.probability),
+        )
+
+
+def _one_step_batch(actions, rewards=None):
+    actions = np.asarray(actions, dtype=float)
+    if rewards is None:
+        rewards = actions
+    return [
+        (
+            np.zeros((1, 1)),
+            np.array([[action]]),
+            np.array([reward], dtype=float),
+            np.ones(1, dtype=bool),
+            np.zeros(1),
+        )
+        for action, reward in zip(actions, rewards)
+    ]
+
+
+def test_leave_one_out_baseline_has_unscaled_monte_carlo_expectation():
+    probability = 0.3
+    expected_gradient = probability * (1. - probability)
+    policy = _BernoulliPolicy(probability)
+    rng = np.random.default_rng(2025)
+    estimates = {}
+
+    for batch_size in (5, 100):
+        zero_estimates = []
+        loo_estimates = []
+        for _ in range(1500):
+            actions = rng.binomial(1, probability, size=batch_size)
+            batch = _one_step_batch(actions)
+            zero_estimates.append(
+                gpomdp_estimator(batch, 1., policy, baseline="zero")[0]
+            )
+            loo_estimates.append(
+                gpomdp_estimator(batch, 1., policy, baseline="average")[0]
+            )
+        estimates[batch_size] = np.asarray(loo_estimates)
+        assert np.mean(zero_estimates) == pytest.approx(expected_gradient, abs=0.025)
+        assert np.mean(loo_estimates) == pytest.approx(expected_gradient, abs=0.025)
+
+    assert np.var(estimates[100]) < np.var(estimates[5])
+    assert np.mean(estimates[5]) != pytest.approx(
+        (1. - 1. / 5.) * expected_gradient, abs=0.02
+    )
+
+
+@pytest.mark.parametrize(
+    "estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator)
+)
+@pytest.mark.parametrize("baseline", ("average", "peters"))
+def test_one_trajectory_sample_baseline_falls_back_to_zero(estimator, baseline):
+    policy = _BernoulliPolicy(0.3)
+    batch = _one_step_batch([1])
+
+    sample_baseline = estimator(batch, 1., policy, baseline=baseline)
+    zero = estimator(batch, 1., policy, baseline="zero")
+
+    assert np.array_equal(sample_baseline, zero)
+
+
+def test_action_independent_constant_reward_has_zero_mean_gradient():
+    policy = _BernoulliPolicy(0.4)
+    rng = np.random.default_rng(17)
+    zero_estimates = []
+    loo_estimates = []
+    for _ in range(500):
+        actions = rng.binomial(1, policy.probability, size=20)
+        batch = _one_step_batch(actions, np.ones(20))
+        zero_estimates.append(
+            gpomdp_estimator(batch, 1., policy, baseline="zero")[0]
+        )
+        loo_estimates.append(
+            gpomdp_estimator(
+                batch,
+                1.,
+                policy,
+                baseline="average",
+            )[0]
+        )
+
+    assert np.mean(zero_estimates) == pytest.approx(0., abs=0.03)
+    assert np.mean(loo_estimates) == pytest.approx(0., abs=1e-14)
+
+
+def test_gpomdp_leave_one_out_baseline_handles_variable_horizons():
+    class StateScorePolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            return states
+
+    policy = StateScorePolicy()
+    batch = [
+        (
+            np.array([[-0.3], [0.5]]),
+            np.ones((2, 1)),
+            np.array([1., 2.]),
+            np.array([True, True]),
+            np.zeros(2),
+        ),
+        (
+            np.array([[1.], [999.]]),
+            np.ones((2, 1)),
+            np.array([4., 999.]),
+            np.array([True, False]),
+            np.zeros(2),
+        ),
+    ]
+
+    samples = gpomdp_estimator(
+        batch, 1., policy, baseline="average", average=False
+    )
+
+    # At t=0 each trajectory uses the other's return-to-go. At t=1 the
+    # longer trajectory has no peer and therefore uses the zero fallback.
+    expected = np.array([[-0.3 * (3. - 4.) + 0.5 * 2.], [1. * (4. - 3.)]])
+    assert np.allclose(samples, expected)

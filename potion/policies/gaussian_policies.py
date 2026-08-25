@@ -2,14 +2,36 @@ import numpy as np
 from abc import abstractmethod
 import torch
 from torch import nn
+from torch.func import functional_call, grad, vmap
 from torch.nn.utils import parameters_to_vector, vector_to_parameters
 from potion.policies import ParametricStochasticPolicy
 
 
+_SQUASH_QUADRATURE_NODES, _SQUASH_QUADRATURE_WEIGHTS = (
+    np.polynomial.hermite.hermgauss(32)
+)
+_SQUASH_QUADRATURE_NOISE = np.sqrt(2.) * _SQUASH_QUADRATURE_NODES
+_SQUASH_QUADRATURE_WEIGHTS = _SQUASH_QUADRATURE_WEIGHTS / np.sqrt(np.pi)
+
+
 class GaussianPolicy(ParametricStochasticPolicy):
-    def __init__(self, state_dim, action_dim, std_init=None, learn_std=False):
+    def __init__(self, state_dim, action_dim, std_init=None, learn_std=False,
+                 squash_actions=False, action_low=None, action_high=None):
         super().__init__(state_dim, action_dim)
         self._learn_std = learn_std
+        self._squash_actions = bool(squash_actions)
+        self._action_low = None
+        self._action_high = None
+        self._action_midpoint = None
+        self._action_scale = None
+
+        if self._squash_actions:
+            self._action_low = self._validate_action_bound(action_low, "action_low")
+            self._action_high = self._validate_action_bound(action_high, "action_high")
+            if not np.all(self._action_low < self._action_high):
+                raise ValueError("action_low must be strictly less than action_high")
+            self._action_midpoint = (self._action_low + self._action_high) / 2.
+            self._action_scale = (self._action_high - self._action_low) / 2.
 
         # Log of standard deviation
         if std_init is not None:
@@ -30,6 +52,25 @@ class GaussianPolicy(ParametricStochasticPolicy):
         else:
             self._n_std_params = len(self._std_params)
 
+    @classmethod
+    def make(cls, env, **kwargs):
+        if kwargs.get("squash_actions", False):
+            kwargs.setdefault("action_low", env.action_space.low)
+            kwargs.setdefault("action_high", env.action_space.high)
+        return super().make(env, **kwargs)
+
+    def _validate_action_bound(self, bound, name):
+        if bound is None:
+            raise ValueError("{} is required when squash_actions=True".format(name))
+        value = np.asarray(bound, dtype=float)
+        if value.ndim == 0:
+            value = np.full(self.action_dim, value.item())
+        if value.shape != (self.action_dim,):
+            raise ValueError("{} must have shape ({},)".format(name, self.action_dim))
+        if not np.isfinite(value).all():
+            raise ValueError("{} must contain only finite values".format(name))
+        return value
+
     def _check_action(self, a):
         if a.shape[-1] != self.action_dim:
             raise ValueError("Bad shape: expected %d-dimensional action(s)" % self.action_dim)
@@ -37,6 +78,18 @@ class GaussianPolicy(ParametricStochasticPolicy):
     @property
     def learn_std(self):
         return self._learn_std
+
+    @property
+    def squash_actions(self):
+        return self._squash_actions
+
+    @property
+    def action_low(self):
+        return None if self._action_low is None else self._action_low.copy()
+
+    @property
+    def action_high(self):
+        return None if self._action_high is None else self._action_high.copy()
 
     @property
     def parameters(self):
@@ -96,45 +149,115 @@ class GaussianPolicy(ParametricStochasticPolicy):
         self._std_params = np.log(std)
 
     def mean(self, s):
+        """Return the latent Gaussian mean, before optional action squashing."""
         self.check_state(s)
         return self._mean(s)
+
+    def _squash(self, latent_action):
+        return self._action_midpoint + self._action_scale * np.tanh(latent_action)
+
+    def _unsquash(self, action):
+        normalized = (action - self._action_midpoint) / self._action_scale
+        tolerance = 10. * np.finfo(float).eps
+        if np.any(normalized < -1. - tolerance) or np.any(normalized > 1. + tolerance):
+            raise ValueError("Squashed actions must lie within the action bounds")
+        open_unit = np.nextafter(1., 0.)
+        normalized = np.clip(normalized, -open_unit, open_unit)
+        latent_action = np.arctanh(normalized)
+        log_sech_squared = 2. * (
+            np.log(2.) - latent_action - np.logaddexp(0., -2. * latent_action)
+        )
+        log_abs_det = np.log(self._action_scale) + log_sech_squared
+        return latent_action, log_abs_det
 
     def act(self, s, rng, t=None):
         self.check_state(s)
         noise = rng.normal(size=self.action_dim)
-        return self.mean(s) + noise * self.std
+        latent_action = self.mean(s) + noise * self.std
+        if not self.squash_actions:
+            return latent_action
+        return self._squash(latent_action)
 
     def log_prob(self, s, a, t=None):
         self.check_state(s)
         self._check_action(a)
         self.check_matching(s, a)
-        log_p = -((a - self.mean(s)) ** 2) / (2 * self.std ** 2) - self._std_params - 0.5 * np.log(2 * np.pi)
+        if self.squash_actions:
+            latent_action, log_abs_det = self._unsquash(a)
+        else:
+            latent_action = a
+            log_abs_det = 0.
+        log_p = (-((latent_action - self.mean(s)) ** 2) / (2 * self.std ** 2)
+                 - self._std_params - 0.5 * np.log(2 * np.pi)
+                 - log_abs_det)
         return np.sum(log_p, -1)
 
     def score(self, s, a, t=None):
         self.check_state(s)
         self._check_action(a)
         self.check_matching(s, a)
+        latent_action = self._unsquash(a)[0] if self.squash_actions else a
         if self._learn_std:
-            return np.concatenate((self._mean_score(s, a), self._log_std_score(s, a)), axis=-1)
+            return np.concatenate((self._mean_score(s, latent_action),
+                                   self._log_std_score(s, latent_action)), axis=-1)
         else:
-            return self._mean_score(s, a)
+            return self._mean_score(s, latent_action)
 
     def entropy(self, s, t=None):
         self.check_state(s)
         ent = self._std_params + 0.5 * (1. + np.log(2 * np.pi)) * np.ones(self.action_dim)
+        if self.squash_actions:
+            mean = self.mean(s)
+            noise = _SQUASH_QUADRATURE_NOISE.reshape(
+                (1,) * len(s.shape[:-1]) + (-1, 1)
+            )
+            weights = _SQUASH_QUADRATURE_WEIGHTS.reshape(
+                (1,) * len(s.shape[:-1]) + (-1, 1)
+            )
+            latent_actions = mean[..., None, :] + self.std * noise
+            log_sech_squared = 2. * (
+                np.log(2.) - latent_actions - np.logaddexp(0., -2. * latent_actions)
+            )
+            expected_log_jacobian = np.sum(
+                weights * log_sech_squared,
+                axis=-2,
+            )
+            ent = ent + np.log(self._action_scale) + expected_log_jacobian
         return np.sum(ent, -1) * np.ones(s.shape[:-1])
 
     def entropy_grad(self, s, t=None):
         self.check_state(s)
-        if self._learn_std:
+        if not self.squash_actions:
+            mean_score = np.zeros(s.shape[:-1] + (self.num_mean_params,))
+            if not self._learn_std:
+                return mean_score
             std_score = np.ones(s.shape[:-1] + (self._action_dim,))
             if np.isscalar(self._std_params):
                 std_score = np.sum(std_score, -1, keepdims=True)
-            return np.concatenate((np.zeros(s.shape[:-1] + (self._state_dim * self._action_dim,)),
-                                   std_score), -1)
-        else:
-            return np.zeros(s.shape[:-1] + (self._state_dim * self._action_dim,))
+            return np.concatenate((mean_score, std_score), -1)
+
+        mean = self.mean(s)
+        noise = _SQUASH_QUADRATURE_NOISE.reshape(
+            (1,) * len(s.shape[:-1]) + (-1, 1)
+        )
+        weights = _SQUASH_QUADRATURE_WEIGHTS.reshape(
+            (1,) * len(s.shape[:-1]) + (-1, 1)
+        )
+        latent_actions = mean[..., None, :] + self.std * noise
+        tanh_actions = np.tanh(latent_actions)
+        entropy_mean_derivative = np.sum(weights * -2. * tanh_actions, axis=-2)
+        pseudo_action = mean + self.std ** 2 * entropy_mean_derivative
+        mean_score = self._mean_score(s, pseudo_action)
+        if not self._learn_std:
+            return mean_score
+
+        std_score = 1. + np.sum(
+            weights * -2. * tanh_actions * self.std * noise,
+            axis=-2,
+        )
+        if np.isscalar(self._std_params):
+            std_score = np.sum(std_score, axis=-1, keepdims=True)
+        return np.concatenate((mean_score, std_score), axis=-1)
 
     @property
     @abstractmethod
@@ -161,10 +284,13 @@ class GaussianPolicy(ParametricStochasticPolicy):
 
 
 class LinearGaussianPolicy(GaussianPolicy):
-    def __init__(self, state_dim, action_dim, mean_params_init=None, std_init=None, learn_std=False):
+    def __init__(self, state_dim, action_dim, mean_params_init=None, std_init=None,
+                 learn_std=False, squash_actions=False, action_low=None,
+                 action_high=None):
 
         # Mean
-        super().__init__(state_dim, action_dim, std_init, learn_std)
+        super().__init__(state_dim, action_dim, std_init, learn_std,
+                         squash_actions, action_low, action_high)
 
         if mean_params_init is not None:
             if np.isscalar(mean_params_init):
@@ -200,8 +326,11 @@ class LinearGaussianPolicy(GaussianPolicy):
 
 
 class DeepGaussianPolicy(GaussianPolicy):
-    def __init__(self, state_dim, action_dim, mean_network=None, std_init=None, learn_std=False):
-        super().__init__(state_dim, action_dim, std_init, learn_std)
+    def __init__(self, state_dim, action_dim, mean_network=None, std_init=None,
+                 learn_std=False, squash_actions=False, action_low=None,
+                 action_high=None):
+        super().__init__(state_dim, action_dim, std_init, learn_std,
+                         squash_actions, action_low, action_high)
 
         if mean_network is None:
             self._mean_network = nn.Linear(self._state_dim, self._action_dim, bias=False)
@@ -240,9 +369,23 @@ class DeepGaussianPolicy(GaussianPolicy):
                 return self._mean_network(s).numpy()
 
     def _mean_score(self, s, a):
-        s = torch.tensor(s, dtype=torch.float, requires_grad=False)
-        a = torch.tensor(a, dtype=torch.float, requires_grad=False)
+        leading_shape = s.shape[:-1]
+        states = torch.as_tensor(s, dtype=torch.float).reshape(-1, self.state_dim)
+        actions = torch.as_tensor(a, dtype=torch.float).reshape(-1, self.action_dim)
         std = torch.tensor(self.std, dtype=torch.float, requires_grad=False)
-        val = torch.sum(-((a - self._mean(s, requires_grad=True)) ** 2) / (2 * std ** 2), -1)
-        grad = torch.autograd.grad(val, self._mean_network.parameters())
-        return parameters_to_vector(grad).numpy()
+        params = dict(self._mean_network.named_parameters())
+
+        def log_prob(parameters, state, action):
+            mean = functional_call(self._mean_network, parameters, (state,))
+            return torch.sum(-((action - mean) ** 2) / (2 * std ** 2))
+
+        grads = vmap(grad(log_prob), in_dims=(None, 0, 0))(
+            params, states, actions
+        )
+        flat_grads = torch.cat(
+            [param_grad.reshape(len(states), -1) for param_grad in grads.values()],
+            dim=-1,
+        )
+        return flat_grads.reshape(
+            leading_shape + (self.num_mean_params,)
+        ).detach().numpy()

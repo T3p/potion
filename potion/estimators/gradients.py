@@ -3,6 +3,35 @@ from potion.simulation.trajectory_generators import unpack, apply_mask, apply_di
 import warnings
 
 
+def _leave_one_out_average(values, alive):
+    """Average ``values`` over the other active trajectories at each time."""
+    values = apply_mask(values, alive)
+    totals = np.sum(values, axis=0, keepdims=True)
+    counts = np.sum(alive, axis=0, keepdims=True)
+    denominators = counts - alive
+    return np.divide(
+        totals - values,
+        denominators,
+        out=np.zeros_like(values, dtype=float),
+        where=denominators > 0,
+    )
+
+
+def _leave_one_out_weighted_average(values, weights, alive):
+    """Peters-style baseline formed without each sample's own trajectory."""
+    masked_weights = apply_mask(weights, alive)
+    weighted_values = masked_weights * values[..., None]
+    weight_totals = np.sum(masked_weights, axis=0, keepdims=True)
+    value_totals = np.sum(weighted_values, axis=0, keepdims=True)
+    denominators = weight_totals - masked_weights
+    return np.divide(
+        value_totals - weighted_values,
+        denominators,
+        out=np.zeros_like(weighted_values, dtype=float),
+        where=~np.isclose(denominators, 0.),
+    )
+
+
 def _importance_weights(states, actions, alive, behavior_logps, policy):
     if behavior_logps.shape != alive.shape:
         raise ValueError("Bad shape: behavior log probabilities should match alive flags")
@@ -35,11 +64,15 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
     disc_rewards = apply_discount(rewards, discount)  # NxH
     returns = np.sum(disc_rewards, 1)  # N
 
+    trajectory_alive = np.ones((len(returns), 1), dtype=bool)
     if baseline == 'average':
-        baseline = np.mean(returns, 0, keepdims=True)[..., None]  # Nx1
+        baseline = _leave_one_out_average(
+            returns[..., None], trajectory_alive
+        )
     elif baseline == 'peters':
-        baseline = np.mean(cum_scores ** 2 * returns[..., None], 0) / np.mean(cum_scores ** 2, 0,
-                                                                              keepdims=True)  # Nxd
+        baseline = _leave_one_out_weighted_average(
+            returns[..., None], cum_scores[:, None, :] ** 2, trajectory_alive
+        )[:, 0, :]
     else:
         baseline = np.zeros((1, 1))  # 1x1
     baseline[baseline != baseline] = 0.  # replaces nan with zero
@@ -66,25 +99,22 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True, 
     if not actions.shape[-1] == policy.action_dim:
         raise ValueError("Bad shape: action dimension does not match that of given policy")
 
-    scores = policy.score(states, actions)  # NxHxd
-    cum_scores = np.cumsum(scores, 1)  # NxHxd
-    cum_scores = apply_mask(cum_scores, alive)
+    scores = apply_mask(policy.score(states, actions), alive)  # NxHxd
+    rewards = apply_mask(rewards, alive)
     disc_rewards = apply_discount(rewards, discount)  # NxH
-    n_k = np.sum(alive, axis=0, keepdims=True)  # NxH
-    n_k[n_k == 0] = 1
+    returns_to_go = np.cumsum(disc_rewards[:, ::-1], axis=1)[:, ::-1]
 
     if baseline == 'average':
-        #baseline = (np.sum(disc_rewards, axis=0, keepdims=True) / n_k)[..., None]  # NxHx1
-        baseline = np.average(disc_rewards, axis=0, keepdims=True)[..., None]   # NxHx1
+        baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
     elif baseline == 'peters':
-        denominator = np.sum(cum_scores ** 2, axis=0, keepdims=True)
-        denominator[np.isclose(denominator, 0)] = 1.
-        baseline = np.sum(cum_scores ** 2 * disc_rewards[..., None], axis=0, keepdims=True) / denominator  # NxHxd
+        baseline = _leave_one_out_weighted_average(
+            returns_to_go, scores ** 2, alive
+        )
     else:
         baseline = np.zeros((1, 1, 1))  # 1x1x1
-    values = disc_rewards[..., None] - baseline  # NxHxd or NxHx1
+    values = returns_to_go[..., None] - baseline  # NxHxd or NxHx1
 
-    grad_samples = np.sum(cum_scores * values, axis=1)  # Nxd
+    grad_samples = np.sum(scores * values, axis=1)  # Nxd
     if off_policy:
         weights = _importance_weights(states, actions, alive, logps, policy)
         grad_samples = weights[..., None] * grad_samples
@@ -112,11 +142,11 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
     returns_to_go = np.cumsum(disc_rewards[:, ::-1], 1)[:, ::-1]  # NxH
 
     if baseline == 'average':
-        baseline = np.mean(returns_to_go, 0, keepdims=True)[..., None]  # NxHx1
+        baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
     elif baseline == 'peters':
-        denominator = np.mean(scores ** 2, 0, keepdims=True)
-        denominator[np.isclose(denominator, 0)] = 1.
-        baseline = np.mean(scores ** 2 * returns_to_go[..., None], 0) / denominator  # NxHxd
+        baseline = _leave_one_out_weighted_average(
+            returns_to_go, scores ** 2, alive
+        )
     else:
         baseline = np.zeros((1, 1, 1))  # 1x1x1
     baseline[baseline != baseline] = 0.  # replaces nan with zero

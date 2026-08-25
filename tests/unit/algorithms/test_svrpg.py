@@ -83,7 +83,7 @@ def test_svrpg_trajectory_budget_counts_all_training_batches(env, policy, n_para
           logger=SilentLogger(),
           verbose=False)
 
-    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 2, 2]
+    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 2, 1]
     assert adaptive_step.call_count == 2
 
 

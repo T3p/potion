@@ -1,14 +1,18 @@
 import numpy as np
 import pytest
 
-from potion.algorithms import pagepg
+from potion.algorithms import pagepg, reinforce
 from potion.evaluation.loggers import SilentLogger
+from potion.policies.gaussian_policies import LinearGaussianPolicy
 
 
 def test_pagepg_recursive_gradient_and_default_probability(env, policy, n_params, mocker):
     rng = mocker.Mock()
     rng.random.return_value = 0.9
-    mocker.patch("potion.algorithms.pagepg.np.random.default_rng", return_value=rng)
+    mocker.patch(
+        "potion.algorithms.pagepg.initialize_run",
+        side_effect=lambda seed, logger: (rng, mocker.Mock(), logger),
+    )
     generate_batch = mocker.patch(
         "potion.algorithms.pagepg.generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
@@ -117,3 +121,34 @@ def test_pagepg_rejects_missing_stopping_criterion(env, policy):
                max_trajectories=None,
                logger=SilentLogger(),
                verbose=False)
+
+
+def test_pagepg_certain_refresh_matches_batch_gpomdp(env):
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    reinforce_policy = LinearGaussianPolicy(state_dim, action_dim)
+    page_policy = LinearGaussianPolicy(state_dim, action_dim)
+    arguments = {
+        "horizon": 3,
+        "discount": 0.9,
+        "step_size": 1e-3,
+        "batch_size": 5,
+        "max_iterations": None,
+        "max_trajectories": 15,
+        "estimator": "gpomdp",
+        "baseline": "zero",
+        "seed": 481,
+        "n_jobs": 1,
+        "verbose": False,
+    }
+
+    reinforce(env, reinforce_policy, logger=SilentLogger(), **arguments)
+    pagepg(
+        env,
+        page_policy,
+        refresh_probability=1.,
+        logger=SilentLogger(),
+        **arguments,
+    )
+
+    np.testing.assert_array_equal(page_policy.parameters, reinforce_policy.parameters)

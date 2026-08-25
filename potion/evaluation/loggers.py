@@ -38,6 +38,10 @@ class _EpisodicLogger(Logger):
         self.save_every = save_every
         self.path = path
         self.color = color
+        self._reset_run_state()
+
+    def _reset_run_state(self):
+        """Clear all state that belongs to one algorithm run."""
         self.tot_traj = 0
         self.buffer = []
         self.blank = True
@@ -115,7 +119,7 @@ class _EpisodicLogger(Logger):
 
 class EpisodicOnlineLogger(_EpisodicLogger):
     def __init__(self, log_every=1, save_every=1000, verbose=True,
-                 override_discount=False,
+                 override_discount=None,
                  log_params=False,
                  path="tmp_log.csv",
                  color="cyan"):
@@ -123,13 +127,16 @@ class EpisodicOnlineLogger(_EpisodicLogger):
         self.log_every = log_every
         self.verbose = verbose
         self.log_params = log_params
-        self.discount = override_discount
+        self.override_discount = override_discount
+        self.discount = None
         self.policy = None
 
     def initialize(self, env, policy, horizon, discount, rng):
+        self._reset_run_state()
         self.policy = policy
-        if not self.discount:
-            self.discount = discount
+        self.discount = (
+            discount if self.override_discount is None else self.override_discount
+        )
         if self.verbose:
             self._print(">> Episodic Online Logger ***")
             if self.log_params:
@@ -159,11 +166,12 @@ class EpisodicOnlineLogger(_EpisodicLogger):
 
 class EpisodicTestLogger(_EpisodicLogger):
     def __init__(self, log_every=1, save_every=1000, verbose=True,
-                 override_discount=False,
+                 override_discount=None,
                  log_params=False,
                  path="tmp_log.csv",
                  n_test=100,
-                 color="cyan"):
+                 color="cyan",
+                 keep_records=False):
         if not isinstance(n_test, (int, np.integer)) or n_test < 0:
             raise ValueError("n_test must be a non-negative integer")
         super().__init__(save_every, path, color)
@@ -171,17 +179,33 @@ class EpisodicTestLogger(_EpisodicLogger):
         self.verbose = verbose
         self.log_params = log_params
         self.n_test = int(n_test)
-        self.discount = override_discount
+        self.override_discount = override_discount
+        self.discount = None
         self.env = None
         self.horizon = None
         self.rng = None
+        self.keep_records = keep_records
+        self.records = []
+
+    def _append_return_record(self, tot_trajectories, ret, normalized_auc):
+        record = {
+            "tot_trajectories": tot_trajectories,
+            "return": ret,
+            "normalized_auc": normalized_auc,
+        }
+        if self.keep_records:
+            self.records.append(record.copy())
+        self.buffer.append(record)
 
     def initialize(self, env, policy, horizon, discount, rng):
+        self._reset_run_state()
+        self.records = []
         self.env = env
         self.horizon = horizon
         self.rng = rng
-        if not self.discount:
-            self.discount = discount
+        self.discount = (
+            discount if self.override_discount is None else self.override_discount
+        )
 
         if self.verbose:
             self._print(">> Episodic Test Logger ***")
@@ -201,19 +225,16 @@ class EpisodicTestLogger(_EpisodicLogger):
         previous_tot_traj = self.tot_traj
         for _ in trajectories:
             self.tot_traj += 1
-
-        crossed_log_interval = (self.tot_traj // self.log_every
-                                > previous_tot_traj // self.log_every)
-        if crossed_log_interval and self.n_test > 0:
-            ret = self._evaluate_policy(policy)
-            normalized_auc = self._record_return(self.tot_traj, ret)
-            if self.verbose:
-                self._print(">> Episodic Test Logger")
-                self._print(">> Policy after {} online trajectories obtained average return {} "
-                            "over {} test trajectories".format(self.tot_traj, ret, self.n_test))
-                self._print(">> Normalized area under learning curve: {}".format(normalized_auc))
-                if self.log_params:
-                    self._print(">> Policy parameters: ", policy.parameters)
+            if self.tot_traj % self.log_every == 0 and self.n_test > 0:
+                ret = self._evaluate_policy(policy)
+                normalized_auc = self._record_return(self.tot_traj, ret)
+                if self.verbose:
+                    self._print(">> Episodic Test Logger")
+                    self._print(">> Policy after {} online trajectories obtained average return {} "
+                                "over {} test trajectories".format(self.tot_traj, ret, self.n_test))
+                    self._print(">> Normalized area under learning curve: {}".format(normalized_auc))
+                    if self.log_params:
+                        self._print(">> Policy parameters: ", policy.parameters)
 
         crossed_save_interval = (self.tot_traj // self.save_every
                                  > previous_tot_traj // self.save_every)

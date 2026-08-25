@@ -1,6 +1,13 @@
+"""Defensive policy-gradient algorithms.
+
+``defensive_parameter`` is the snapshot-policy mixture mass. In the paper's
+notation, alpha is the current-policy mass, so alpha equals
+``1 - defensive_parameter`` (and both are one half in the reproduction).
+"""
+
 from potion.simulation.trajectory_generators import generate_batch, unpack, apply_mask
 from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
-from potion.evaluation.loggers import EpisodicOnlineLogger
+from potion.algorithms._common import capped_batch_size, initialize_run
 import numpy as np
 import warnings
 
@@ -16,6 +23,11 @@ def _trajectory_log_probabilities(batch, policy):
 
 
 def _defensive_importance_weights(current_logps, snapshot_logps, defensive_parameter):
+    """Return component/mixture weights.
+
+    ``defensive_parameter`` is the snapshot-policy mixture mass; the paper's
+    alpha is the current-policy mass, i.e. ``alpha = 1 - defensive_parameter``.
+    """
     if not 0. <= defensive_parameter < 1.:
         raise ValueError(
             "defensive parameter should be greater than or equal to zero and less than one"
@@ -51,11 +63,13 @@ def _generate_defensive_batch(env, policy, snapshot_params, defensive_parameter,
     n_snapshot = np.count_nonzero(draw_snapshot)
     n_current = n_episodes - n_snapshot
 
-    # generate_batch derives episode seeds from its RNG's seed sequence. Use
-    # independent child seed sequences so the two components do not reuse seeds.
-    current_seed_seq, snapshot_seed_seq = rng.bit_generator.seed_seq.spawn(2)
-    current_rng = np.random.default_rng(current_seed_seq)
-    snapshot_rng = np.random.default_rng(snapshot_seed_seq)
+    # Draw component RNG seeds from the advancing training stream so repeated
+    # calls cannot reuse the same episode seeds.
+    current_seed, snapshot_seed = rng.integers(
+        0, np.iinfo(np.uint32).max, size=2, dtype=np.uint32
+    )
+    current_rng = np.random.default_rng(current_seed)
+    snapshot_rng = np.random.default_rng(snapshot_seed)
 
     batch = []
     if n_current:
@@ -93,7 +107,7 @@ def def_svrpg(env, policy, *,
               estimator='gpomdp',
               baseline='average',
               seed=None,
-              logger=EpisodicOnlineLogger(),
+              logger=None,
               n_jobs=1,
               verbose=True):
     """Run defensive SVRPG until an iteration or trajectory limit is met."""
@@ -104,13 +118,13 @@ def def_svrpg(env, policy, *,
             "defensive parameter should be greater than or equal to zero and less than one"
         )
 
-    rng = np.random.default_rng(seed)
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
 
     if verbose:
         print("\n*** DEF-SVRPG ***\n")
 
     # Initialize logger
-    logger.initialize(env, policy, horizon, discount, rng)
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
 
     if estimator not in ["reinforce", "gpomdp", "nonstationary"]:
         warnings.warn("Unknown gradient estimator: will default to gpomdp", UserWarning)
@@ -135,7 +149,10 @@ def def_svrpg(env, policy, *,
         snapshot_params = policy.parameters.copy()
 
         # Estimate the gradient at the snapshot policy using a large batch
-        snapshot_batch = generate_batch(env, policy, batch_size, horizon,
+        actual_batch_size = capped_batch_size(
+            batch_size, total_trajectories, max_trajectories
+        )
+        snapshot_batch = generate_batch(env, policy, actual_batch_size, horizon,
                                         rng=rng,
                                         discount=discount,
                                         parallel=(n_jobs > 1),
@@ -152,9 +169,12 @@ def def_svrpg(env, policy, *,
 
             # Collect trajectories from the trajectory-level mixture of the
             # current and snapshot policies.
+            actual_mini_batch_size = capped_batch_size(
+                mini_batch_size, total_trajectories, max_trajectories
+            )
             batch = _generate_defensive_batch(
                 env, policy, snapshot_params, defensive_parameter,
-                mini_batch_size, horizon, discount, rng, n_jobs
+                actual_mini_batch_size, horizon, discount, rng, n_jobs
             )
             total_trajectories += len(batch)
             logger.submit(batch, policy)
@@ -240,7 +260,7 @@ def def_srvrpg(env, policy, *,
                estimator='gpomdp',
                baseline='average',
                seed=None,
-               logger=EpisodicOnlineLogger(),
+               logger=None,
                n_jobs=1,
                verbose=True):
     """Run defensive SRVR-PG until an iteration or trajectory limit is met."""
@@ -251,13 +271,13 @@ def def_srvrpg(env, policy, *,
             "defensive parameter should be greater than or equal to zero and less than one"
         )
 
-    rng = np.random.default_rng(seed)
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
 
     if verbose:
         print("\n*** DEF-SRVR-PG ***\n")
 
     # Initialize logger
-    logger.initialize(env, policy, horizon, discount, rng)
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
 
     if estimator not in ["reinforce", "gpomdp", "nonstationary"]:
         warnings.warn("Unknown gradient estimator: will default to gpomdp", UserWarning)
@@ -280,7 +300,10 @@ def def_srvrpg(env, policy, *,
             print("\nIteration {} running...".format(iteration))
 
         # Start the epoch with an on-policy large-batch estimate and update.
-        batch = generate_batch(env, policy, batch_size, horizon,
+        actual_batch_size = capped_batch_size(
+            batch_size, total_trajectories, max_trajectories
+        )
+        batch = generate_batch(env, policy, actual_batch_size, horizon,
                                rng=rng,
                                discount=discount,
                                parallel=(n_jobs > 1),
@@ -311,9 +334,12 @@ def def_srvrpg(env, policy, *,
 
             # Sample from the trajectory-level mixture of the current and
             # preceding policies used by the recursive correction.
+            actual_mini_batch_size = capped_batch_size(
+                mini_batch_size, total_trajectories, max_trajectories
+            )
             batch = _generate_defensive_batch(
                 env, policy, previous_params, defensive_parameter,
-                mini_batch_size, horizon, discount, rng, n_jobs
+                actual_mini_batch_size, horizon, discount, rng, n_jobs
             )
             total_trajectories += len(batch)
             logger.submit(batch, policy)
@@ -389,7 +415,7 @@ def def_stormpg(env, policy, *,
                 estimator='gpomdp',
                 baseline='average',
                 seed=None,
-                logger=EpisodicOnlineLogger(),
+                logger=None,
                 n_jobs=1,
                 verbose=True):
     """Run defensive STORM-PG until an iteration or trajectory limit is met."""
@@ -402,13 +428,13 @@ def def_stormpg(env, policy, *,
             "defensive parameter should be greater than or equal to zero and less than one"
         )
 
-    rng = np.random.default_rng(seed)
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
 
     if verbose:
         print("\n*** DEF-STORM-PG ***\n")
 
     # Initialize logger
-    logger.initialize(env, policy, horizon, discount, rng)
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
 
     if ((max_iterations is not None and max_iterations < 1)
             or (max_trajectories is not None and max_trajectories < 1)):
@@ -427,7 +453,8 @@ def def_stormpg(env, policy, *,
     estimator_discount = discount if horizon is not None else 1.
 
     # Estimate the initial gradient using an on-policy large batch.
-    batch = generate_batch(env, policy, batch_size, horizon,
+    initial_batch_size = capped_batch_size(batch_size, 0, max_trajectories)
+    batch = generate_batch(env, policy, initial_batch_size, horizon,
                            rng=rng,
                            discount=discount,
                            parallel=(n_jobs > 1),
@@ -463,9 +490,12 @@ def def_stormpg(env, policy, *,
 
         # Sample from the trajectory-level mixture of the updated and
         # preceding policies used by the momentum correction.
+        actual_mini_batch_size = capped_batch_size(
+            mini_batch_size, total_trajectories, max_trajectories
+        )
         batch = _generate_defensive_batch(
             env, policy, previous_params, defensive_parameter,
-            mini_batch_size, horizon, discount, rng, n_jobs
+            actual_mini_batch_size, horizon, discount, rng, n_jobs
         )
         total_trajectories += len(batch)
         logger.submit(batch, policy)
@@ -523,7 +553,7 @@ def def_pagepg(env, policy, *,
                estimator='gpomdp',
                baseline='average',
                seed=None,
-               logger=EpisodicOnlineLogger(),
+               logger=None,
                n_jobs=1,
                verbose=True):
     """Run defensive PAGE-PG until an iteration or trajectory limit is met."""
@@ -536,13 +566,13 @@ def def_pagepg(env, policy, *,
             "defensive parameter should be greater than or equal to zero and less than one"
         )
 
-    rng = np.random.default_rng(seed)
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
 
     if verbose:
         print("\n*** DEF-PAGE-PG ***\n")
 
     # Initialize logger
-    logger.initialize(env, policy, horizon, discount, rng)
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
 
     if ((max_iterations is not None and max_iterations < 1)
             or (max_trajectories is not None and max_trajectories < 1)):
@@ -561,10 +591,7 @@ def def_pagepg(env, policy, *,
     estimator_discount = discount if horizon is not None else 1.
 
     # Estimate the initial gradient using an on-policy large batch.
-    initial_batch_size = (
-        batch_size if max_trajectories is None
-        else min(batch_size, max_trajectories)
-    )
+    initial_batch_size = capped_batch_size(batch_size, 0, max_trajectories)
     batch = generate_batch(env, policy, initial_batch_size, horizon,
                            rng=rng,
                            discount=discount,
@@ -599,11 +626,11 @@ def def_pagepg(env, policy, *,
                 or (max_trajectories is not None and total_trajectories >= max_trajectories)):
             break
 
-        if rng.random() < refresh_probability:
+        if (refresh_probability == 1.
+                or rng.random() < refresh_probability):
             # Large-batch refresh at the updated policy.
-            next_batch_size = (
-                batch_size if max_trajectories is None
-                else min(batch_size, max_trajectories - total_trajectories)
+            next_batch_size = capped_batch_size(
+                batch_size, total_trajectories, max_trajectories
             )
             batch = generate_batch(env, policy, next_batch_size, horizon,
                                    rng=rng,
@@ -616,9 +643,8 @@ def def_pagepg(env, policy, *,
         else:
             # Defensive recursive correction between the updated and
             # preceding policies.
-            next_batch_size = (
-                mini_batch_size if max_trajectories is None
-                else min(mini_batch_size, max_trajectories - total_trajectories)
+            next_batch_size = capped_batch_size(
+                mini_batch_size, total_trajectories, max_trajectories
             )
             batch = _generate_defensive_batch(
                 env, policy, previous_params, defensive_parameter,

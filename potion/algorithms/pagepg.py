@@ -1,6 +1,6 @@
 from potion.simulation.trajectory_generators import generate_batch
 from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
-from potion.evaluation.loggers import EpisodicOnlineLogger
+from potion.algorithms._common import capped_batch_size, initialize_run
 import numpy as np
 import warnings
 
@@ -17,7 +17,7 @@ def pagepg(env, policy, *,
            estimator='gpomdp',
            baseline='average',
            seed=None,
-           logger=EpisodicOnlineLogger(),
+           logger=None,
            n_jobs=1,
            verbose=True):
     """Run PAGE-PG training until an iteration or trajectory limit is met."""
@@ -26,13 +26,13 @@ def pagepg(env, policy, *,
     if not 0. < refresh_probability <= 1.:
         raise ValueError("refresh probability should be greater than zero and at most one")
 
-    rng = np.random.default_rng(seed)
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
 
     if verbose:
         print("\n*** PAGE-PG ***\n")
 
     # Initialize logger
-    logger.initialize(env, policy, horizon, discount, rng)
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
 
     if ((max_iterations is not None and max_iterations < 1)
             or (max_trajectories is not None and max_trajectories < 1)):
@@ -51,10 +51,7 @@ def pagepg(env, policy, *,
     estimator_discount = discount if horizon is not None else 1.
 
     # Estimate the initial gradient using a large batch.
-    initial_batch_size = (
-        batch_size if max_trajectories is None
-        else min(batch_size, max_trajectories)
-    )
+    initial_batch_size = capped_batch_size(batch_size, 0, max_trajectories)
     batch = generate_batch(env, policy, initial_batch_size, horizon,
                            rng=rng,
                            discount=discount,
@@ -89,11 +86,11 @@ def pagepg(env, policy, *,
                 or (max_trajectories is not None and total_trajectories >= max_trajectories)):
             break
 
-        if rng.random() < refresh_probability:
+        if (refresh_probability == 1.
+                or rng.random() < refresh_probability):
             # Large-batch refresh at the updated policy.
-            next_batch_size = (
-                batch_size if max_trajectories is None
-                else min(batch_size, max_trajectories - total_trajectories)
+            next_batch_size = capped_batch_size(
+                batch_size, total_trajectories, max_trajectories
             )
             batch = generate_batch(env, policy, next_batch_size, horizon,
                                    rng=rng,
@@ -105,9 +102,8 @@ def pagepg(env, policy, *,
             gradient = gradient_estimator(batch, estimator_discount, policy, baseline)
         else:
             # Recursive correction between the updated and preceding policies.
-            next_batch_size = (
-                mini_batch_size if max_trajectories is None
-                else min(mini_batch_size, max_trajectories - total_trajectories)
+            next_batch_size = capped_batch_size(
+                mini_batch_size, total_trajectories, max_trajectories
             )
             batch = generate_batch(env, policy, next_batch_size, horizon,
                                    rng=rng,

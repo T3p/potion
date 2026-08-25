@@ -19,8 +19,8 @@ TEMPERATURE = 1.0
 INITIALIZATION = "xavier_uniform"
 
 ESTIMATOR = "gpomdp"
-BASELINE = "average"
-DISCOUNT = 0.995
+BASELINE = "zero"
+DISCOUNT = 0.9999
 BATCH_SIZE = 100
 LEARNING_RATE = 1e-3
 OPTIMIZER = "constant"
@@ -85,6 +85,7 @@ def main():
         n_test=N_TEST,
         verbose=LOGGER_VERBOSE,
         log_params=LOG_PARAMETERS,
+        override_discount=1.0,
         path=None,
     )
 

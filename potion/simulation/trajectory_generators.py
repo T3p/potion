@@ -4,6 +4,16 @@ from collections.abc import Sequence
 import scipy.stats as sts
 
 
+def _generate_episode_seeds(rng, n_episodes):
+    """Draw advancing, reproducible uint32 seeds from ``rng``."""
+    return rng.integers(
+        0,
+        np.iinfo(np.uint32).max,
+        size=n_episodes,
+        dtype=np.uint32,
+    )
+
+
 def generate_trajectory(env, policy, max_trajectory_len, seed):
     # Infer state and action dimensions from the environment
     ds = max(1, sum(env.observation_space.shape))
@@ -90,7 +100,7 @@ def generate_batch(env, policy, n_episodes, max_trajectory_len, rng, discount=No
         return generate_batch_continual(env, policy, n_episodes, discount, rng, max_trajectory_len, parallel, n_jobs)
 
     # Generate independent seeds for the different episodes
-    seeds = rng.bit_generator.seed_seq.generate_state(n_episodes)
+    seeds = _generate_episode_seeds(rng, n_episodes)
 
     if not parallel:
         batch = [generate_trajectory(env, policy, max_trajectory_len, s) for s in seeds]
@@ -107,7 +117,7 @@ def blackbox_simulate_batch(env, policy, n_episodes, max_trajectory_len, rng, di
         return blackbox_simulate_batch_continual(env, policy, n_episodes, discount, rng, parallel, n_jobs)
 
     # Generate independent seeds for the different episodes
-    seeds = rng.bit_generator.seed_seq.generate_state(n_episodes)
+    seeds = _generate_episode_seeds(rng, n_episodes)
 
     if not parallel:
         batch = [blackbox_simulate_episode(env, policy, max_trajectory_len, s, discount) for s in seeds]
@@ -200,14 +210,14 @@ def simulate_infinite_trajectory(env, policy, discount, seed, max_trajectory_len
 def generate_batch_continual(env, policy, n_episodes, discount, rng, max_trajectory_len, parallel=False, n_jobs=4):
     # A batch is a list of trajectories. Each trajectory contains states, actions, rewards, alive flags, and logps.
     # Generate independent seeds for the different episodes
-    seeds = rng.bit_generator.seed_seq.generate_state(n_episodes)
+    seeds = _generate_episode_seeds(rng, n_episodes)
 
     if not parallel:
         batch = [simulate_infinite_trajectory(env, policy, discount, s, max_trajectory_len) for s in seeds]
     else:
         # Joblib (with processes)
         batch = Parallel(backend="loky", n_jobs=n_jobs)(delayed(simulate_infinite_trajectory)
-                                                        (env, policy, max_trajectory_len, s)
+                                                        (env, policy, discount, s, max_trajectory_len)
                                                         for s in seeds)
     return batch
 
@@ -245,7 +255,7 @@ def blackbox_simulate_infinite_trajectory(env, policy, discount, seed, max_traje
 
 def blackbox_simulate_batch_continual(env, policy, n_episodes, discount, rng, parallel=False, n_jobs=2):
     # Generate independent seeds for the different episodes
-    seeds = rng.bit_generator.seed_seq.generate_state(n_episodes)
+    seeds = _generate_episode_seeds(rng, n_episodes)
 
     if not parallel:
         batch = [blackbox_simulate_infinite_trajectory(env, policy, discount, s) for s in seeds]

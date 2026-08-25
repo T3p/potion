@@ -2,6 +2,8 @@ from potion.simulation.trajectory_generators import (generate_trajectory,
                                                      blackbox_simulate_episode,
                                                      generate_batch,
                                                      blackbox_simulate_batch,
+                                                     generate_batch_continual,
+                                                     blackbox_simulate_batch_continual,
                                                      unpack,
                                                      apply_mask,
                                                      apply_discount,
@@ -129,6 +131,79 @@ def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len
     assert np.allclose(seq_states_2, par_states_2)
 
 
+def test_consecutive_batch_calls_draw_new_reproducible_episode_seeds(mocker):
+    generate = mocker.patch(
+        "potion.simulation.trajectory_generators.generate_trajectory",
+        side_effect=lambda env, policy, horizon, seed: int(seed),
+    )
+
+    rng = np.random.default_rng(314159)
+    first_hundred = generate_batch(None, None, 100, 1, rng)
+    following_five = generate_batch(None, None, 5, 1, rng)
+
+    replay_rng = np.random.default_rng(314159)
+    replay_hundred = generate_batch(None, None, 100, 1, replay_rng)
+    replay_five = generate_batch(None, None, 5, 1, replay_rng)
+
+    assert first_hundred != replay_five
+    assert following_five != first_hundred[:5]
+    assert replay_hundred == first_hundred
+    assert replay_five == following_five
+    assert generate.call_count == 210
+
+
+def test_blackbox_batch_variants_advance_their_rng(mocker):
+    finite = mocker.patch(
+        "potion.simulation.trajectory_generators.blackbox_simulate_episode",
+        side_effect=lambda env, policy, horizon, seed, discount: int(seed),
+    )
+    continual = mocker.patch(
+        "potion.simulation.trajectory_generators.blackbox_simulate_infinite_trajectory",
+        side_effect=lambda env, policy, discount, seed: int(seed),
+    )
+
+    finite_rng = np.random.default_rng(7)
+    assert blackbox_simulate_batch(None, None, 3, 5, finite_rng) != blackbox_simulate_batch(
+        None, None, 3, 5, finite_rng
+    )
+    continual_rng = np.random.default_rng(7)
+    assert blackbox_simulate_batch_continual(
+        None, None, 3, 0.9, continual_rng
+    ) != blackbox_simulate_batch_continual(None, None, 3, 0.9, continual_rng)
+    assert finite.call_count == 6
+    assert continual.call_count == 6
+
+
+@pytest.mark.filterwarnings(
+    "ignore:This process .* is multi-threaded.*:DeprecationWarning:joblib.*"
+)
+def test_generate_batch_continual_serial_and_parallel_shapes(
+        env, policy, discount, max_trajectory_len, n_jobs):
+    serial = generate_batch_continual(
+        env,
+        policy,
+        2,
+        discount,
+        np.random.default_rng(91),
+        max_trajectory_len,
+        parallel=False,
+    )
+    parallel = generate_batch_continual(
+        env,
+        policy,
+        2,
+        discount,
+        np.random.default_rng(91),
+        max_trajectory_len,
+        parallel=True,
+        n_jobs=n_jobs,
+    )
+
+    assert [tuple(value.shape for value in trajectory) for trajectory in serial] == [
+        tuple(value.shape for value in trajectory) for trajectory in parallel
+    ]
+
+
 def test_blackbox_simulate_batch(env_stochastic_reward, policy, n_episodes, max_trajectory_len, rng, discount, n_jobs,
                                  horizon):
     # Clone rng for "what if" scenario (just deepcopying the rng does not work!)
@@ -240,9 +315,11 @@ def test_apply_discount_exceptions():
 def test_estimate_average_return(env, env_stochastic_reward, policy, n_episodes, max_trajectory_len, rng, discount,
                                  n_jobs, horizon):
     ret = estimate_average_return(env, policy, n_episodes, max_trajectory_len, rng, discount)
-    ret_1 = estimate_average_return(env_stochastic_reward, policy, n_episodes, max_trajectory_len, rng, discount,
+    sequential_rng = np.random.default_rng(123)
+    parallel_rng = np.random.default_rng(123)
+    ret_1 = estimate_average_return(env_stochastic_reward, policy, n_episodes, max_trajectory_len, sequential_rng, discount,
                                     parallel=False)
-    ret_2 = estimate_average_return(env_stochastic_reward, policy, n_episodes, max_trajectory_len, rng, discount,
+    ret_2 = estimate_average_return(env_stochastic_reward, policy, n_episodes, max_trajectory_len, parallel_rng, discount,
                                     parallel=True)
 
     assert np.isclose(ret, - (1 - discount**horizon) / (1 - discount))

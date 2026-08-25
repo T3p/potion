@@ -85,7 +85,7 @@ def test_stormpg_trajectory_budget_counts_all_training_batches(env, policy, n_pa
             logger=SilentLogger(),
             verbose=False)
 
-    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 2, 2]
+    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 2, 1]
     assert adaptive_step.call_count == 3
 
 
@@ -96,3 +96,34 @@ def test_stormpg_rejects_missing_stopping_criterion(env, policy):
                 max_trajectories=None,
                 logger=SilentLogger(),
                 verbose=False)
+
+
+def test_stormpg_uses_one_minus_momentum_for_previous_estimator(
+        env, policy, n_params, mocker):
+    mocker.patch(
+        "potion.algorithms.stormpg.generate_batch",
+        side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
+    )
+    estimator = mocker.patch("potion.algorithms.stormpg.gpomdp_estimator")
+    estimator.side_effect = [
+        np.zeros(n_params),
+        np.zeros((2, n_params)),
+        np.ones((2, n_params)),
+    ]
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    stormpg(
+        env,
+        policy,
+        batch_size=7,
+        mini_batch_size=2,
+        momentum_parameter=0.99,
+        max_iterations=2,
+        step_size=adaptive_step,
+        logger=SilentLogger(),
+        verbose=False,
+    )
+
+    assert np.allclose(
+        adaptive_step.call_args_list[1].args[0], -0.01 * np.ones(n_params)
+    )

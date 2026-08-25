@@ -12,8 +12,10 @@ from potion.algorithms import (
     svrpg,
 )
 from potion.algorithms.defpg import _defensive_importance_weights
+from potion.estimators.gradients import gpomdp_estimator
 from potion.evaluation.loggers import SilentLogger
 from potion.policies.gaussian_policies import LinearGaussianPolicy
+from potion.simulation.trajectory_generators import generate_batch
 
 
 def test_defensive_importance_weights():
@@ -29,6 +31,66 @@ def test_defensive_importance_weights():
     assert np.allclose(snapshot_weights, np.exp(snapshot_logps) / mixture)
     assert np.all(current_weights <= 2.)
     assert np.all(snapshot_weights <= 2.)
+
+
+def test_defensive_importance_weighted_monte_carlo_identities():
+    rng = np.random.default_rng(991)
+    n_samples = 200_000
+    current_probability = 0.7
+    snapshot_probability = 0.2
+    defensive_parameter = 0.5
+    use_snapshot = rng.random(n_samples) < defensive_parameter
+    behavior_probability = np.where(
+        use_snapshot, snapshot_probability, current_probability
+    )
+    actions = rng.random(n_samples) < behavior_probability
+
+    current_logps = np.where(
+        actions,
+        np.log(current_probability),
+        np.log1p(-current_probability),
+    )
+    snapshot_logps = np.where(
+        actions,
+        np.log(snapshot_probability),
+        np.log1p(-snapshot_probability),
+    )
+    current_weights, snapshot_weights = _defensive_importance_weights(
+        current_logps, snapshot_logps, defensive_parameter
+    )
+    current_gradient_samples = (actions - current_probability) * actions
+    snapshot_gradient_samples = (actions - snapshot_probability) * actions
+
+    assert np.mean(current_weights * current_gradient_samples) == pytest.approx(
+        current_probability * (1. - current_probability), abs=0.003
+    )
+    assert np.mean(snapshot_weights * snapshot_gradient_samples) == pytest.approx(
+        snapshot_probability * (1. - snapshot_probability), abs=0.003
+    )
+
+
+def test_recursive_correction_is_zero_when_policy_parameters_coincide(env):
+    policy = LinearGaussianPolicy(
+        env.observation_space.shape[0], env.action_space.shape[0]
+    )
+    batch = generate_batch(
+        env, policy, n_episodes=7, max_trajectory_len=3,
+        rng=np.random.default_rng(123)
+    )
+
+    current_samples = gpomdp_estimator(
+        batch, 0.9, policy, baseline="average", average=False
+    )
+    previous_samples = gpomdp_estimator(
+        batch,
+        0.9,
+        policy,
+        baseline="average",
+        average=False,
+        off_policy=True,
+    )
+
+    assert np.allclose(current_samples - previous_samples, 0., atol=1e-14)
 
 
 @pytest.mark.parametrize("defensive_parameter", [1., -0.1, 1.1])
@@ -182,7 +244,7 @@ def test_def_svrpg_trajectory_budget_counts_all_training_batches(env, policy, n_
               verbose=False)
 
     assert generate_batch.call_args.args[2] == 7
-    assert [call.args[4] for call in defensive_batch.call_args_list] == [2, 2]
+    assert [call.args[4] for call in defensive_batch.call_args_list] == [2, 1]
     assert adaptive_step.call_count == 2
 
 
@@ -273,7 +335,7 @@ def test_def_srvrpg_trajectory_budget_counts_all_training_batches(env, policy, n
                verbose=False)
 
     assert generate_batch.call_args.args[2] == 7
-    assert [call.args[4] for call in defensive_batch.call_args_list] == [2, 2]
+    assert [call.args[4] for call in defensive_batch.call_args_list] == [2, 1]
     assert adaptive_step.call_count == 3
 
 
@@ -374,7 +436,7 @@ def test_def_stormpg_trajectory_budget_counts_all_training_batches(env, policy, 
                 verbose=False)
 
     assert generate_batch.call_args.args[2] == 7
-    assert [call.args[4] for call in defensive_batch.call_args_list] == [2, 2]
+    assert [call.args[4] for call in defensive_batch.call_args_list] == [2, 1]
     assert adaptive_step.call_count == 3
 
 
@@ -408,7 +470,10 @@ def test_def_pagepg_rejects_invalid_defensive_parameter(env, policy, defensive_p
 def test_def_pagepg_recursive_gradient_and_default_probability(env, policy, n_params, mocker):
     rng = mocker.Mock()
     rng.random.return_value = 0.9
-    mocker.patch("potion.algorithms.defpg.np.random.default_rng", return_value=rng)
+    mocker.patch(
+        "potion.algorithms.defpg.initialize_run",
+        side_effect=lambda seed, logger: (rng, mocker.Mock(), logger),
+    )
     generate_batch = mocker.patch(
         "potion.algorithms.defpg.generate_batch",
         return_value=[None] * 7,

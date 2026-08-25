@@ -1,6 +1,6 @@
 from potion.simulation.trajectory_generators import generate_batch
 from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
-from potion.evaluation.loggers import EpisodicOnlineLogger
+from potion.algorithms._common import capped_batch_size, initialize_run
 import numpy as np
 import warnings
 
@@ -15,20 +15,20 @@ def reinforce(env, policy, *,
               estimator='gpomdp',
               baseline='average',
               seed=None,
-              logger=EpisodicOnlineLogger(),
+              logger=None,
               n_jobs=1,
               verbose=True):
     """Run policy-gradient training until an iteration or trajectory limit is met."""
     if max_iterations is None and max_trajectories is None:
         raise ValueError("max_iterations and max_trajectories cannot both be None")
 
-    rng = np.random.default_rng(seed)
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
 
     if verbose:
         print("\n*** REINFORCE ***\n")
 
     # Initialize logger
-    logger.initialize(env, policy, horizon, discount, rng)
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
 
     # Learning loop
     it = 1
@@ -39,7 +39,10 @@ def reinforce(env, policy, *,
             iteration = "{} of {}".format(it, max_iterations) if max_iterations is not None else str(it)
             print("\nIteration {} running...".format(iteration))
         # Collect trajectories
-        batch = generate_batch(env, policy, batch_size, horizon,
+        actual_batch_size = capped_batch_size(
+            batch_size, total_trajectories, max_trajectories
+        )
+        batch = generate_batch(env, policy, actual_batch_size, horizon,
                                rng=rng,
                                discount=discount,
                                parallel=(n_jobs > 1),

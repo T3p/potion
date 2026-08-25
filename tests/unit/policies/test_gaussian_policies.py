@@ -1,6 +1,8 @@
 import pytest
+from gymnasium.spaces import Box
 from potion.policies.gaussian_policies import LinearGaussianPolicy, DeepGaussianPolicy
 import numpy as np
+from types import SimpleNamespace
 from torch import nn
 
 
@@ -129,6 +131,130 @@ def test_linear_gaussian_policy_initialization(state_d, action_d):
     assert np.allclose(pol4.std, pol3.std * np.ones(action_d))
     assert pol5.parameters.ndim == 1 and len(pol5.parameters) == state_d * action_d
     assert np.allclose(pol5.parameters, 1.)
+
+
+def test_squashed_gaussian_policy_uses_environment_bounds(rng):
+    env = SimpleNamespace(
+        observation_space=Box(-np.inf, np.inf, shape=(2,)),
+        action_space=Box(
+            low=np.array([-2., 1.]),
+            high=np.array([4., 5.]),
+        ),
+    )
+    policy = LinearGaussianPolicy.make(
+        env,
+        mean_params_init=np.array([[0.5, -0.25], [0.1, 0.2]]),
+        std_init=np.array([0.4, 0.7]),
+        squash_actions=True,
+    )
+    latent_policy = LinearGaussianPolicy(
+        2,
+        2,
+        mean_params_init=policy.parameters,
+        std_init=policy.std,
+    )
+    state = np.array([0.3, -0.6])
+    latent_action = latent_policy.act(state, np.random.default_rng(123))
+    action = policy.act(state, np.random.default_rng(123))
+
+    expected = np.array([1., 3.]) + np.array([3., 2.]) * np.tanh(latent_action)
+    assert policy.squash_actions
+    assert np.allclose(policy.action_low, env.action_space.low)
+    assert np.allclose(policy.action_high, env.action_space.high)
+    assert np.allclose(action, expected)
+    assert np.all(action > env.action_space.low)
+    assert np.all(action < env.action_space.high)
+
+
+def test_squashed_gaussian_log_prob_score_and_importance_ratio(rng):
+    low = np.array([-2., 1.])
+    high = np.array([4., 5.])
+    latent_action = np.array([0.25, -0.4])
+    midpoint = (low + high) / 2.
+    scale = (high - low) / 2.
+    action = midpoint + scale * np.tanh(latent_action)
+    state = np.array([0.3, -0.6])
+    parameters = np.array([0.5, -0.25, 0.1, 0.2, np.log(0.7)])
+
+    squashed = LinearGaussianPolicy(
+        2, 2, std_init=0.7, learn_std=True, squash_actions=True,
+        action_low=low, action_high=high,
+    )
+    latent = LinearGaussianPolicy(2, 2, std_init=0.7, learn_std=True)
+    squashed.set_params(parameters)
+    latent.set_params(parameters)
+
+    log_jacobian = np.sum(np.log(scale * (1. - np.tanh(latent_action) ** 2)))
+    assert np.allclose(
+        squashed.log_prob(state, action),
+        latent.log_prob(state, latent_action) - log_jacobian,
+    )
+    assert np.allclose(
+        squashed.score(state, action),
+        latent.score(state, latent_action),
+    )
+
+    squashed_reference = LinearGaussianPolicy(
+        2, 2, std_init=0.7, learn_std=True, squash_actions=True,
+        action_low=low, action_high=high,
+    )
+    latent_reference = LinearGaussianPolicy(
+        2, 2, std_init=0.7, learn_std=True
+    )
+    squashed_reference.set_params(parameters)
+    latent_reference.set_params(parameters)
+
+    other_parameters = parameters + np.array([0.1, -0.2, 0.05, 0.15, -0.1])
+    squashed.set_params(other_parameters)
+    latent.set_params(other_parameters)
+    squashed_log_ratio = (
+        squashed.log_prob(state, action)
+        - squashed_reference.log_prob(state, action)
+    )
+    latent_log_ratio = (
+        latent.log_prob(state, latent_action)
+        - latent_reference.log_prob(state, latent_action)
+    )
+    assert np.allclose(squashed_log_ratio, latent_log_ratio)
+
+
+def test_squashed_gaussian_entropy_gradient(rng):
+    policy = LinearGaussianPolicy(
+        2, 2, std_init=0.6, learn_std=True, squash_actions=True,
+        action_low=np.array([-2., -1.]), action_high=np.array([3., 4.]),
+    )
+    policy.set_params(np.array([0.2, -0.1, 0.05, 0.3, np.log(0.6)]))
+    state = np.array([0.4, -0.7])
+    analytic = policy.entropy_grad(state)
+    parameters = policy.parameters.copy()
+    numerical = np.empty_like(parameters)
+    epsilon = 1e-5
+    for index in range(len(parameters)):
+        offset = np.zeros_like(parameters)
+        offset[index] = epsilon
+        policy.set_params(parameters + offset)
+        upper = policy.entropy(state)
+        policy.set_params(parameters - offset)
+        lower_entropy = policy.entropy(state)
+        numerical[index] = (upper - lower_entropy) / (2. * epsilon)
+    policy.set_params(parameters)
+
+    assert np.allclose(analytic, numerical, atol=1e-5)
+
+
+def test_squashed_gaussian_policy_rejects_invalid_bounds():
+    with pytest.raises(ValueError, match="required"):
+        LinearGaussianPolicy(2, 2, squash_actions=True)
+    with pytest.raises(ValueError, match="shape"):
+        LinearGaussianPolicy(
+            2, 2, squash_actions=True, action_low=np.zeros(3),
+            action_high=np.ones(2),
+        )
+    with pytest.raises(ValueError, match="strictly less"):
+        LinearGaussianPolicy(
+            2, 2, squash_actions=True, action_low=np.zeros(2),
+            action_high=np.zeros(2),
+        )
 
 
 def test_linear_gaussian_policy(rng):
@@ -433,6 +559,24 @@ def test_deep_gaussian_policy_nn(state_d, action_d, deep_gaussian_policy, rng):
     assert isinstance(score, np.ndarray) and score.shape == (pol.num_params,)
     assert not np.isnan(score).any()
     assert not np.allclose(score, 0.)
+
+
+def test_deep_gaussian_policy_batched_score(
+        state_d, action_d, deep_gaussian_policy, rng):
+    states = rng.normal(size=(2, 3, state_d))
+    actions = rng.normal(size=(2, 3, action_d))
+
+    scores = deep_gaussian_policy.score(states, actions)
+
+    expected = np.stack([
+        np.stack([
+            deep_gaussian_policy.score(state, action)
+            for state, action in zip(state_row, action_row)
+        ])
+        for state_row, action_row in zip(states, actions)
+    ])
+    assert scores.shape == (2, 3, deep_gaussian_policy.num_params)
+    assert np.allclose(scores, expected)
 
 
 def test_deep_gaussian_policy_exceptions(state_d, action_d):

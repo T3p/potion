@@ -1,6 +1,6 @@
 from potion.simulation.trajectory_generators import generate_batch
 from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
-from potion.evaluation.loggers import EpisodicOnlineLogger
+from potion.algorithms._common import capped_batch_size, initialize_run
 import numpy as np
 import warnings
 
@@ -17,7 +17,7 @@ def stormpg(env, policy, *,
             estimator='gpomdp',
             baseline='average',
             seed=None,
-            logger=EpisodicOnlineLogger(),
+            logger=None,
             n_jobs=1,
             verbose=True):
     """Run STORM-PG training until an iteration or trajectory limit is met."""
@@ -26,13 +26,13 @@ def stormpg(env, policy, *,
     if not 0. < momentum_parameter < 1.:
         raise ValueError("momentum parameter should be strictly between zero and one")
 
-    rng = np.random.default_rng(seed)
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
 
     if verbose:
         print("\n*** STORM-PG ***\n")
 
     # Initialize logger
-    logger.initialize(env, policy, horizon, discount, rng)
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
 
     if ((max_iterations is not None and max_iterations < 1)
             or (max_trajectories is not None and max_trajectories < 1)):
@@ -51,7 +51,8 @@ def stormpg(env, policy, *,
     estimator_discount = discount if horizon is not None else 1.
 
     # Estimate the initial gradient using a large batch.
-    batch = generate_batch(env, policy, batch_size, horizon,
+    initial_batch_size = capped_batch_size(batch_size, 0, max_trajectories)
+    batch = generate_batch(env, policy, initial_batch_size, horizon,
                            rng=rng,
                            discount=discount,
                            parallel=(n_jobs > 1),
@@ -87,7 +88,10 @@ def stormpg(env, policy, *,
 
         # Sample with the updated policy and form the momentum-corrected
         # gradient estimate for the following update.
-        batch = generate_batch(env, policy, mini_batch_size, horizon,
+        actual_mini_batch_size = capped_batch_size(
+            mini_batch_size, total_trajectories, max_trajectories
+        )
+        batch = generate_batch(env, policy, actual_mini_batch_size, horizon,
                                rng=rng,
                                discount=discount,
                                parallel=(n_jobs > 1),

@@ -1,6 +1,6 @@
 from potion.simulation.trajectory_generators import generate_batch
 from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
-from potion.evaluation.loggers import EpisodicOnlineLogger
+from potion.algorithms._common import capped_batch_size, initialize_run
 import numpy as np
 import warnings
 
@@ -17,20 +17,20 @@ def svrpg(env, policy, *,
           estimator='gpomdp',
           baseline='average',
           seed=None,
-          logger=EpisodicOnlineLogger(),
+          logger=None,
           n_jobs=1,
           verbose=True):
     """Run SVRPG training until an iteration or trajectory limit is met."""
     if max_iterations is None and max_trajectories is None:
         raise ValueError("max_iterations and max_trajectories cannot both be None")
 
-    rng = np.random.default_rng(seed)
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
 
     if verbose:
         print("\n*** SVRPG ***\n")
 
     # Initialize logger
-    logger.initialize(env, policy, horizon, discount, rng)
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
 
     if estimator not in ["reinforce", "gpomdp", "nonstationary"]:
         warnings.warn("Unknown gradient estimator: will default to gpomdp", UserWarning)
@@ -55,7 +55,10 @@ def svrpg(env, policy, *,
         snapshot_params = policy.parameters.copy()
 
         # Estimate the gradient at the snapshot policy using a large batch
-        snapshot_batch = generate_batch(env, policy, batch_size, horizon,
+        actual_batch_size = capped_batch_size(
+            batch_size, total_trajectories, max_trajectories
+        )
+        snapshot_batch = generate_batch(env, policy, actual_batch_size, horizon,
                                         rng=rng,
                                         discount=discount,
                                         parallel=(n_jobs > 1),
@@ -71,7 +74,10 @@ def svrpg(env, policy, *,
                 print("Epoch {} of {} running...".format(epoch, epoch_length))
 
             # Collect trajectories with the current policy
-            batch = generate_batch(env, policy, mini_batch_size, horizon,
+            actual_mini_batch_size = capped_batch_size(
+                mini_batch_size, total_trajectories, max_trajectories
+            )
+            batch = generate_batch(env, policy, actual_mini_batch_size, horizon,
                                    rng=rng,
                                    discount=discount,
                                    parallel=(n_jobs > 1),

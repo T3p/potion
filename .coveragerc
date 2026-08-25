@@ -1,0 +1,7 @@
+[run]
+omit =
+    */potion/visualization/*
+
+[report]
+omit =
+    */potion/visualization/*
