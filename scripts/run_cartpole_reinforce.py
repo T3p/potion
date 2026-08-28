@@ -1,14 +1,19 @@
 """Train a deep softmax policy on Gymnasium's CartPole-v1."""
 
+from pathlib import Path
+
 import gymnasium as gym
 from torch import nn
 import torch
 
 from potion.algorithms import reinforce
 from potion.evaluation.loggers import EpisodicTestLogger
-from potion.optimization.gradient_descent import Adam
 from potion.policies.softmax_policies import DeepSoftmaxPolicy
 
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+RESULTS_DIRECTORY = SCRIPT_DIRECTORY / "cartpole_results"
+LOG_PATH = RESULTS_DIRECTORY / "run_cartpole_reinforce.csv"
 
 # Edit this block to change the experiment.
 SEED = 42
@@ -23,7 +28,6 @@ BASELINE = "zero"
 DISCOUNT = 0.995
 BATCH_SIZE = 100
 LEARNING_RATE = 1e-4
-OPTIMIZER = "constant"
 
 MAX_ITERATIONS = None
 MAX_TRAJECTORIES = 10000
@@ -72,13 +76,7 @@ def main():
     torch.manual_seed(SEED)
     env = gym.make("CartPole-v1")
     policy = build_policy(env)
-
-    if OPTIMIZER == "adam":
-        step_size = Adam(alpha=LEARNING_RATE)
-    elif OPTIMIZER == "constant":
-        step_size = LEARNING_RATE
-    else:
-        raise ValueError("OPTIMIZER must be 'adam' or 'constant'")
+    RESULTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
     logger = EpisodicTestLogger(
         log_every=LOG_EVERY,
@@ -86,7 +84,7 @@ def main():
         verbose=LOGGER_VERBOSE,
         log_params=LOG_PARAMETERS,
         override_discount=1.0,
-        path=None,
+        path=LOG_PATH,
     )
 
     print("Training DeepSoftmaxPolicy on CartPole-v1")
@@ -100,7 +98,7 @@ def main():
             policy,
             horizon=HORIZON,
             discount=DISCOUNT,
-            step_size=step_size,
+            step_size=LEARNING_RATE,
             batch_size=BATCH_SIZE,
             max_iterations=MAX_ITERATIONS,
             max_trajectories=MAX_TRAJECTORIES,

@@ -1,3 +1,5 @@
+from importlib import import_module
+
 import numpy as np
 import pytest
 
@@ -5,19 +7,23 @@ from potion.algorithms import pagepg, reinforce
 from potion.evaluation.loggers import SilentLogger
 from potion.policies.gaussian_policies import LinearGaussianPolicy
 
+pagepg_module = import_module("potion.algorithms.pagepg")
+
 
 def test_pagepg_recursive_gradient_and_default_probability(env, policy, n_params, mocker):
     rng = mocker.Mock()
     rng.random.return_value = 0.9
-    mocker.patch(
-        "potion.algorithms.pagepg.initialize_run",
+    mocker.patch.object(
+        pagepg_module,
+        "initialize_run",
         side_effect=lambda seed, logger: (rng, mocker.Mock(), logger),
     )
-    generate_batch = mocker.patch(
-        "potion.algorithms.pagepg.generate_batch",
+    generate_batch = mocker.patch.object(
+        pagepg_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    estimator = mocker.patch("potion.algorithms.pagepg.gpomdp_estimator")
+    estimator = mocker.patch.object(pagepg_module, "gpomdp_estimator")
     estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: np.full(
         n_params, 2. if kwargs.get("off_policy") else 3.
     )
@@ -42,12 +48,14 @@ def test_pagepg_recursive_gradient_and_default_probability(env, policy, n_params
 
 
 def test_pagepg_large_batch_refresh(env, policy, n_params, mocker):
-    generate_batch = mocker.patch(
-        "potion.algorithms.pagepg.generate_batch",
+    generate_batch = mocker.patch.object(
+        pagepg_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    estimator = mocker.patch(
-        "potion.algorithms.pagepg.gpomdp_estimator",
+    estimator = mocker.patch.object(
+        pagepg_module,
+        "gpomdp_estimator",
         side_effect=[np.ones(n_params), 5. * np.ones(n_params)],
     )
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
@@ -78,9 +86,10 @@ def test_pagepg_rejects_invalid_refresh_probability(env, policy, refresh_probabi
 
 
 def test_pagepg_unknown_estimator_defaults_to_gpomdp(env, policy, mocker):
-    mocker.patch("potion.algorithms.pagepg.generate_batch", return_value=[None])
-    estimator = mocker.patch(
-        "potion.algorithms.pagepg.gpomdp_estimator",
+    mocker.patch.object(pagepg_module, "generate_batch", return_value=[None])
+    estimator = mocker.patch.object(
+        pagepg_module,
+        "gpomdp_estimator",
         return_value=np.zeros(policy.num_params),
     )
 
@@ -96,12 +105,14 @@ def test_pagepg_unknown_estimator_defaults_to_gpomdp(env, policy, mocker):
 
 
 def test_pagepg_trajectory_budget_counts_refresh_batches(env, policy, n_params, mocker):
-    generate_batch = mocker.patch(
-        "potion.algorithms.pagepg.generate_batch",
+    generate_batch = mocker.patch.object(
+        pagepg_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    mocker.patch(
-        "potion.algorithms.pagepg.gpomdp_estimator",
+    mocker.patch.object(
+        pagepg_module,
+        "gpomdp_estimator",
         return_value=np.zeros(n_params),
     )
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))

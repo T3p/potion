@@ -1,16 +1,21 @@
+from importlib import import_module
+
 import numpy as np
 import pytest
 
 from potion.algorithms import stormpg
 from potion.evaluation.loggers import SilentLogger
 
+stormpg_module = import_module("potion.algorithms.stormpg")
+
 
 def test_stormpg_batch_schedule_and_momentum_gradient(env, policy, n_params, mocker, capsys):
-    generate_batch = mocker.patch(
-        "potion.algorithms.stormpg.generate_batch",
+    generate_batch = mocker.patch.object(
+        stormpg_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    estimator = mocker.patch("potion.algorithms.stormpg.gpomdp_estimator")
+    estimator = mocker.patch.object(stormpg_module, "gpomdp_estimator")
     estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: np.full(
         n_params, 2. if kwargs.get("off_policy") else 3.
     )
@@ -47,9 +52,10 @@ def test_stormpg_rejects_invalid_momentum_parameter(env, policy, momentum_parame
 
 
 def test_stormpg_unknown_estimator_defaults_to_gpomdp(env, policy, mocker):
-    mocker.patch("potion.algorithms.stormpg.generate_batch", return_value=[None])
-    estimator = mocker.patch(
-        "potion.algorithms.stormpg.gpomdp_estimator",
+    mocker.patch.object(stormpg_module, "generate_batch", return_value=[None])
+    estimator = mocker.patch.object(
+        stormpg_module,
+        "gpomdp_estimator",
         return_value=np.zeros(policy.num_params),
     )
 
@@ -65,11 +71,12 @@ def test_stormpg_unknown_estimator_defaults_to_gpomdp(env, policy, mocker):
 
 
 def test_stormpg_trajectory_budget_counts_all_training_batches(env, policy, n_params, mocker):
-    generate_batch = mocker.patch(
-        "potion.algorithms.stormpg.generate_batch",
+    generate_batch = mocker.patch.object(
+        stormpg_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    estimator = mocker.patch("potion.algorithms.stormpg.gpomdp_estimator")
+    estimator = mocker.patch.object(stormpg_module, "gpomdp_estimator")
     estimator.return_value = np.zeros(n_params)
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
 
@@ -97,11 +104,12 @@ def test_stormpg_rejects_missing_stopping_criterion(env, policy):
 
 def test_stormpg_uses_one_minus_momentum_for_previous_estimator(
         env, policy, n_params, mocker):
-    mocker.patch(
-        "potion.algorithms.stormpg.generate_batch",
+    mocker.patch.object(
+        stormpg_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    estimator = mocker.patch("potion.algorithms.stormpg.gpomdp_estimator")
+    estimator = mocker.patch.object(stormpg_module, "gpomdp_estimator")
     estimator.side_effect = [
         np.zeros(n_params),
         np.zeros(n_params),

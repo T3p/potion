@@ -1,21 +1,33 @@
+from importlib import import_module
+from unittest.mock import MagicMock
+
+import numpy as np
 import pytest
 
 from potion.algorithms import reinforce
 from potion.evaluation.loggers import EpisodicTestLogger, SilentLogger
-import numpy as np
-from unittest.mock import MagicMock
+
+reinforce_module = import_module("potion.algorithms.reinforce")
 
 
 def test_reinforce_estimator_call(env, policy, n_params, mocker):
-    m = mocker.patch("potion.algorithms.reinforce.reinforce_estimator", return_value=np.ones(n_params))
+    m = mocker.patch.object(
+        reinforce_module, "reinforce_estimator", return_value=np.ones(n_params)
+    )
     reinforce(env, policy, max_iterations=1, estimator="reinforce", logger=SilentLogger())
     m.assert_called()
 
-    m = mocker.patch("potion.algorithms.reinforce.gpomdp_estimator", return_value=np.ones(n_params))
+    m = mocker.patch.object(
+        reinforce_module, "gpomdp_estimator", return_value=np.ones(n_params)
+    )
     reinforce(env, policy, max_iterations=1, estimator="gpomdp", logger=SilentLogger())
     m.assert_called()
 
-    m = mocker.patch("potion.algorithms.reinforce.nonstationary_pg_estimator", return_value=np.ones(n_params))
+    m = mocker.patch.object(
+        reinforce_module,
+        "nonstationary_pg_estimator",
+        return_value=np.ones(n_params),
+    )
     reinforce(env, policy, max_iterations=1, estimator="nonstationary", logger=SilentLogger())
     m.assert_called()
 
@@ -25,8 +37,9 @@ def test_reinforce_estimator_call(env, policy, n_params, mocker):
 
 def test_reinforce_adaptive_step_receives_averaged_gradient(env, policy, n_params, mocker):
     gradient = np.arange(n_params)
-    mocker.patch(
-        "potion.algorithms.reinforce.reinforce_estimator",
+    mocker.patch.object(
+        reinforce_module,
+        "reinforce_estimator",
         return_value=gradient,
     )
     adaptive_step = MagicMock(return_value=np.ones(n_params))
@@ -35,12 +48,14 @@ def test_reinforce_adaptive_step_receives_averaged_gradient(env, policy, n_param
 
 
 def test_reinforce_trajectory_budget(env, policy, n_params, mocker):
-    generate_batch = mocker.patch(
-        "potion.algorithms.reinforce.generate_batch",
+    generate_batch = mocker.patch.object(
+        reinforce_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    estimator = mocker.patch(
-        "potion.algorithms.reinforce.gpomdp_estimator",
+    estimator = mocker.patch.object(
+        reinforce_module,
+        "gpomdp_estimator",
         return_value=np.zeros(n_params),
     )
 
@@ -86,9 +101,10 @@ def test_evaluation_schedule_does_not_change_training_randomness(
         def close(self):
             pass
 
-    mocker.patch("potion.algorithms.reinforce.generate_batch", side_effect=generate)
-    mocker.patch(
-        "potion.algorithms.reinforce.gpomdp_estimator",
+    mocker.patch.object(reinforce_module, "generate_batch", side_effect=generate)
+    mocker.patch.object(
+        reinforce_module,
+        "gpomdp_estimator",
         return_value=np.zeros(n_params),
     )
 
@@ -120,12 +136,14 @@ def test_evaluation_schedule_does_not_change_training_randomness(
 
 def test_reusing_logger_for_two_algorithm_runs_starts_fresh(
         env, policy, n_params, mocker):
-    mocker.patch(
-        "potion.algorithms.reinforce.generate_batch",
+    mocker.patch.object(
+        reinforce_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    mocker.patch(
-        "potion.algorithms.reinforce.gpomdp_estimator",
+    mocker.patch.object(
+        reinforce_module,
+        "gpomdp_estimator",
         return_value=np.zeros(n_params),
     )
     mocker.patch(

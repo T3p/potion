@@ -1,17 +1,22 @@
+from importlib import import_module
+
 import numpy as np
 import pytest
 
 from potion.algorithms import svrpg
 from potion.evaluation.loggers import SilentLogger
 
+svrpg_module = import_module("potion.algorithms.svrpg")
+
 
 def test_svrpg_batch_schedule_and_gradient_correction(env, policy, n_params, mocker, capsys):
-    generate_batch = mocker.patch(
-        "potion.algorithms.svrpg.generate_batch",
+    generate_batch = mocker.patch.object(
+        svrpg_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
     logger = SilentLogger()
-    estimator = mocker.patch("potion.algorithms.svrpg.gpomdp_estimator")
+    estimator = mocker.patch.object(svrpg_module, "gpomdp_estimator")
     estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: np.full(
         n_params, 2. if kwargs.get("off_policy") else 3.
     )
@@ -42,9 +47,10 @@ def test_svrpg_batch_schedule_and_gradient_correction(env, policy, n_params, moc
 
 
 def test_svrpg_unknown_estimator_defaults_to_gpomdp(env, policy, mocker):
-    mocker.patch("potion.algorithms.svrpg.generate_batch", return_value=[None])
-    estimator = mocker.patch(
-        "potion.algorithms.svrpg.gpomdp_estimator",
+    mocker.patch.object(svrpg_module, "generate_batch", return_value=[None])
+    estimator = mocker.patch.object(
+        svrpg_module,
+        "gpomdp_estimator",
         side_effect=[np.zeros(policy.num_params)] * 3,
     )
 
@@ -62,11 +68,12 @@ def test_svrpg_unknown_estimator_defaults_to_gpomdp(env, policy, mocker):
 
 
 def test_svrpg_trajectory_budget_counts_all_training_batches(env, policy, n_params, mocker):
-    generate_batch = mocker.patch(
-        "potion.algorithms.svrpg.generate_batch",
+    generate_batch = mocker.patch.object(
+        svrpg_module,
+        "generate_batch",
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
-    estimator = mocker.patch("potion.algorithms.svrpg.gpomdp_estimator")
+    estimator = mocker.patch.object(svrpg_module, "gpomdp_estimator")
     estimator.return_value = np.zeros(n_params)
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
 
