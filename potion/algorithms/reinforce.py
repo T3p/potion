@@ -56,11 +56,17 @@ def reinforce(env, policy, *,
         if estimator not in ["reinforce", "gpomdp", "nonstationary"]:
             warnings.warn("Unknown gradient estimator: will default to gpomdp", UserWarning)
         if estimator == "reinforce":
-            gradient = reinforce_estimator(batch, estimator_discount, policy, baseline)
+            gradient = reinforce_estimator(
+                batch, estimator_discount, policy, baseline
+            )
         elif estimator == "nonstationary":
-            gradient = nonstationary_pg_estimator(batch, estimator_discount, policy, baseline)
+            gradient = nonstationary_pg_estimator(
+                batch, estimator_discount, policy, baseline
+            )
         else:
-            gradient = gpomdp_estimator(batch, estimator_discount, policy, baseline)
+            gradient = gpomdp_estimator(
+                batch, estimator_discount, policy, baseline
+            )
 
         # Compute update vector
         if callable(step_size):

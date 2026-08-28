@@ -12,9 +12,8 @@ def test_svrpg_batch_schedule_and_gradient_correction(env, policy, n_params, moc
     )
     logger = SilentLogger()
     estimator = mocker.patch("potion.algorithms.svrpg.gpomdp_estimator")
-    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
-        np.full((2, n_params), 2. if kwargs.get("off_policy") else 3.)
-        if kwargs.get("average") is False else np.ones(n_params)
+    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: np.full(
+        n_params, 2. if kwargs.get("off_policy") else 3.
     )
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
 
@@ -29,8 +28,11 @@ def test_svrpg_batch_schedule_and_gradient_correction(env, policy, n_params, moc
 
     assert [call.args[2] for call in generate_batch.call_args_list] == [7, 2, 2, 7, 2, 2]
     assert adaptive_step.call_count == 4
+    assert [call.kwargs["reset"] for call in adaptive_step.call_args_list] == [
+        True, False, True, False
+    ]
     for call in adaptive_step.call_args_list:
-        assert np.allclose(call.args[0], 2. * np.ones(n_params))
+        assert np.allclose(call.args[0], 4. * np.ones(n_params))
 
     output = capsys.readouterr().out
     assert output.count("Iteration 1 of 2 running...") == 1
@@ -43,9 +45,7 @@ def test_svrpg_unknown_estimator_defaults_to_gpomdp(env, policy, mocker):
     mocker.patch("potion.algorithms.svrpg.generate_batch", return_value=[None])
     estimator = mocker.patch(
         "potion.algorithms.svrpg.gpomdp_estimator",
-        side_effect=[np.zeros(policy.num_params),
-                     np.zeros((1, policy.num_params)),
-                     np.zeros((1, policy.num_params))],
+        side_effect=[np.zeros(policy.num_params)] * 3,
     )
 
     with pytest.warns(UserWarning):
@@ -67,10 +67,7 @@ def test_svrpg_trajectory_budget_counts_all_training_batches(env, policy, n_para
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
     estimator = mocker.patch("potion.algorithms.svrpg.gpomdp_estimator")
-    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
-        np.zeros((len(batch), n_params))
-        if kwargs.get("average") is False else np.zeros(n_params)
-    )
+    estimator.return_value = np.zeros(n_params)
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
 
     svrpg(env, policy,

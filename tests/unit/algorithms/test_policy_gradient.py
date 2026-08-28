@@ -23,10 +23,15 @@ def test_reinforce_estimator_call(env, policy, n_params, mocker):
         reinforce(env, policy, max_iterations=1, estimator="xyz", logger=SilentLogger())
 
 
-def test_reinforce_adaptive_step_call(env, policy, n_params):
+def test_reinforce_adaptive_step_receives_averaged_gradient(env, policy, n_params, mocker):
+    gradient = np.arange(n_params)
+    mocker.patch(
+        "potion.algorithms.reinforce.reinforce_estimator",
+        return_value=gradient,
+    )
     adaptive_step = MagicMock(return_value=np.ones(n_params))
     reinforce(env, policy, max_iterations=1, estimator="reinforce", step_size=adaptive_step, logger=SilentLogger())
-    adaptive_step.assert_called()
+    adaptive_step.assert_called_once_with(gradient)
 
 
 def test_reinforce_trajectory_budget(env, policy, n_params, mocker):

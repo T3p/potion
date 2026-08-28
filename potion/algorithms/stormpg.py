@@ -59,7 +59,9 @@ def stormpg(env, policy, *,
                            n_jobs=n_jobs)
     total_trajectories = len(batch)
     logger.submit(batch, policy)
-    gradient = gradient_estimator(batch, estimator_discount, policy, baseline)
+    gradient = gradient_estimator(
+        batch, estimator_discount, policy, baseline
+    )
 
     # Learning loop
     it = 1
@@ -99,22 +101,21 @@ def stormpg(env, policy, *,
         total_trajectories += len(batch)
         logger.submit(batch, policy)
 
-        current_gradient_samples = gradient_estimator(
-            batch, estimator_discount, policy, baseline, average=False
+        current_gradient = gradient_estimator(
+            batch, estimator_discount, policy, baseline
         )
         current_params = policy.parameters.copy()
         try:
             policy.set_params(previous_params)
-            previous_gradient_samples = gradient_estimator(
-                batch, estimator_discount, policy, baseline,
-                average=False, off_policy=True
+            previous_batch_gradient = gradient_estimator(
+                batch, estimator_discount, policy, baseline, off_policy=True
             )
         finally:
             policy.set_params(current_params)
 
         decay = 1. - momentum_parameter
-        gradient = np.mean(current_gradient_samples, axis=0) + decay * (
-            gradient - np.mean(previous_gradient_samples, axis=0)
+        gradient = current_gradient + decay * (
+            gradient - previous_batch_gradient
         )
 
     # Cleanup

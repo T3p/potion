@@ -46,7 +46,8 @@ def _importance_weights(states, actions, alive, behavior_logps, policy):
     return np.exp(np.sum(log_ratios, axis=1))
 
 
-def reinforce_estimator(batch, discount, policy, baseline="average", average=True, off_policy=False):
+def reinforce_estimator(batch, discount, policy, baseline="average", average=True,
+                        off_policy=False):
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
@@ -83,12 +84,18 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
         weights = _importance_weights(states, actions, alive, logps, policy)
         grad_samples = weights[..., None] * grad_samples
     if average:
-        return np.mean(grad_samples, 0)  # d
-    else:
-        return grad_samples  # Nxd
+        return np.mean(grad_samples, axis=0)  # d
+    return grad_samples  # Nxd
 
 
-def gpomdp_estimator(batch, discount, policy, baseline='average', average=True, off_policy=False):
+def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
+                     off_policy=False):
+    """Estimate GPOMDP as action scores multiplied by discounted returns-to-go.
+
+    Sample-derived baselines exclude the trajectory to which they are applied.
+    The average baseline is the leave-one-out return-to-go mean, while Peters'
+    baseline is its squared-score-weighted leave-one-out counterpart.
+    """
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
@@ -120,11 +127,11 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True, 
         grad_samples = weights[..., None] * grad_samples
     if average:
         return np.mean(grad_samples, axis=0)  # d
-    else:
-        return grad_samples
+    return grad_samples  # Nxd
 
 
-def nonstationary_pg_estimator(batch, discount, policy, baseline="average", average=True, off_policy=False):
+def nonstationary_pg_estimator(batch, discount, policy, baseline="average", average=True,
+                               off_policy=False):
     if baseline not in ["average", "peters", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
@@ -159,6 +166,5 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
         grad_samples = weights[..., None] * grad_samples
 
     if average:
-        return np.mean(grad_samples, 0)  # Hd
-    else:
-        return grad_samples  # NxHd
+        return np.mean(grad_samples, axis=0)  # Hd
+    return grad_samples  # NxHd

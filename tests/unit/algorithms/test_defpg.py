@@ -209,6 +209,7 @@ def test_def_svrpg_gradient_correction(env, policy, n_params, mocker):
     assert generate_batch.call_args.args[2] == 7
     assert defensive_batch.call_args.args[3] == 0.5
     assert estimator.call_count == 3
+    assert adaptive_step.call_args.kwargs["reset"] is True
     assert np.allclose(adaptive_step.call_args.args[0], 2. * np.ones(n_params))
 
 
@@ -299,6 +300,9 @@ def test_def_srvrpg_recursive_gradient(env, policy, n_params, mocker):
     assert generate_batch.call_args.args[2] == 7
     assert defensive_batch.call_args.args[3] == 0.5
     assert estimator.call_count == 3
+    assert [call.kwargs["reset"] for call in adaptive_step.call_args_list] == [
+        True, False
+    ]
     assert np.allclose(adaptive_step.call_args_list[0].args[0], np.ones(n_params))
     assert np.allclose(adaptive_step.call_args_list[1].args[0], 2. * np.ones(n_params))
 
@@ -400,6 +404,7 @@ def test_def_stormpg_momentum_gradient(env, policy, n_params, mocker):
 
     assert generate_batch.call_args.args[2] == 7
     assert [call.args[3] for call in defensive_batch.call_args_list] == [0.5, 0.5]
+    assert all(not call.kwargs for call in adaptive_step.call_args_list)
     expected_gradients = [1., 2.5, 3.25]
     for call, expected in zip(adaptive_step.call_args_list, expected_gradients):
         assert np.allclose(call.args[0], expected * np.ones(n_params))
@@ -506,6 +511,9 @@ def test_def_pagepg_recursive_gradient_and_default_probability(env, policy, n_pa
 
     assert generate_batch.call_args.args[2] == 7
     assert [call.args[3] for call in defensive_batch.call_args_list] == [0.5, 0.5]
+    assert [call.kwargs["reset"] for call in adaptive_step.call_args_list] == [
+        True, False, False
+    ]
     expected_gradients = [1., 2., 3.]
     for call, expected in zip(adaptive_step.call_args_list, expected_gradients):
         assert np.allclose(call.args[0], expected * np.ones(n_params))
@@ -532,6 +540,9 @@ def test_def_pagepg_large_batch_refresh(env, policy, n_params, mocker):
                verbose=False)
 
     assert [call.args[2] for call in generate_batch.call_args_list] == [7, 7]
+    assert [call.kwargs["reset"] for call in adaptive_step.call_args_list] == [
+        True, True
+    ]
     assert np.allclose(adaptive_step.call_args_list[0].args[0], np.ones(n_params))
     assert np.allclose(adaptive_step.call_args_list[1].args[0], 5. * np.ones(n_params))
 

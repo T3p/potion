@@ -64,10 +64,12 @@ def srvrpg(env, policy, *,
                                n_jobs=n_jobs)
         total_trajectories += len(batch)
         logger.submit(batch, policy)
-        gradient = gradient_estimator(batch, estimator_discount, policy, baseline)
+        gradient = gradient_estimator(
+            batch, estimator_discount, policy, baseline
+        )
 
         if callable(step_size):
-            delta = step_size(gradient)
+            delta = step_size(gradient, reset=True)
         else:
             delta = step_size * gradient
 
@@ -99,25 +101,22 @@ def srvrpg(env, policy, *,
             total_trajectories += len(batch)
             logger.submit(batch, policy)
 
-            current_gradient_samples = gradient_estimator(
-                batch, estimator_discount, policy, baseline, average=False
+            current_gradient = gradient_estimator(
+                batch, estimator_discount, policy, baseline
             )
             current_params = policy.parameters.copy()
             try:
                 policy.set_params(previous_params)
-                previous_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline,
-                    average=False, off_policy=True
+                previous_batch_gradient = gradient_estimator(
+                    batch, estimator_discount, policy, baseline, off_policy=True
                 )
             finally:
                 policy.set_params(current_params)
 
-            gradient = gradient + np.mean(
-                current_gradient_samples - previous_gradient_samples, axis=0
-            )
+            gradient = gradient + current_gradient - previous_batch_gradient
 
             if callable(step_size):
-                delta = step_size(gradient)
+                delta = step_size(gradient, reset=False)
             else:
                 delta = step_size * gradient
 

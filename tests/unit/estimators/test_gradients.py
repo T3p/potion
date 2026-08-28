@@ -38,20 +38,20 @@ def small_batch(small_policy):
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 def test_gradient_estimators_shapes(batch, discount, policy, n_traj, n_params, max_trajectory_len, estimator):
-    grad = estimator(batch, discount, policy, baseline="average", average=True)
-
-    grad_samples = estimator(batch, discount, policy, baseline="average", average=False)
+    grad = estimator(batch, discount, policy, baseline="average")
+    grad_samples = estimator(
+        batch, discount, policy, baseline="average", average=False
+    )
 
     expected_num_params = n_params if estimator is not nonstationary_pg_estimator else max_trajectory_len * n_params
     assert grad.shape == (expected_num_params,)
-
     assert grad_samples.shape == (n_traj, expected_num_params)
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 @pytest.mark.parametrize("baseline", (None, "average", "peters"))
 def test_gradient_estimators_invariance(batch, discount, policy, n_traj, estimator, baseline):
-    grad = estimator(batch, discount, policy, baseline=baseline, average=True)
+    grad = estimator(batch, discount, policy, baseline=baseline)
     samples = estimator(batch, discount, policy, baseline=baseline, average=False)
     batch_2 = []
     for i in range(n_traj):
@@ -61,15 +61,14 @@ def test_gradient_estimators_invariance(batch, discount, policy, n_traj, estimat
                        batch[i][3],
                        batch[i][4]))
 
-    grad_2 = estimator(batch_2, discount, policy, baseline=baseline, average=True)
+    grad_2 = estimator(batch_2, discount, policy, baseline=baseline)
 
     batch_3 = batch[::-1]  # reverse
 
-    grad_3 = estimator(batch_3, discount, policy, baseline=baseline, average=True)
+    grad_3 = estimator(batch_3, discount, policy, baseline=baseline)
     samples_3 = estimator(batch_3, discount, policy, baseline=baseline, average=False)
 
     assert np.allclose(grad_2, 2. * grad)
-
     assert np.allclose(grad_3, grad)
     assert np.allclose(samples_3, samples[::-1, :])
 
@@ -169,12 +168,19 @@ def test_gradient_estimators_off_policy_weights(small_batch, small_policy, estim
         behavior_logps = np.array([-np.log(weight), 0.])
         weighted_batch.append((states, actions, rewards, alive, behavior_logps))
 
-    on_policy_samples = estimator(small_batch, 0.9, small_policy, baseline=None, average=False)
-    ignored_logps_samples = estimator(weighted_batch, 0.9, small_policy, baseline=None, average=False)
-    off_policy_samples = estimator(
-        weighted_batch, 0.9, small_policy, baseline=None, average=False, off_policy=True
+    on_policy_samples = estimator(
+        small_batch, 0.9, small_policy, baseline=None, average=False
     )
-    off_policy_grad = estimator(weighted_batch, 0.9, small_policy, baseline=None, off_policy=True)
+    ignored_logps_samples = estimator(
+        weighted_batch, 0.9, small_policy, baseline=None, average=False
+    )
+    off_policy_samples = estimator(
+        weighted_batch, 0.9, small_policy, baseline=None,
+        average=False, off_policy=True
+    )
+    off_policy_grad = estimator(
+        weighted_batch, 0.9, small_policy, baseline=None, off_policy=True
+    )
 
     assert np.allclose(ignored_logps_samples, on_policy_samples)
     assert np.allclose(off_policy_samples, weights[..., None] * on_policy_samples)
@@ -230,7 +236,8 @@ def test_nonstationary_off_policy_weights_staged_policy():
         on_policy_batch, 0.9, policy, baseline=None, average=False
     )
     off_policy_samples = nonstationary_pg_estimator(
-        off_policy_batch, 0.9, policy, baseline=None, average=False, off_policy=True
+        off_policy_batch, 0.9, policy, baseline=None,
+        average=False, off_policy=True
     )
 
     assert np.allclose(off_policy_samples, weights[..., None] * on_policy_samples)
@@ -326,12 +333,7 @@ def test_action_independent_constant_reward_has_zero_mean_gradient():
             gpomdp_estimator(batch, 1., policy, baseline="zero")[0]
         )
         loo_estimates.append(
-            gpomdp_estimator(
-                batch,
-                1.,
-                policy,
-                baseline="average",
-            )[0]
+            gpomdp_estimator(batch, 1., policy, baseline="average")[0]
         )
 
     assert np.mean(zero_estimates) == pytest.approx(0., abs=0.03)
@@ -372,3 +374,41 @@ def test_gpomdp_leave_one_out_baseline_handles_variable_horizons():
     # longer trajectory has no peer and therefore uses the zero fallback.
     expected = np.array([[-0.3 * (3. - 4.) + 0.5 * 2.], [1. * (4. - 3.)]])
     assert np.allclose(samples, expected)
+
+
+def test_gpomdp_peters_baseline_is_weighted_leave_one_out_return_to_go():
+    class StateScorePolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            return states
+
+    scores = np.array([1., 2., 4.])
+    returns_to_go = np.array([10., 20., 30.])
+    batch = [
+        (
+            np.array([[score]]),
+            np.ones((1, 1)),
+            np.array([ret]),
+            np.ones(1, dtype=bool),
+            np.zeros(1),
+        )
+        for score, ret in zip(scores, returns_to_go)
+    ]
+
+    samples = gpomdp_estimator(
+        batch,
+        1.,
+        StateScorePolicy(),
+        baseline="peters",
+        average=False,
+    )
+    leave_one_out_baselines = np.array([
+        (2.**2 * 20. + 4.**2 * 30.) / (2.**2 + 4.**2),
+        (1.**2 * 10. + 4.**2 * 30.) / (1.**2 + 4.**2),
+        (1.**2 * 10. + 2.**2 * 20.) / (1.**2 + 2.**2),
+    ])
+    expected = scores * (returns_to_go - leave_one_out_baselines)
+
+    assert np.allclose(samples[:, 0], expected)

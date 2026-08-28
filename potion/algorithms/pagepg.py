@@ -59,7 +59,10 @@ def pagepg(env, policy, *,
                            n_jobs=n_jobs)
     total_trajectories = len(batch)
     logger.submit(batch, policy)
-    gradient = gradient_estimator(batch, estimator_discount, policy, baseline)
+    gradient = gradient_estimator(
+        batch, estimator_discount, policy, baseline
+    )
+    reset_step_size = True
 
     # Learning loop
     it = 1
@@ -69,7 +72,7 @@ def pagepg(env, policy, *,
             print("\nIteration {} running...".format(iteration))
 
         if callable(step_size):
-            delta = step_size(gradient)
+            delta = step_size(gradient, reset=reset_step_size)
         else:
             delta = step_size * gradient
 
@@ -99,7 +102,10 @@ def pagepg(env, policy, *,
                                    n_jobs=n_jobs)
             total_trajectories += len(batch)
             logger.submit(batch, policy)
-            gradient = gradient_estimator(batch, estimator_discount, policy, baseline)
+            gradient = gradient_estimator(
+                batch, estimator_discount, policy, baseline
+            )
+            reset_step_size = True
         else:
             # Recursive correction between the updated and preceding policies.
             next_batch_size = capped_batch_size(
@@ -113,22 +119,20 @@ def pagepg(env, policy, *,
             total_trajectories += len(batch)
             logger.submit(batch, policy)
 
-            current_gradient_samples = gradient_estimator(
-                batch, estimator_discount, policy, baseline, average=False
+            current_gradient = gradient_estimator(
+                batch, estimator_discount, policy, baseline
             )
             current_params = policy.parameters.copy()
             try:
                 policy.set_params(previous_params)
-                previous_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline,
-                    average=False, off_policy=True
+                previous_batch_gradient = gradient_estimator(
+                    batch, estimator_discount, policy, baseline, off_policy=True
                 )
             finally:
                 policy.set_params(current_params)
 
-            gradient = gradient + np.mean(
-                current_gradient_samples - previous_gradient_samples, axis=0
-            )
+            gradient = gradient + current_gradient - previous_batch_gradient
+            reset_step_size = False
 
     # Cleanup
     logger.close()

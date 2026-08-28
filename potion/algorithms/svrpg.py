@@ -65,7 +65,9 @@ def svrpg(env, policy, *,
                                         n_jobs=n_jobs)
         total_trajectories += len(snapshot_batch)
         logger.submit(snapshot_batch, policy)
-        snapshot_gradient = gradient_estimator(snapshot_batch, estimator_discount, policy, baseline)
+        snapshot_gradient = gradient_estimator(
+            snapshot_batch, estimator_discount, policy, baseline
+        )
 
         epoch = 1
         while (epoch <= epoch_length
@@ -87,25 +89,23 @@ def svrpg(env, policy, *,
 
             # Compute the SVRPG correction on the same trajectories. The
             # off-policy snapshot samples include p_snapshot / p_current.
-            current_gradient_samples = gradient_estimator(
-                batch, estimator_discount, policy, baseline, average=False
+            current_gradient = gradient_estimator(
+                batch, estimator_discount, policy, baseline
             )
             current_params = policy.parameters.copy()
             try:
                 policy.set_params(snapshot_params)
-                snapshot_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline,
-                    average=False, off_policy=True
+                snapshot_batch_gradient = gradient_estimator(
+                    batch, estimator_discount, policy, baseline, off_policy=True
                 )
             finally:
                 policy.set_params(current_params)
 
-            correction = np.mean(current_gradient_samples - snapshot_gradient_samples, axis=0)
-            gradient = snapshot_gradient + correction
+            gradient = snapshot_gradient + current_gradient - snapshot_batch_gradient
 
             # Compute update vector
             if callable(step_size):
-                delta = step_size(gradient)
+                delta = step_size(gradient, reset=(epoch == 1))
             else:
                 delta = step_size * gradient
 

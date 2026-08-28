@@ -11,9 +11,8 @@ def test_stormpg_batch_schedule_and_momentum_gradient(env, policy, n_params, moc
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
     estimator = mocker.patch("potion.algorithms.stormpg.gpomdp_estimator")
-    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
-        np.full((2, n_params), 2. if kwargs.get("off_policy") else 3.)
-        if kwargs.get("average") is False else np.ones(n_params)
+    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: np.full(
+        n_params, 2. if kwargs.get("off_policy") else 3.
     )
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
 
@@ -27,7 +26,8 @@ def test_stormpg_batch_schedule_and_momentum_gradient(env, policy, n_params, moc
             verbose=True)
 
     assert [call.args[2] for call in generate_batch.call_args_list] == [7, 2, 2]
-    expected_gradients = [1., 2.5, 3.25]
+    assert all(not call.kwargs for call in adaptive_step.call_args_list)
+    expected_gradients = [3., 3.5, 3.75]
     for call, expected in zip(adaptive_step.call_args_list, expected_gradients):
         assert np.allclose(call.args[0], expected * np.ones(n_params))
 
@@ -70,10 +70,7 @@ def test_stormpg_trajectory_budget_counts_all_training_batches(env, policy, n_pa
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
     estimator = mocker.patch("potion.algorithms.stormpg.gpomdp_estimator")
-    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
-        np.zeros((len(batch), n_params))
-        if kwargs.get("average") is False else np.zeros(n_params)
-    )
+    estimator.return_value = np.zeros(n_params)
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
 
     stormpg(env, policy,
@@ -107,8 +104,8 @@ def test_stormpg_uses_one_minus_momentum_for_previous_estimator(
     estimator = mocker.patch("potion.algorithms.stormpg.gpomdp_estimator")
     estimator.side_effect = [
         np.zeros(n_params),
-        np.zeros((2, n_params)),
-        np.ones((2, n_params)),
+        np.zeros(n_params),
+        np.ones(n_params),
     ]
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
 

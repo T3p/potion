@@ -18,9 +18,8 @@ def test_pagepg_recursive_gradient_and_default_probability(env, policy, n_params
         side_effect=lambda env, policy, n_episodes, horizon, **kwargs: [None] * n_episodes,
     )
     estimator = mocker.patch("potion.algorithms.pagepg.gpomdp_estimator")
-    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
-        np.full((2, n_params), 2. if kwargs.get("off_policy") else 3.)
-        if kwargs.get("average") is False else np.ones(n_params)
+    estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: np.full(
+        n_params, 2. if kwargs.get("off_policy") else 3.
     )
     adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
 
@@ -33,7 +32,10 @@ def test_pagepg_recursive_gradient_and_default_probability(env, policy, n_params
            verbose=False)
 
     assert [call.args[2] for call in generate_batch.call_args_list] == [7, 2, 2]
-    expected_gradients = [1., 2., 3.]
+    assert [call.kwargs["reset"] for call in adaptive_step.call_args_list] == [
+        True, False, False
+    ]
+    expected_gradients = [3., 4., 5.]
     for call, expected in zip(adaptive_step.call_args_list, expected_gradients):
         assert np.allclose(call.args[0], expected * np.ones(n_params))
     assert rng.random.call_count == 2
@@ -59,6 +61,9 @@ def test_pagepg_large_batch_refresh(env, policy, n_params, mocker):
            verbose=False)
 
     assert [call.args[2] for call in generate_batch.call_args_list] == [7, 7]
+    assert [call.kwargs["reset"] for call in adaptive_step.call_args_list] == [
+        True, True
+    ]
     assert np.allclose(adaptive_step.call_args_list[0].args[0], np.ones(n_params))
     assert np.allclose(adaptive_step.call_args_list[1].args[0], 5. * np.ones(n_params))
 
