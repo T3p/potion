@@ -32,6 +32,24 @@ def _leave_one_out_weighted_average(values, weights, alive):
     )
 
 
+def _leave_one_out_importance_average(values, weights, alive):
+    """Importance-weighted average over the other active trajectories."""
+    expanded_weights = np.broadcast_to(
+        weights[:, None, None], values.shape + (1,)
+    )
+    return _leave_one_out_weighted_average(
+        values, expanded_weights, alive
+    )[..., 0]
+
+
+def _mastrangelo_weights(score_weights, importance_weights):
+    """Add squared trajectory ratios to Peters' squared-score weights."""
+    if importance_weights is None:
+        return score_weights
+    weight_shape = (len(importance_weights),) + (1,) * (score_weights.ndim - 1)
+    return score_weights * importance_weights.reshape(weight_shape) ** 2
+
+
 def _importance_weights(states, actions, alive, behavior_logps, policy):
     if behavior_logps.shape != alive.shape:
         raise ValueError("Bad shape: behavior log probabilities should match alive flags")
@@ -48,7 +66,7 @@ def _importance_weights(states, actions, alive, behavior_logps, policy):
 
 def reinforce_estimator(batch, discount, policy, baseline="average", average=True,
                         off_policy=False):
-    if baseline not in ["average", "peters", "zero", None]:
+    if baseline not in ["average", "weighted-average", "peters", "mastrangelo", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
     states, actions, rewards, alive, logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
@@ -57,6 +75,10 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
         raise ValueError("Bad shape: state dimension does not match that of given policy")
     if not actions.shape[-1] == policy.action_dim:
         raise ValueError("Bad shape: action dimension does not match that of given policy")
+
+    importance_weights = None
+    if off_policy:
+        importance_weights = _importance_weights(states, actions, alive, logps, policy)
 
     scores = policy.score(states, actions)  # NxHxd
     scores = apply_mask(scores, alive)
@@ -70,9 +92,23 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
         baseline = _leave_one_out_average(
             returns[..., None], trajectory_alive
         )
-    elif baseline == 'peters':
+    elif baseline == 'weighted-average':
+        if off_policy:
+            baseline = _leave_one_out_importance_average(
+                returns[..., None], importance_weights, trajectory_alive
+            )
+        else:
+            baseline = _leave_one_out_average(
+                returns[..., None], trajectory_alive
+            )
+    elif baseline in ['peters', 'mastrangelo']:
+        baseline_weights = cum_scores[:, None, :] ** 2
+        if baseline == 'mastrangelo':
+            baseline_weights = _mastrangelo_weights(
+                baseline_weights, importance_weights
+            )
         baseline = _leave_one_out_weighted_average(
-            returns[..., None], cum_scores[:, None, :] ** 2, trajectory_alive
+            returns[..., None], baseline_weights, trajectory_alive
         )[:, 0, :]
     else:
         baseline = np.zeros((1, 1))  # 1x1
@@ -81,8 +117,7 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
 
     grad_samples = cum_scores * values  # Nxd
     if off_policy:
-        weights = _importance_weights(states, actions, alive, logps, policy)
-        grad_samples = weights[..., None] * grad_samples
+        grad_samples = importance_weights[..., None] * grad_samples
     if average:
         return np.mean(grad_samples, axis=0)  # d
     return grad_samples  # Nxd
@@ -94,9 +129,11 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
 
     Sample-derived baselines exclude the trajectory to which they are applied.
     The average baseline is the leave-one-out return-to-go mean, while Peters'
-    baseline is its squared-score-weighted leave-one-out counterpart.
+    baseline is its squared-score-weighted leave-one-out counterpart. The
+    Mastrangelo baseline additionally uses squared full-trajectory importance
+    ratios off-policy and is identical to Peters on-policy.
     """
-    if baseline not in ["average", "peters", "zero", None]:
+    if baseline not in ["average", "weighted-average", "peters", "mastrangelo", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
     states, actions, rewards, alive, logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
@@ -105,6 +142,10 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
         raise ValueError("Bad shape: state dimension does not match that of given policy")
     if not actions.shape[-1] == policy.action_dim:
         raise ValueError("Bad shape: action dimension does not match that of given policy")
+
+    importance_weights = None
+    if off_policy:
+        importance_weights = _importance_weights(states, actions, alive, logps, policy)
 
     scores = apply_mask(policy.score(states, actions), alive)  # NxHxd
     rewards = apply_mask(rewards, alive)
@@ -113,9 +154,21 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
 
     if baseline == 'average':
         baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
-    elif baseline == 'peters':
+    elif baseline == 'weighted-average':
+        if off_policy:
+            baseline = _leave_one_out_importance_average(
+                returns_to_go, importance_weights, alive
+            )[..., None]
+        else:
+            baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
+    elif baseline in ['peters', 'mastrangelo']:
+        baseline_weights = scores ** 2
+        if baseline == 'mastrangelo':
+            baseline_weights = _mastrangelo_weights(
+                baseline_weights, importance_weights
+            )
         baseline = _leave_one_out_weighted_average(
-            returns_to_go, scores ** 2, alive
+            returns_to_go, baseline_weights, alive
         )
     else:
         baseline = np.zeros((1, 1, 1))  # 1x1x1
@@ -123,8 +176,7 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
 
     grad_samples = np.sum(scores * values, axis=1)  # Nxd
     if off_policy:
-        weights = _importance_weights(states, actions, alive, logps, policy)
-        grad_samples = weights[..., None] * grad_samples
+        grad_samples = importance_weights[..., None] * grad_samples
     if average:
         return np.mean(grad_samples, axis=0)  # d
     return grad_samples  # Nxd
@@ -132,7 +184,7 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
 
 def nonstationary_pg_estimator(batch, discount, policy, baseline="average", average=True,
                                off_policy=False):
-    if baseline not in ["average", "peters", "zero", None]:
+    if baseline not in ["average", "weighted-average", "peters", "mastrangelo", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
     states, actions, rewards, alive, logps = unpack(batch)  # NxHxS, NxHxA, NxH, NxH, NxH
@@ -141,6 +193,10 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
         raise ValueError("Bad shape: state dimension does not match that of given policy")
     if not actions.shape[-1] == policy.action_dim:
         raise ValueError("Bad shape: action dimension does not match that of given policy")
+
+    importance_weights = None
+    if off_policy:
+        importance_weights = _importance_weights(states, actions, alive, logps, policy)
 
     scores = policy.score(states, actions)  # NxHxd
     scores = apply_mask(scores, alive)  # NxHxd
@@ -150,9 +206,21 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
 
     if baseline == 'average':
         baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
-    elif baseline == 'peters':
+    elif baseline == 'weighted-average':
+        if off_policy:
+            baseline = _leave_one_out_importance_average(
+                returns_to_go, importance_weights, alive
+            )[..., None]
+        else:
+            baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
+    elif baseline in ['peters', 'mastrangelo']:
+        baseline_weights = scores ** 2
+        if baseline == 'mastrangelo':
+            baseline_weights = _mastrangelo_weights(
+                baseline_weights, importance_weights
+            )
         baseline = _leave_one_out_weighted_average(
-            returns_to_go, scores ** 2, alive
+            returns_to_go, baseline_weights, alive
         )
     else:
         baseline = np.zeros((1, 1, 1))  # 1x1x1
@@ -162,8 +230,7 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
     grad_samples = scores * values
     grad_samples = np.reshape(grad_samples, (grad_samples.shape[0], -1))
     if off_policy:
-        weights = _importance_weights(states, actions, alive, logps, policy)
-        grad_samples = weights[..., None] * grad_samples
+        grad_samples = importance_weights[..., None] * grad_samples
 
     if average:
         return np.mean(grad_samples, axis=0)  # Hd

@@ -188,6 +188,182 @@ def test_gradient_estimators_off_policy_weights(small_batch, small_policy, estim
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
+def test_weighted_average_baseline_matches_average_on_policy(
+        small_batch, small_policy, estimator):
+    average_samples = estimator(
+        small_batch, 0.9, small_policy, baseline="average", average=False
+    )
+    weighted_average_samples = estimator(
+        small_batch, 0.9, small_policy, baseline="weighted-average", average=False
+    )
+
+    assert np.array_equal(weighted_average_samples, average_samples)
+
+
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
+def test_weighted_average_baseline_uses_off_policy_leave_one_out_weights(estimator):
+    class StateScorePolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            return states
+
+        def log_prob(self, states, actions, t=None):
+            return np.zeros(states.shape[:-1])
+
+    scores = np.array([1., 2., 4.])
+    returns = np.array([10., 20., 30.])
+    weights = np.array([1., 2., 4.])
+    batch = [
+        (
+            np.array([[score]]),
+            np.ones((1, 1)),
+            np.array([ret]),
+            np.ones(1, dtype=bool),
+            np.array([-np.log(weight)]),
+        )
+        for score, ret, weight in zip(scores, returns, weights)
+    ]
+
+    samples = estimator(
+        batch,
+        1.,
+        StateScorePolicy(),
+        baseline="weighted-average",
+        average=False,
+        off_policy=True,
+    )
+    leave_one_out_baselines = np.array([
+        (2. * 20. + 4. * 30.) / (2. + 4.),
+        (1. * 10. + 4. * 30.) / (1. + 4.),
+        (1. * 10. + 2. * 20.) / (1. + 2.),
+    ])
+    expected = weights * scores * (returns - leave_one_out_baselines)
+
+    assert np.allclose(samples[:, 0], expected)
+
+
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
+def test_mastrangelo_baseline_matches_peters_on_policy(
+        small_batch, small_policy, estimator):
+    peters_samples = estimator(
+        small_batch, 0.9, small_policy, baseline="peters", average=False
+    )
+    mastrangelo_samples = estimator(
+        small_batch, 0.9, small_policy, baseline="mastrangelo", average=False
+    )
+
+    assert np.array_equal(mastrangelo_samples, peters_samples)
+
+
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
+def test_mastrangelo_baseline_uses_squared_off_policy_weights(estimator):
+    class StateScorePolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            return states
+
+        def log_prob(self, states, actions, t=None):
+            return np.zeros(states.shape[:-1])
+
+    scores = np.array([1., 2., 4.])
+    returns = np.array([10., 20., 30.])
+    importance_weights = np.array([1., 2., 4.])
+    batch = [
+        (
+            np.array([[score]]),
+            np.ones((1, 1)),
+            np.array([ret]),
+            np.ones(1, dtype=bool),
+            np.array([-np.log(weight)]),
+        )
+        for score, ret, weight in zip(scores, returns, importance_weights)
+    ]
+
+    samples = estimator(
+        batch,
+        1.,
+        StateScorePolicy(),
+        baseline="mastrangelo",
+        average=False,
+        off_policy=True,
+    )
+    baseline_weights = importance_weights ** 2 * scores ** 2
+    leave_one_out_baselines = np.array([
+        (baseline_weights[1] * returns[1] + baseline_weights[2] * returns[2])
+        / (baseline_weights[1] + baseline_weights[2]),
+        (baseline_weights[0] * returns[0] + baseline_weights[2] * returns[2])
+        / (baseline_weights[0] + baseline_weights[2]),
+        (baseline_weights[0] * returns[0] + baseline_weights[1] * returns[1])
+        / (baseline_weights[0] + baseline_weights[1]),
+    ])
+    expected = importance_weights * scores * (returns - leave_one_out_baselines)
+
+    assert np.allclose(samples[:, 0], expected)
+
+
+@pytest.mark.parametrize("estimator", (gpomdp_estimator, nonstationary_pg_estimator))
+def test_mastrangelo_time_baseline_uses_full_trajectory_weights(estimator):
+    class StateScorePolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            return states
+
+        def log_prob(self, states, actions, t=None):
+            return np.zeros(states.shape[:-1])
+
+    scores = np.array([[1., 2.], [2., 3.], [4., 5.]])
+    rewards = np.array([[1., 10.], [2., 20.], [3., 30.]])
+    importance_weights = np.array([1., 2., 4.])
+    behavior_logps = np.column_stack((
+        np.zeros(len(importance_weights)),
+        -np.log(importance_weights),
+    ))
+    batch = [
+        (
+            trajectory_scores[..., None],
+            np.ones((2, 1)),
+            trajectory_rewards,
+            np.ones(2, dtype=bool),
+            trajectory_logps,
+        )
+        for trajectory_scores, trajectory_rewards, trajectory_logps
+        in zip(scores, rewards, behavior_logps)
+    ]
+
+    samples = estimator(
+        batch,
+        1.,
+        StateScorePolicy(),
+        baseline="mastrangelo",
+        average=False,
+        off_policy=True,
+    )
+    returns_to_go = np.cumsum(rewards[:, ::-1], axis=1)[:, ::-1]
+    baseline_weights = importance_weights[:, None] ** 2 * scores ** 2
+    leave_one_out_baselines = (
+        np.sum(baseline_weights * returns_to_go, axis=0) -
+        baseline_weights * returns_to_go
+    ) / (np.sum(baseline_weights, axis=0) - baseline_weights)
+    expected_steps = (
+        importance_weights[:, None] * scores *
+        (returns_to_go - leave_one_out_baselines)
+    )
+    expected = (
+        np.sum(expected_steps, axis=1, keepdims=True)
+        if estimator is gpomdp_estimator
+        else expected_steps
+    )
+
+    assert np.allclose(samples, expected)
+
+
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 def test_gradient_estimators_off_policy_masking(batch, discount, policy, estimator):
     target_logps = np.zeros((len(batch), len(batch[0][3])))
     for t in range(target_logps.shape[1]):
@@ -310,7 +486,7 @@ def test_leave_one_out_baseline_has_unscaled_monte_carlo_expectation():
 @pytest.mark.parametrize(
     "estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator)
 )
-@pytest.mark.parametrize("baseline", ("average", "peters"))
+@pytest.mark.parametrize("baseline", ("average", "peters", "mastrangelo"))
 def test_one_trajectory_sample_baseline_falls_back_to_zero(estimator, baseline):
     policy = _BernoulliPolicy(0.3)
     batch = _one_step_batch([1])
