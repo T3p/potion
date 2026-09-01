@@ -64,8 +64,33 @@ def _importance_weights(states, actions, alive, behavior_logps, policy):
     return np.exp(np.sum(log_ratios, axis=1))
 
 
+def _resolve_importance_weights(states, actions, alive, behavior_logps, policy,
+                                off_policy, importance_weights):
+    if off_policy and importance_weights is not None:
+        raise ValueError(
+            "off_policy and precomputed importance weights are mutually exclusive"
+        )
+    if importance_weights is None:
+        if off_policy:
+            return _importance_weights(
+                states, actions, alive, behavior_logps, policy
+            )
+        return None
+
+    importance_weights = np.asarray(importance_weights, dtype=float)
+    if importance_weights.shape != (len(states),):
+        raise ValueError(
+            "Bad shape: importance weights should have one value per trajectory"
+        )
+    if not np.all(np.isfinite(importance_weights)):
+        raise ValueError("Importance weights should be finite")
+    if np.any(importance_weights < 0.):
+        raise ValueError("Importance weights should be nonnegative")
+    return importance_weights
+
+
 def reinforce_estimator(batch, discount, policy, baseline="average", average=True,
-                        off_policy=False):
+                        off_policy=False, importance_weights=None):
     if baseline not in ["average", "weighted-average", "peters", "mastrangelo", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
@@ -76,9 +101,9 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
     if not actions.shape[-1] == policy.action_dim:
         raise ValueError("Bad shape: action dimension does not match that of given policy")
 
-    importance_weights = None
-    if off_policy:
-        importance_weights = _importance_weights(states, actions, alive, logps, policy)
+    importance_weights = _resolve_importance_weights(
+        states, actions, alive, logps, policy, off_policy, importance_weights
+    )
 
     scores = policy.score(states, actions)  # NxHxd
     scores = apply_mask(scores, alive)
@@ -93,7 +118,7 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
             returns[..., None], trajectory_alive
         )
     elif baseline == 'weighted-average':
-        if off_policy:
+        if importance_weights is not None:
             baseline = _leave_one_out_importance_average(
                 returns[..., None], importance_weights, trajectory_alive
             )
@@ -116,7 +141,7 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
     values = returns[..., None] - baseline  # Nxd or Nx1
 
     grad_samples = cum_scores * values  # Nxd
-    if off_policy:
+    if importance_weights is not None:
         grad_samples = importance_weights[..., None] * grad_samples
     if average:
         return np.mean(grad_samples, axis=0)  # d
@@ -124,7 +149,7 @@ def reinforce_estimator(batch, discount, policy, baseline="average", average=Tru
 
 
 def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
-                     off_policy=False):
+                     off_policy=False, importance_weights=None):
     """Estimate GPOMDP as action scores multiplied by discounted returns-to-go.
 
     Sample-derived baselines exclude the trajectory to which they are applied.
@@ -143,9 +168,9 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
     if not actions.shape[-1] == policy.action_dim:
         raise ValueError("Bad shape: action dimension does not match that of given policy")
 
-    importance_weights = None
-    if off_policy:
-        importance_weights = _importance_weights(states, actions, alive, logps, policy)
+    importance_weights = _resolve_importance_weights(
+        states, actions, alive, logps, policy, off_policy, importance_weights
+    )
 
     scores = apply_mask(policy.score(states, actions), alive)  # NxHxd
     rewards = apply_mask(rewards, alive)
@@ -155,7 +180,7 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
     if baseline == 'average':
         baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
     elif baseline == 'weighted-average':
-        if off_policy:
+        if importance_weights is not None:
             baseline = _leave_one_out_importance_average(
                 returns_to_go, importance_weights, alive
             )[..., None]
@@ -175,7 +200,7 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
     values = returns_to_go[..., None] - baseline  # NxHxd or NxHx1
 
     grad_samples = np.sum(scores * values, axis=1)  # Nxd
-    if off_policy:
+    if importance_weights is not None:
         grad_samples = importance_weights[..., None] * grad_samples
     if average:
         return np.mean(grad_samples, axis=0)  # d
@@ -183,7 +208,7 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
 
 
 def nonstationary_pg_estimator(batch, discount, policy, baseline="average", average=True,
-                               off_policy=False):
+                               off_policy=False, importance_weights=None):
     if baseline not in ["average", "weighted-average", "peters", "mastrangelo", "zero", None]:
         warnings.warn("Unknown baseline type, will default to zero baseline", UserWarning)
 
@@ -194,9 +219,9 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
     if not actions.shape[-1] == policy.action_dim:
         raise ValueError("Bad shape: action dimension does not match that of given policy")
 
-    importance_weights = None
-    if off_policy:
-        importance_weights = _importance_weights(states, actions, alive, logps, policy)
+    importance_weights = _resolve_importance_weights(
+        states, actions, alive, logps, policy, off_policy, importance_weights
+    )
 
     scores = policy.score(states, actions)  # NxHxd
     scores = apply_mask(scores, alive)  # NxHxd
@@ -207,7 +232,7 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
     if baseline == 'average':
         baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
     elif baseline == 'weighted-average':
-        if off_policy:
+        if importance_weights is not None:
             baseline = _leave_one_out_importance_average(
                 returns_to_go, importance_weights, alive
             )[..., None]
@@ -229,7 +254,7 @@ def nonstationary_pg_estimator(batch, discount, policy, baseline="average", aver
 
     grad_samples = scores * values
     grad_samples = np.reshape(grad_samples, (grad_samples.shape[0], -1))
-    if off_policy:
+    if importance_weights is not None:
         grad_samples = importance_weights[..., None] * grad_samples
 
     if average:

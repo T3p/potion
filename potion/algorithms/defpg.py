@@ -47,6 +47,36 @@ def _defensive_importance_weights(current_logps, snapshot_logps, defensive_param
     return current_weights, snapshot_weights
 
 
+def _defensive_gradient_samples(batch, policy, reference_params,
+                                defensive_parameter, gradient_estimator,
+                                estimator_discount, baseline):
+    """Evaluate both mixture-corrected gradient samples on one batch."""
+    current_params = policy.parameters.copy()
+    current_logps = _trajectory_log_probabilities(batch, policy)
+    try:
+        policy.set_params(reference_params)
+        reference_logps = _trajectory_log_probabilities(batch, policy)
+    finally:
+        policy.set_params(current_params)
+
+    current_weights, reference_weights = _defensive_importance_weights(
+        current_logps, reference_logps, defensive_parameter
+    )
+    current_samples = gradient_estimator(
+        batch, estimator_discount, policy, baseline, average=False,
+        importance_weights=current_weights
+    )
+    try:
+        policy.set_params(reference_params)
+        reference_samples = gradient_estimator(
+            batch, estimator_discount, policy, baseline, average=False,
+            importance_weights=reference_weights
+        )
+    finally:
+        policy.set_params(current_params)
+    return current_samples, reference_samples
+
+
 def _generate_defensive_batch(env, policy, snapshot_params, defensive_parameter,
                               n_episodes, horizon, discount, rng, n_jobs):
     # At zero the mixture is exactly the current policy. Preserve SVRPG's RNG
@@ -187,37 +217,26 @@ def def_svrpg(env, policy, *,
                     batch, estimator_discount, policy, baseline
                 )
             else:
-                current_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline, average=False
+                (current_gradient_samples,
+                 snapshot_gradient_samples) = _defensive_gradient_samples(
+                    batch, policy, snapshot_params, defensive_parameter,
+                    gradient_estimator, estimator_discount, baseline
                 )
-                # Evaluate each trajectory under both policies. The component
-                # that generated it is irrelevant: both weights use the
-                # mixture density.
-                current_logps = _trajectory_log_probabilities(batch, policy)
 
-            try:
-                policy.set_params(snapshot_params)
-                if defensive_parameter == 0.:
+            if defensive_parameter == 0.:
+                try:
+                    policy.set_params(snapshot_params)
                     snapshot_batch_gradient = gradient_estimator(
                         batch, estimator_discount, policy, baseline, off_policy=True
                     )
-                else:
-                    snapshot_logps = _trajectory_log_probabilities(batch, policy)
-                    snapshot_gradient_samples = gradient_estimator(
-                        batch, estimator_discount, policy, baseline, average=False
-                    )
-            finally:
-                policy.set_params(current_params)
+                finally:
+                    policy.set_params(current_params)
 
             if defensive_parameter == 0.:
                 gradient = snapshot_gradient + current_gradient - snapshot_batch_gradient
             else:
-                current_weights, snapshot_weights = _defensive_importance_weights(
-                    current_logps, snapshot_logps, defensive_parameter
-                )
                 correction = np.mean(
-                    current_weights[..., None] * current_gradient_samples
-                    - snapshot_weights[..., None] * snapshot_gradient_samples,
+                    current_gradient_samples - snapshot_gradient_samples,
                     axis=0,
                 )
                 gradient = snapshot_gradient + correction
@@ -354,33 +373,25 @@ def def_srvrpg(env, policy, *,
                     batch, estimator_discount, policy, baseline
                 )
             else:
-                current_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline, average=False
+                (current_gradient_samples,
+                 previous_gradient_samples) = _defensive_gradient_samples(
+                    batch, policy, previous_params, defensive_parameter,
+                    gradient_estimator, estimator_discount, baseline
                 )
-                current_logps = _trajectory_log_probabilities(batch, policy)
-            try:
-                policy.set_params(previous_params)
-                if defensive_parameter == 0.:
+            if defensive_parameter == 0.:
+                try:
+                    policy.set_params(previous_params)
                     previous_batch_gradient = gradient_estimator(
                         batch, estimator_discount, policy, baseline, off_policy=True
                     )
-                else:
-                    previous_logps = _trajectory_log_probabilities(batch, policy)
-                    previous_gradient_samples = gradient_estimator(
-                        batch, estimator_discount, policy, baseline, average=False
-                    )
-            finally:
-                policy.set_params(current_params)
+                finally:
+                    policy.set_params(current_params)
 
             if defensive_parameter == 0.:
                 gradient = gradient + current_gradient - previous_batch_gradient
             else:
-                current_weights, previous_weights = _defensive_importance_weights(
-                    current_logps, previous_logps, defensive_parameter
-                )
                 correction = np.mean(
-                    current_weights[..., None] * current_gradient_samples
-                    - previous_weights[..., None] * previous_gradient_samples,
+                    current_gradient_samples - previous_gradient_samples,
                     axis=0,
                 )
                 gradient = gradient + correction
@@ -514,23 +525,19 @@ def def_stormpg(env, policy, *,
                 batch, estimator_discount, policy, baseline
             )
         else:
-            current_gradient_samples = gradient_estimator(
-                batch, estimator_discount, policy, baseline, average=False
+            (current_gradient_samples,
+             previous_gradient_samples) = _defensive_gradient_samples(
+                batch, policy, previous_params, defensive_parameter,
+                gradient_estimator, estimator_discount, baseline
             )
-            current_logps = _trajectory_log_probabilities(batch, policy)
-        try:
-            policy.set_params(previous_params)
-            if defensive_parameter == 0.:
+        if defensive_parameter == 0.:
+            try:
+                policy.set_params(previous_params)
                 previous_batch_gradient = gradient_estimator(
                     batch, estimator_discount, policy, baseline, off_policy=True
                 )
-            else:
-                previous_logps = _trajectory_log_probabilities(batch, policy)
-                previous_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline, average=False
-                )
-        finally:
-            policy.set_params(current_params)
+            finally:
+                policy.set_params(current_params)
 
         decay = 1. - momentum_parameter
         if defensive_parameter == 0.:
@@ -538,12 +545,8 @@ def def_stormpg(env, policy, *,
                 gradient - previous_batch_gradient
             )
         else:
-            current_weights, previous_weights = _defensive_importance_weights(
-                current_logps, previous_logps, defensive_parameter
-            )
             gradient = decay * gradient + np.mean(
-                current_weights[..., None] * current_gradient_samples
-                - decay * previous_weights[..., None] * previous_gradient_samples,
+                current_gradient_samples - decay * previous_gradient_samples,
                 axis=0,
             )
 
@@ -676,33 +679,25 @@ def def_pagepg(env, policy, *,
                     batch, estimator_discount, policy, baseline
                 )
             else:
-                current_gradient_samples = gradient_estimator(
-                    batch, estimator_discount, policy, baseline, average=False
+                (current_gradient_samples,
+                 previous_gradient_samples) = _defensive_gradient_samples(
+                    batch, policy, previous_params, defensive_parameter,
+                    gradient_estimator, estimator_discount, baseline
                 )
-                current_logps = _trajectory_log_probabilities(batch, policy)
-            try:
-                policy.set_params(previous_params)
-                if defensive_parameter == 0.:
+            if defensive_parameter == 0.:
+                try:
+                    policy.set_params(previous_params)
                     previous_batch_gradient = gradient_estimator(
                         batch, estimator_discount, policy, baseline, off_policy=True
                     )
-                else:
-                    previous_logps = _trajectory_log_probabilities(batch, policy)
-                    previous_gradient_samples = gradient_estimator(
-                        batch, estimator_discount, policy, baseline, average=False
-                    )
-            finally:
-                policy.set_params(current_params)
+                finally:
+                    policy.set_params(current_params)
 
             if defensive_parameter == 0.:
                 gradient = gradient + current_gradient - previous_batch_gradient
             else:
-                current_weights, previous_weights = _defensive_importance_weights(
-                    current_logps, previous_logps, defensive_parameter
-                )
                 correction = np.mean(
-                    current_weights[..., None] * current_gradient_samples
-                    - previous_weights[..., None] * previous_gradient_samples,
+                    current_gradient_samples - previous_gradient_samples,
                     axis=0,
                 )
                 gradient = gradient + correction

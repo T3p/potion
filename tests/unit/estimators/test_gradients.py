@@ -141,6 +141,24 @@ def test_gradient_estimators_exceptions(batch, discount, policy, estimator):
     with pytest.raises(ValueError):
         _ = estimator(batch_3, discount, policy, off_policy=True)
 
+    with pytest.raises(ValueError):
+        _ = estimator(
+            batch, discount, policy,
+            importance_weights=np.ones(len(batch) + 1)
+        )
+
+    with pytest.raises(ValueError):
+        _ = estimator(
+            batch, discount, policy,
+            importance_weights=-np.ones(len(batch))
+        )
+
+    with pytest.raises(ValueError):
+        _ = estimator(
+            batch, discount, policy, off_policy=True,
+            importance_weights=np.ones(len(batch))
+        )
+
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 def test_gradient_estimators_masking(batch, discount, policy, horizon, estimator):
@@ -185,6 +203,29 @@ def test_gradient_estimators_off_policy_weights(small_batch, small_policy, estim
     assert np.allclose(ignored_logps_samples, on_policy_samples)
     assert np.allclose(off_policy_samples, weights[..., None] * on_policy_samples)
     assert np.allclose(off_policy_grad, np.mean(off_policy_samples, axis=0))
+
+
+@pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
+@pytest.mark.parametrize("baseline", (None, "weighted-average", "mastrangelo"))
+def test_precomputed_importance_weights_match_derived_weights(
+        small_batch, small_policy, estimator, baseline):
+    weights = np.array([2., 0.5])
+    weighted_batch = []
+    for trajectory, weight in zip(small_batch, weights):
+        states, actions, rewards, alive, _ = trajectory
+        behavior_logps = np.array([-np.log(weight), 0.])
+        weighted_batch.append((states, actions, rewards, alive, behavior_logps))
+
+    derived = estimator(
+        weighted_batch, 0.9, small_policy, baseline=baseline,
+        average=False, off_policy=True
+    )
+    precomputed = estimator(
+        weighted_batch, 0.9, small_policy, baseline=baseline,
+        average=False, importance_weights=weights
+    )
+
+    assert np.array_equal(precomputed, derived)
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
@@ -289,7 +330,7 @@ def test_mastrangelo_baseline_uses_squared_off_policy_weights(estimator):
         StateScorePolicy(),
         baseline="mastrangelo",
         average=False,
-        off_policy=True,
+        importance_weights=importance_weights,
     )
     baseline_weights = importance_weights ** 2 * scores ** 2
     leave_one_out_baselines = np.array([

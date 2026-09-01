@@ -189,6 +189,12 @@ def test_def_svrpg_gradient_correction(env, policy, n_params, mocker):
         "potion.algorithms.defpg._trajectory_log_probabilities",
         side_effect=[np.zeros(2), np.zeros(2)],
     )
+    current_weights = np.array([2., 0.5])
+    snapshot_weights = np.array([0.25, 1.5])
+    mocker.patch(
+        "potion.algorithms.defpg._defensive_importance_weights",
+        return_value=(current_weights, snapshot_weights),
+    )
     estimator = mocker.patch(
         "potion.algorithms.defpg.gpomdp_estimator",
         side_effect=[np.ones(n_params),
@@ -209,6 +215,12 @@ def test_def_svrpg_gradient_correction(env, policy, n_params, mocker):
     assert generate_batch.call_args.args[2] == 7
     assert defensive_batch.call_args.args[3] == 0.5
     assert estimator.call_count == 3
+    np.testing.assert_array_equal(
+        estimator.call_args_list[1].kwargs["importance_weights"], current_weights
+    )
+    np.testing.assert_array_equal(
+        estimator.call_args_list[2].kwargs["importance_weights"], snapshot_weights
+    )
     assert adaptive_step.call_args.kwargs["reset"] is True
     assert np.allclose(adaptive_step.call_args.args[0], 2. * np.ones(n_params))
 
