@@ -6,6 +6,7 @@ from potion.algorithms import (
     def_srvrpg,
     def_stormpg,
     def_svrpg,
+    lvrpg,
     pagepg,
     srvrpg,
     stormpg,
@@ -590,3 +591,151 @@ def test_def_pagepg_rejects_missing_stopping_criterion(env, policy):
                    max_trajectories=None,
                    logger=SilentLogger(),
                    verbose=False)
+
+
+@pytest.mark.parametrize("refresh_probability", [-0.1, 1.1])
+def test_lvrpg_rejects_invalid_refresh_probability(
+        env, policy, refresh_probability):
+    with pytest.raises(ValueError):
+        lvrpg(
+            env,
+            policy,
+            refresh_probability=refresh_probability,
+            logger=SilentLogger(),
+            verbose=False,
+        )
+
+
+@pytest.mark.parametrize("momentum_parameter", [-0.1, 1., 1.1])
+def test_lvrpg_rejects_invalid_momentum_parameter(
+        env, policy, momentum_parameter):
+    with pytest.raises(ValueError):
+        lvrpg(
+            env,
+            policy,
+            momentum_parameter=momentum_parameter,
+            logger=SilentLogger(),
+            verbose=False,
+        )
+
+
+def test_lvrpg_rejects_both_mechanisms_deactivated(env, policy):
+    with pytest.raises(ValueError):
+        lvrpg(
+            env,
+            policy,
+            refresh_probability=0.,
+            momentum_parameter=0.,
+            logger=SilentLogger(),
+            verbose=False,
+        )
+
+
+def test_lvrpg_combines_momentum_and_refresh(
+        env, policy, n_params, mocker):
+    rng = mocker.Mock()
+    rng.random.side_effect = [0.9, 0.1]
+    mocker.patch(
+        "potion.algorithms.defpg.initialize_run",
+        side_effect=lambda seed, logger: (rng, mocker.Mock(), logger),
+    )
+    generate_batch = mocker.patch(
+        "potion.algorithms.defpg.generate_batch",
+        return_value=[None] * 7,
+    )
+    defensive_batch = mocker.patch(
+        "potion.algorithms.defpg._generate_defensive_batch",
+        return_value=[None] * 2,
+    )
+    mocker.patch(
+        "potion.algorithms.defpg._trajectory_log_probabilities",
+        side_effect=[np.zeros(2), np.zeros(2)],
+    )
+    mocker.patch(
+        "potion.algorithms.defpg.gpomdp_estimator",
+        side_effect=[
+            np.ones(n_params),
+            3. * np.ones((2, n_params)),
+            2. * np.ones((2, n_params)),
+            5. * np.ones(n_params),
+        ],
+    )
+    adaptive_step = mocker.Mock(return_value=np.zeros(n_params))
+
+    lvrpg(
+        env,
+        policy,
+        batch_size=7,
+        mini_batch_size=2,
+        refresh_probability=0.5,
+        momentum_parameter=0.5,
+        max_iterations=3,
+        step_size=adaptive_step,
+        logger=SilentLogger(),
+        verbose=False,
+    )
+
+    assert [call.args[2] for call in generate_batch.call_args_list] == [7, 7]
+    assert defensive_batch.call_args.args[3] == 0.5
+    assert [call.kwargs["reset"] for call in adaptive_step.call_args_list] == [
+        True, False, True
+    ]
+    for call, expected in zip(
+            adaptive_step.call_args_list, [1., 2.5, 5.]):
+        assert np.allclose(call.args[0], expected * np.ones(n_params))
+
+
+@pytest.mark.parametrize(
+    "lvr_arguments, reference_algorithm, reference_arguments",
+    [
+        (
+            {"refresh_probability": 0., "momentum_parameter": 0.7},
+            def_stormpg,
+            {"momentum_parameter": 0.7},
+        ),
+        (
+            {"refresh_probability": 0.2, "momentum_parameter": 0.},
+            def_pagepg,
+            {"refresh_probability": 0.2},
+        ),
+    ],
+    ids=["refresh-disabled", "momentum-disabled"],
+)
+def test_lvrpg_deactivated_mechanism_matches_defensive_algorithm(
+        env, lvr_arguments, reference_algorithm, reference_arguments):
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    lvr_policy = LinearGaussianPolicy(state_dim, action_dim)
+    reference_policy = LinearGaussianPolicy(state_dim, action_dim)
+    arguments = {
+        "horizon": 3,
+        "discount": 0.9,
+        "step_size": 1e-3,
+        "batch_size": 5,
+        "mini_batch_size": 3,
+        "max_iterations": 3,
+        "estimator": "gpomdp",
+        "baseline": "zero",
+        "seed": 123,
+        "n_jobs": 1,
+        "verbose": False,
+    }
+
+    lvrpg(
+        env,
+        lvr_policy,
+        logger=SilentLogger(),
+        **arguments,
+        **lvr_arguments,
+    )
+    reference_algorithm(
+        env,
+        reference_policy,
+        logger=SilentLogger(),
+        **arguments,
+        **reference_arguments,
+    )
+
+    np.testing.assert_array_equal(
+        lvr_policy.parameters, reference_policy.parameters
+    )

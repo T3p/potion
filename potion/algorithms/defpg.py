@@ -707,5 +707,183 @@ def def_pagepg(env, policy, *,
     logger.close()
 
 
+def lvrpg(env, policy, *,
+          horizon=100,
+          discount=1.,
+          step_size=1e-4,
+          batch_size=100,
+          mini_batch_size=10,
+          refresh_probability=0.8,
+          momentum_parameter=0.9,
+          max_iterations=1000,
+          max_trajectories=None,
+          defensive_parameter=0.5,
+          estimator='gpomdp',
+          baseline='average',
+          seed=None,
+          logger=None,
+          n_jobs=1,
+          verbose=True):
+    """Run loopless variance-reduced policy gradient with momentum.
+
+    A large-batch gradient refresh is performed with
+    ``refresh_probability``. Otherwise, the estimate uses the defensive
+    STORM correction controlled by ``momentum_parameter``. Setting the
+    refresh probability to zero recovers defensive STORM-PG; setting the
+    momentum parameter to zero recovers defensive PAGE-PG. They cannot both
+    be zero.
+    """
+    if max_iterations is None and max_trajectories is None:
+        raise ValueError("max_iterations and max_trajectories cannot both be None")
+    if not 0. <= refresh_probability <= 1.:
+        raise ValueError(
+            "refresh probability should be between zero and one"
+        )
+    if not 0. <= momentum_parameter < 1.:
+        raise ValueError(
+            "momentum parameter should be greater than or equal to zero and less than one"
+        )
+    if refresh_probability == 0. and momentum_parameter == 0.:
+        raise ValueError(
+            "refresh probability and momentum parameter cannot both be zero"
+        )
+    if not 0. <= defensive_parameter < 1.:
+        raise ValueError(
+            "defensive parameter should be greater than or equal to zero and less than one"
+        )
+
+    rng, evaluation_rng, logger = initialize_run(seed, logger)
+
+    if verbose:
+        print("\n*** LVR-PG ***\n")
+
+    logger.initialize(env, policy, horizon, discount, evaluation_rng)
+
+    if ((max_iterations is not None and max_iterations < 1)
+            or (max_trajectories is not None and max_trajectories < 1)):
+        logger.close()
+        return
+
+    if estimator not in ["reinforce", "gpomdp", "nonstationary"]:
+        warnings.warn("Unknown gradient estimator: will default to gpomdp", UserWarning)
+    if estimator == "reinforce":
+        gradient_estimator = reinforce_estimator
+    elif estimator == "nonstationary":
+        gradient_estimator = nonstationary_pg_estimator
+    else:
+        gradient_estimator = gpomdp_estimator
+
+    estimator_discount = discount if horizon is not None else 1.
+
+    # Initialize with an on-policy large-batch gradient.
+    initial_batch_size = capped_batch_size(batch_size, 0, max_trajectories)
+    batch = generate_batch(env, policy, initial_batch_size, horizon,
+                           rng=rng,
+                           discount=discount,
+                           parallel=(n_jobs > 1),
+                           n_jobs=n_jobs)
+    total_trajectories = len(batch)
+    logger.submit(batch, policy)
+    gradient = gradient_estimator(
+        batch, estimator_discount, policy, baseline
+    )
+    reset_step_size = True
+
+    it = 1
+    while max_iterations is None or it <= max_iterations:
+        if verbose:
+            iteration = "{} of {}".format(it, max_iterations) if max_iterations is not None else str(it)
+            print("\nIteration {} running...".format(iteration))
+
+        if callable(step_size):
+            delta = step_size(gradient, reset=reset_step_size)
+        else:
+            delta = step_size * gradient
+
+        previous_params = policy.parameters.copy()
+        policy.set_params(previous_params + delta)
+
+        if verbose:
+            print("Iteration {} completed!".format(iteration))
+            print("Gradient norm = {}".format(np.linalg.norm(gradient)))
+            print("Parameter delta norm = {}".format(np.linalg.norm(delta)))
+
+        it += 1
+        if ((max_iterations is not None and it > max_iterations)
+                or (max_trajectories is not None and total_trajectories >= max_trajectories)):
+            break
+
+        refresh = (
+            refresh_probability == 1.
+            or (refresh_probability > 0.
+                and rng.random() < refresh_probability)
+        )
+        if refresh:
+            next_batch_size = capped_batch_size(
+                batch_size, total_trajectories, max_trajectories
+            )
+            batch = generate_batch(env, policy, next_batch_size, horizon,
+                                   rng=rng,
+                                   discount=discount,
+                                   parallel=(n_jobs > 1),
+                                   n_jobs=n_jobs)
+            total_trajectories += len(batch)
+            logger.submit(batch, policy)
+            gradient = gradient_estimator(
+                batch, estimator_discount, policy, baseline
+            )
+            reset_step_size = True
+            continue
+
+        # Defensive momentum correction between the updated and preceding
+        # policies. At zero momentum this is PAGE's recursive correction.
+        next_batch_size = capped_batch_size(
+            mini_batch_size, total_trajectories, max_trajectories
+        )
+        batch = _generate_defensive_batch(
+            env, policy, previous_params, defensive_parameter,
+            next_batch_size, horizon, discount, rng, n_jobs
+        )
+        total_trajectories += len(batch)
+        logger.submit(batch, policy)
+
+        current_params = policy.parameters.copy()
+        if defensive_parameter == 0.:
+            current_gradient = gradient_estimator(
+                batch, estimator_discount, policy, baseline
+            )
+            try:
+                policy.set_params(previous_params)
+                previous_batch_gradient = gradient_estimator(
+                    batch, estimator_discount, policy, baseline,
+                    off_policy=True
+                )
+            finally:
+                policy.set_params(current_params)
+        else:
+            (current_gradient_samples,
+             previous_gradient_samples) = _defensive_gradient_samples(
+                batch, policy, previous_params, defensive_parameter,
+                gradient_estimator, estimator_discount, baseline
+            )
+
+        decay = 1. - momentum_parameter
+        if defensive_parameter == 0.:
+            gradient = current_gradient + decay * (
+                gradient - previous_batch_gradient
+            )
+        else:
+            gradient = decay * gradient + np.mean(
+                current_gradient_samples - decay * previous_gradient_samples,
+                axis=0,
+            )
+        reset_step_size = False
+
+    logger.close()
+
+
 # Short public name for defensive PAGE-PG.
 def_pg = def_pagepg
+
+# Alternative spelling matching the hyphenated algorithm name.
+lvr_pg = lvrpg

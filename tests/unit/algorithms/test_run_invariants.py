@@ -7,6 +7,7 @@ from potion.algorithms import (
     def_srvrpg,
     def_stormpg,
     def_svrpg,
+    lvrpg,
     pagepg,
     reinforce,
     srvrpg,
@@ -25,6 +26,7 @@ ALGORITHMS = (
     def_stormpg,
     pagepg,
     def_pagepg,
+    lvrpg,
 )
 
 
@@ -68,6 +70,12 @@ def test_algorithms_honor_exact_awkward_trajectory_budgets(
         arguments.update(mini_batch_size=5, momentum_parameter=0.99)
     elif algorithm in (pagepg, def_pagepg):
         arguments.update(mini_batch_size=5, refresh_probability=0.8)
+    elif algorithm is lvrpg:
+        arguments.update(
+            mini_batch_size=5,
+            refresh_probability=0.8,
+            momentum_parameter=0.99,
+        )
 
     algorithm(env, policy, **arguments)
 
