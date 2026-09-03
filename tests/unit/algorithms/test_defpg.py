@@ -619,18 +619,6 @@ def test_lvrpg_rejects_invalid_momentum_parameter(
         )
 
 
-def test_lvrpg_rejects_both_mechanisms_deactivated(env, policy):
-    with pytest.raises(ValueError):
-        lvrpg(
-            env,
-            policy,
-            refresh_probability=0.,
-            momentum_parameter=0.,
-            logger=SilentLogger(),
-            verbose=False,
-        )
-
-
 def test_lvrpg_combines_momentum_and_refresh(
         env, policy, n_params, mocker):
     rng = mocker.Mock()
@@ -739,3 +727,30 @@ def test_lvrpg_deactivated_mechanism_matches_defensive_algorithm(
     np.testing.assert_array_equal(
         lvr_policy.parameters, reference_policy.parameters
     )
+
+
+def test_lvrpg_accepts_both_mechanisms_deactivated(env):
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    policy = LinearGaussianPolicy(state_dim, action_dim)
+
+    lvrpg(
+        env,
+        policy,
+        horizon=3,
+        discount=0.9,
+        step_size=1e-3,
+        batch_size=5,
+        mini_batch_size=3,
+        refresh_probability=0.,
+        momentum_parameter=0.,
+        max_iterations=3,
+        estimator="gpomdp",
+        baseline="zero",
+        seed=123,
+        logger=SilentLogger(),
+        n_jobs=1,
+        verbose=False,
+    )
+
+    assert np.all(np.isfinite(policy.parameters))

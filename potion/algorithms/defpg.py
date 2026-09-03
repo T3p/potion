@@ -730,8 +730,8 @@ def lvrpg(env, policy, *,
     ``refresh_probability``. Otherwise, the estimate uses the defensive
     STORM correction controlled by ``momentum_parameter``. Setting the
     refresh probability to zero recovers defensive STORM-PG; setting the
-    momentum parameter to zero recovers defensive PAGE-PG. They cannot both
-    be zero.
+    momentum parameter to zero recovers defensive PAGE-PG. Setting both to
+    zero is also supported and runs the unrefreshed recursive estimator.
     """
     if max_iterations is None and max_trajectories is None:
         raise ValueError("max_iterations and max_trajectories cannot both be None")
@@ -742,10 +742,6 @@ def lvrpg(env, policy, *,
     if not 0. <= momentum_parameter < 1.:
         raise ValueError(
             "momentum parameter should be greater than or equal to zero and less than one"
-        )
-    if refresh_probability == 0. and momentum_parameter == 0.:
-        raise ValueError(
-            "refresh probability and momentum parameter cannot both be zero"
         )
     if not 0. <= defensive_parameter < 1.:
         raise ValueError(
