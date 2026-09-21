@@ -122,6 +122,9 @@ def pagepg(
             print(f"Gradient norm = {np.linalg.norm(gradient)}")
             print(f"Parameter delta norm = {np.linalg.norm(delta)}")
 
+        if max_trajectories is None:
+            pbar.update(1)
+
         it += 1
         if (max_iterations is not None and it > max_iterations) or (
             max_trajectories is not None

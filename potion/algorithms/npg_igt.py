@@ -4,7 +4,12 @@ import warnings
 
 import numpy as np
 
-from potion.algorithms._common import capped_batch_size, initialize_run
+from potion.algorithms._common import (
+    capped_batch_size,
+    initialize_progress_bar,
+    initialize_run,
+    update_progress_bar,
+)
 from potion.estimators.gradients import (
     gpomdp_estimator,
     nonstationary_pg_estimator,
@@ -13,20 +18,24 @@ from potion.estimators.gradients import (
 from potion.simulation.trajectory_generators import generate_batch
 
 
-def npg_igt(env, policy, *,
-            horizon=100,
-            discount=1.,
-            step_size=1e-4,
-            batch_size=100,
-            momentum_parameter=0.9,
-            max_iterations=1000,
-            max_trajectories=None,
-            estimator='gpomdp',
-            baseline='average',
-            seed=None,
-            logger=None,
-            n_jobs=1,
-            verbose=True):
+def npg_igt(
+    env,
+    policy,
+    *,
+    horizon=100,
+    discount=1.0,
+    step_size=1e-4,
+    batch_size=100,
+    momentum_parameter=0.9,
+    max_iterations=1000,
+    max_trajectories=None,
+    estimator="gpomdp",
+    baseline="average",
+    seed=None,
+    logger=None,
+    n_jobs=1,
+    verbose=True,
+):
     """Run normalized PG with implicit gradient transport.
 
     This implements Algorithm 1 (N-PG-IGT) from Fatkhullin et al.,
@@ -37,8 +46,10 @@ def npg_igt(env, policy, *,
     gradient; set ``batch_size=1`` for the paper's single-trajectory update.
     """
     if max_iterations is None and max_trajectories is None:
-        raise ValueError("max_iterations and max_trajectories cannot both be None")
-    if not 0. < momentum_parameter <= 1.:
+        raise ValueError(
+            "max_iterations and max_trajectories cannot both be None"
+        )
+    if not 0.0 < momentum_parameter <= 1.0:
         raise ValueError(
             "momentum parameter should be greater than zero and at most one"
         )
@@ -49,6 +60,10 @@ def npg_igt(env, policy, *,
         print("\n*** N-PG-IGT ***\n")
 
     logger.initialize(env, policy, horizon, discount, evaluation_rng)
+
+    progress_bar = initialize_progress_bar(
+        max_iterations, max_trajectories, "N-PG-IGT"
+    )
 
     if estimator not in ["reinforce", "gpomdp", "nonstationary"]:
         warnings.warn(
@@ -61,24 +76,25 @@ def npg_igt(env, policy, *,
     else:
         gradient_estimator = gpomdp_estimator
 
-    estimator_discount = discount if horizon is not None else 1.
+    estimator_discount = discount if horizon is not None else 1.0
     previous_params = policy.parameters.copy()
     direction = None
     it = 1
     total_trajectories = 0
 
-    while ((max_iterations is None or it <= max_iterations)
-           and (max_trajectories is None
-                or total_trajectories < max_trajectories)):
+    while (max_iterations is None or it <= max_iterations) and (
+        max_trajectories is None or total_trajectories < max_trajectories
+    ):
         if verbose:
             iteration = (
-                "{} of {}".format(it, max_iterations)
-                if max_iterations is not None else str(it)
+                f"{it} of {max_iterations}"
+                if max_iterations is not None
+                else str(it)
             )
-            print("\nIteration {} running...".format(iteration))
+            print(f"\nIteration {iteration} running...")
 
         current_params = policy.parameters.copy()
-        lookahead_scale = (1. - momentum_parameter) / momentum_parameter
+        lookahead_scale = (1.0 - momentum_parameter) / momentum_parameter
         lookahead_params = current_params + lookahead_scale * (
             current_params - previous_params
         )
@@ -108,6 +124,7 @@ def npg_igt(env, policy, *,
             policy.set_params(current_params)
 
         total_trajectories += len(batch)
+        update_progress_bar(progress_bar, max_trajectories, len(batch))
         logger.submit(batch, policy)
 
         # The first stochastic gradient initializes d_0. Subsequent estimates
@@ -116,12 +133,11 @@ def npg_igt(env, policy, *,
             direction = gradient
         else:
             direction = (
-                (1. - momentum_parameter) * direction
-                + momentum_parameter * gradient
-            )
+                1.0 - momentum_parameter
+            ) * direction + momentum_parameter * gradient
 
         direction_norm = np.linalg.norm(direction)
-        if direction_norm == 0.:
+        if direction_norm == 0.0:
             normalized_direction = np.zeros_like(direction)
         else:
             normalized_direction = direction / direction_norm
@@ -135,11 +151,12 @@ def npg_igt(env, policy, *,
         policy.set_params(current_params + delta)
 
         if verbose:
-            print("Iteration {} completed!".format(iteration))
-            print("Gradient norm = {}".format(np.linalg.norm(gradient)))
-            print("Momentum norm = {}".format(direction_norm))
-            print("Parameter delta norm = {}".format(np.linalg.norm(delta)))
+            print(f"Iteration {iteration} completed!")
+            print(f"Gradient norm = {np.linalg.norm(gradient)}")
+            print(f"Momentum norm = {direction_norm}")
+            print(f"Parameter delta norm = {np.linalg.norm(delta)}")
 
         it += 1
 
     logger.close()
+    progress_bar.close()

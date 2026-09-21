@@ -7,8 +7,8 @@ register(
 )
 
 register(
-    id='CartPoleContinuous-v0',
-    entry_point='potion.envs.cartpole_continuous:CartPoleContinuous'
+    id="CartPoleContinuous-v0",
+    entry_point="potion.envs.cartpole:ContCartPole",
 )
 
 register(
