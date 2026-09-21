@@ -3,6 +3,9 @@ from gymnasium.spaces import Box, Discrete
 
 
 class Policy(ABC):
+    # Stationary policies can evaluate every trajectory timestep in one batch.
+    is_stationary = True
+
     def __init__(self, state_dim, action_dim):
         self._state_dim = state_dim
         self._action_dim = action_dim
@@ -49,6 +52,14 @@ class StochasticPolicy(Policy):
     @abstractmethod
     def log_prob(self, s, a, t=None):  # pragma: no cover
         pass
+
+    def act_and_log_prob(self, s, rng, t=None):
+        """Sample one action and return its log probability.
+
+        Subclasses can override this to reuse policy-network activations.
+        """
+        action = self.act(s, rng, t)
+        return action, self.log_prob(s, action, t)
 
     @abstractmethod
     def entropy(self, s, t=None):  # pragma: no cover

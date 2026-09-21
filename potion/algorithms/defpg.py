@@ -6,20 +6,39 @@ notation, alpha is the current-policy mass, so alpha equals
 """
 
 from potion.simulation.trajectory_generators import generate_batch, unpack, apply_mask
-from potion.estimators.gradients import gpomdp_estimator, reinforce_estimator, nonstationary_pg_estimator
+from potion.estimators.gradients import (gpomdp_estimator, reinforce_estimator,
+                                         nonstationary_pg_estimator,
+                                         prepare_gradient_batch)
 from potion.algorithms._common import capped_batch_size, initialize_run
 import numpy as np
 import warnings
 
 
-def _trajectory_log_probabilities(batch, policy):
-    states, actions, _, alive, _ = unpack(batch)
-    logps = np.zeros_like(alive, dtype=float)
-    for t in range(states.shape[1]):
-        active = alive[:, t]
-        if np.any(active):
-            logps[active, t] = policy.log_prob(states[active, t], actions[active, t], t)
-    return np.sum(apply_mask(logps, alive), axis=1)
+def _trajectory_log_probabilities(batch, policy, per_decision=False,
+                                  batch_context=None):
+    if batch_context is None:
+        states, actions, _, alive, _ = unpack(batch)
+    else:
+        states = batch_context.states
+        actions = batch_context.actions
+        alive = batch_context.alive
+    if getattr(policy, "is_stationary", False):
+        logps = apply_mask(
+            np.asarray(policy.log_prob(states, actions), dtype=np.float64),
+            alive,
+        )
+    else:
+        logps = np.zeros_like(alive, dtype=float)
+        for t in range(states.shape[1]):
+            active = alive[:, t]
+            if np.any(active):
+                logps[active, t] = policy.log_prob(
+                    states[active, t], actions[active, t], t
+                )
+        logps = apply_mask(logps, alive)
+    if per_decision:
+        return np.cumsum(logps, axis=1)
+    return np.sum(logps, axis=1)
 
 
 def _defensive_importance_weights(current_logps, snapshot_logps, defensive_parameter):
@@ -48,14 +67,30 @@ def _defensive_importance_weights(current_logps, snapshot_logps, defensive_param
 
 
 def _defensive_gradient_samples(batch, policy, reference_params,
-                                defensive_parameter, gradient_estimator,
-                                estimator_discount, baseline):
+                                 defensive_parameter, gradient_estimator,
+                                 estimator_discount, baseline):
     """Evaluate both mixture-corrected gradient samples on one batch."""
+    batch_context = None
+    if batch and isinstance(batch[0], tuple) and len(batch[0]) == 5:
+        batch_context = prepare_gradient_batch(
+            batch, estimator_discount, baseline
+        )
+    context_kwargs = (
+        {"batch_context": batch_context} if batch_context is not None else {}
+    )
     current_params = policy.parameters.copy()
-    current_logps = _trajectory_log_probabilities(batch, policy)
+    per_decision = gradient_estimator in (
+        gpomdp_estimator,
+        nonstationary_pg_estimator,
+    )
+    current_logps = _trajectory_log_probabilities(
+        batch, policy, per_decision=per_decision, **context_kwargs
+    )
     try:
         policy.set_params(reference_params)
-        reference_logps = _trajectory_log_probabilities(batch, policy)
+        reference_logps = _trajectory_log_probabilities(
+            batch, policy, per_decision=per_decision, **context_kwargs
+        )
     finally:
         policy.set_params(current_params)
 
@@ -64,13 +99,13 @@ def _defensive_gradient_samples(batch, policy, reference_params,
     )
     current_samples = gradient_estimator(
         batch, estimator_discount, policy, baseline, average=False,
-        importance_weights=current_weights
+        importance_weights=current_weights, **context_kwargs
     )
     try:
         policy.set_params(reference_params)
         reference_samples = gradient_estimator(
             batch, estimator_discount, policy, baseline, average=False,
-            importance_weights=reference_weights
+            importance_weights=reference_weights, **context_kwargs
         )
     finally:
         policy.set_params(current_params)

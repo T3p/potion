@@ -1,8 +1,16 @@
 import numpy as np
 import pytest
-from potion.estimators.gradients import reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator
-from potion.policies.gaussian_policies import LinearGaussianPolicy
+from potion.estimators.gradients import (
+    reinforce_estimator,
+    gpomdp_estimator,
+    nonstationary_pg_estimator,
+    prepare_gradient_batch,
+    _importance_weights,
+)
+from potion.policies.gaussian_policies import DeepGaussianPolicy, LinearGaussianPolicy
 from potion.policies.wrappers import Staged
+from potion.simulation.trajectory_generators import unpack
+from torch import nn
 
 
 @pytest.fixture
@@ -46,6 +54,45 @@ def test_gradient_estimators_shapes(batch, discount, policy, n_traj, n_params, m
     expected_num_params = n_params if estimator is not nonstationary_pg_estimator else max_trajectory_len * n_params
     assert grad.shape == (expected_num_params,)
     assert grad_samples.shape == (n_traj, expected_num_params)
+
+
+@pytest.mark.parametrize(
+    "estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator)
+)
+def test_prepared_gradient_batch_matches_regular_estimator(
+        batch, discount, policy, estimator):
+    context = prepare_gradient_batch(batch, discount, baseline="average")
+
+    expected = estimator(batch, discount, policy, baseline="average", average=False)
+    actual = estimator(
+        batch,
+        discount,
+        policy,
+        baseline="average",
+        average=False,
+        batch_context=context,
+    )
+
+    assert np.allclose(actual, expected)
+
+
+def test_prepared_gradient_batch_avoids_restacking(
+        small_batch, small_policy, mocker):
+    context = prepare_gradient_batch(small_batch, 0.9, baseline="average")
+    mocker.patch(
+        "potion.estimators.gradients.unpack",
+        side_effect=AssertionError("prepared data should be reused"),
+    )
+
+    result = gpomdp_estimator(
+        small_batch,
+        0.9,
+        small_policy,
+        baseline="average",
+        batch_context=context,
+    )
+
+    assert result.shape == (small_policy.num_params,)
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
@@ -107,6 +154,44 @@ def test_gpomdp_estimator_values(small_policy, small_batch):
     assert np.allclose(grad_1, [g1, 2. * g1])
     assert np.allclose(grad_2, [g2, 2. * g2])
     assert np.allclose(grad_3, [g3, 2. * g3])
+
+
+def test_gpomdp_uses_weighted_score_samples_when_available(small_batch):
+    class FastPolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            raise AssertionError("The score tensor should not be materialized")
+
+        def weighted_score_samples(self, states, actions, coefficients):
+            assert coefficients.shape == states.shape[:-1]
+            return np.full((len(states), 2), 3., dtype=np.float32)
+
+    samples = gpomdp_estimator(
+        small_batch, 0.9, FastPolicy(), baseline="average", average=False
+    )
+
+    assert np.array_equal(samples, np.full((2, 2), 3., dtype=np.float32))
+
+
+def test_gpomdp_uses_weighted_score_sum_when_available(small_batch):
+    class FastPolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            raise AssertionError("The score tensor should not be materialized")
+
+        def weighted_score_sum(self, states, actions, coefficients):
+            assert coefficients.shape == states.shape[:-1]
+            return np.full(2, 6., dtype=np.float32)
+
+    gradient = gpomdp_estimator(
+        small_batch, 0.9, FastPolicy(), baseline="average", average=True
+    )
+
+    assert np.array_equal(gradient, np.full(2, 3., dtype=np.float32))
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
@@ -347,7 +432,7 @@ def test_mastrangelo_baseline_uses_squared_off_policy_weights(estimator):
 
 
 @pytest.mark.parametrize("estimator", (gpomdp_estimator, nonstationary_pg_estimator))
-def test_mastrangelo_time_baseline_uses_full_trajectory_weights(estimator):
+def test_mastrangelo_time_baseline_uses_per_decision_weights(estimator):
     class StateScorePolicy:
         state_dim = 1
         action_dim = 1
@@ -386,22 +471,68 @@ def test_mastrangelo_time_baseline_uses_full_trajectory_weights(estimator):
         off_policy=True,
     )
     returns_to_go = np.cumsum(rewards[:, ::-1], axis=1)[:, ::-1]
-    baseline_weights = importance_weights[:, None] ** 2 * scores ** 2
+    prefix_weights = np.column_stack((
+        np.ones(len(importance_weights)),
+        importance_weights,
+    ))
+    baseline_weights = prefix_weights ** 2 * scores ** 2
     leave_one_out_baselines = (
         np.sum(baseline_weights * returns_to_go, axis=0) -
         baseline_weights * returns_to_go
     ) / (np.sum(baseline_weights, axis=0) - baseline_weights)
-    expected_steps = (
-        importance_weights[:, None] * scores *
-        (returns_to_go - leave_one_out_baselines)
-    )
-    expected = (
-        np.sum(expected_steps, axis=1, keepdims=True)
-        if estimator is gpomdp_estimator
-        else expected_steps
-    )
+    if estimator is gpomdp_estimator:
+        expected_steps = (
+            prefix_weights * rewards * np.cumsum(scores, axis=1)
+            - prefix_weights * scores * leave_one_out_baselines
+        )
+        expected = np.sum(expected_steps, axis=1, keepdims=True)
+    else:
+        weighted_returns_to_go = np.cumsum(
+            (prefix_weights * rewards)[:, ::-1], axis=1
+        )[:, ::-1]
+        expected = scores * (
+            weighted_returns_to_go
+            - prefix_weights * leave_one_out_baselines
+        )
 
     assert np.allclose(samples, expected)
+
+
+def test_reinforce_off_policy_keeps_full_trajectory_weight():
+    class StateScorePolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            return states
+
+        def log_prob(self, states, actions, t=None):
+            return np.zeros(states.shape[:-1])
+
+    scores = np.array([1., 2.])
+    rewards = np.array([1., 10.])
+    incremental_ratios = np.array([2., 3.])
+    batch = [(
+        scores[..., None],
+        np.ones((2, 1)),
+        rewards,
+        np.ones(2, dtype=bool),
+        -np.log(incremental_ratios),
+    )]
+
+    samples = reinforce_estimator(
+        batch,
+        1.,
+        StateScorePolicy(),
+        baseline=None,
+        average=False,
+        off_policy=True,
+    )
+    expected = (
+        np.prod(incremental_ratios) * np.sum(scores) * np.sum(rewards)
+    )
+
+    assert samples[0, 0] == pytest.approx(expected)
 
 
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
@@ -457,7 +588,77 @@ def test_nonstationary_off_policy_weights_staged_policy():
         average=False, off_policy=True
     )
 
-    assert np.allclose(off_policy_samples, weights[..., None] * on_policy_samples)
+    incremental_ratios = np.sqrt(weights)[..., None]
+    prefix_weights = np.concatenate(
+        (incremental_ratios, weights[..., None]), axis=1
+    )
+    discounted_rewards = rewards * np.array([1., 0.9])
+    weighted_returns_to_go = np.cumsum(
+        (prefix_weights * discounted_rewards)[:, ::-1], axis=1
+    )[:, ::-1]
+    scores = policy.score(states, actions)
+    expected = (scores[..., 0] * weighted_returns_to_go).reshape(
+        len(states), -1
+    )
+
+    assert not np.allclose(
+        off_policy_samples, weights[..., None] * on_policy_samples
+    )
+    assert np.allclose(off_policy_samples, expected)
+
+
+@pytest.mark.parametrize("estimator", (gpomdp_estimator, nonstationary_pg_estimator))
+def test_gpomdp_like_estimators_use_prefix_importance_weights(estimator):
+    class StateScorePolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def score(self, states, actions):
+            return states
+
+        def log_prob(self, states, actions, t=None):
+            return np.zeros(states.shape[:-1])
+
+    scores = np.array([1., 2.])
+    rewards = np.array([1., 10.])
+    incremental_ratios = np.array([2., 3.])
+    prefix_weights = np.cumprod(incremental_ratios)
+    batch = [(
+        scores[..., None],
+        np.ones((2, 1)),
+        rewards,
+        np.ones(2, dtype=bool),
+        -np.log(incremental_ratios),
+    )]
+
+    samples = estimator(
+        batch,
+        1.,
+        StateScorePolicy(),
+        baseline=None,
+        average=False,
+        off_policy=True,
+    )
+    precomputed_samples = estimator(
+        batch,
+        1.,
+        StateScorePolicy(),
+        baseline=None,
+        average=False,
+        importance_weights=prefix_weights[None, :],
+    )
+    if estimator is gpomdp_estimator:
+        expected = np.sum(
+            prefix_weights * rewards * np.cumsum(scores)
+        ).reshape(1, 1)
+    else:
+        weighted_returns_to_go = np.cumsum(
+            (prefix_weights * rewards)[::-1]
+        )[::-1]
+        expected = (scores * weighted_returns_to_go).reshape(1, -1)
+
+    assert np.allclose(samples, expected)
+    assert np.array_equal(precomputed_samples, samples)
 
 
 class _BernoulliPolicy:
@@ -629,3 +830,133 @@ def test_gpomdp_peters_baseline_is_weighted_leave_one_out_return_to_go():
     expected = scores * (returns_to_go - leave_one_out_baselines)
 
     assert np.allclose(samples[:, 0], expected)
+
+
+@pytest.mark.parametrize("off_policy", (False, True))
+@pytest.mark.parametrize("baseline", (None, "average", "weighted-average"))
+def test_deep_gpomdp_fast_average_matches_per_sample_estimator(
+        rng, off_policy, baseline):
+    state_dim = 3
+    action_dim = 2
+    policy = DeepGaussianPolicy(
+        state_dim,
+        action_dim,
+        mean_network=nn.Sequential(
+            nn.Linear(state_dim, 4),
+            nn.Tanh(),
+            nn.Linear(4, action_dim),
+        ),
+        std_init=np.array([0.5, 0.8]),
+        learn_std=True,
+    )
+    n_trajectories = 4
+    horizon = 5
+    states = rng.normal(size=(n_trajectories, horizon, state_dim))
+    actions = rng.normal(size=(n_trajectories, horizon, action_dim))
+    rewards = rng.normal(size=(n_trajectories, horizon))
+    alive = np.ones((n_trajectories, horizon), dtype=bool)
+    alive[0, -2:] = False
+    alive[1, -1] = False
+    behavior_logps = policy.log_prob(states, actions)
+    if off_policy:
+        behavior_logps = behavior_logps - rng.normal(
+            scale=0.02, size=behavior_logps.shape
+        )
+    batch = [
+        (states[i], actions[i], rewards[i], alive[i], behavior_logps[i])
+        for i in range(n_trajectories)
+    ]
+
+    samples = gpomdp_estimator(
+        batch,
+        0.97,
+        policy,
+        baseline=baseline,
+        average=False,
+        off_policy=off_policy,
+    )
+    fast_average = gpomdp_estimator(
+        batch,
+        0.97,
+        policy,
+        baseline=baseline,
+        average=True,
+        off_policy=off_policy,
+    )
+
+    assert np.allclose(
+        fast_average,
+        np.mean(samples, axis=0),
+        rtol=2e-5,
+        atol=2e-5,
+    )
+
+
+def test_stationary_importance_log_probs_are_evaluated_in_one_batch():
+    class CountingStationaryPolicy:
+        state_dim = 1
+        action_dim = 1
+        is_stationary = True
+
+        def __init__(self):
+            self.log_prob_calls = 0
+
+        def score(self, states, actions):
+            return np.ones(states.shape[:-1] + (1,))
+
+        def log_prob(self, states, actions, t=None):
+            self.log_prob_calls += 1
+            return np.zeros(states.shape[:-1])
+
+    policy = CountingStationaryPolicy()
+    batch = [
+        (
+            np.zeros((3, 1)),
+            np.zeros((3, 1)),
+            np.ones(3),
+            np.ones(3, dtype=bool),
+            np.zeros(3),
+        )
+        for _ in range(2)
+    ]
+
+    gpomdp_estimator(
+        batch,
+        1.,
+        policy,
+        baseline=None,
+        average=False,
+        off_policy=True,
+    )
+
+    assert policy.log_prob_calls == 1
+
+
+def test_importance_log_ratio_accumulation_uses_float64():
+    class Float32StationaryPolicy:
+        is_stationary = True
+
+        def score(self, states, actions):
+            return np.ones(states.shape[:-1] + (1,))
+
+        def log_prob(self, states, actions, t=None):
+            return np.zeros(states.shape[:-1], dtype=np.float32)
+
+    policy = Float32StationaryPolicy()
+    batch = [
+        (
+            np.zeros((3, 1), dtype=np.float32),
+            np.zeros((3, 1), dtype=np.float32),
+            np.ones(3, dtype=np.float32),
+            np.ones(3, dtype=bool),
+            np.zeros(3, dtype=np.float32),
+        )
+        for _ in range(2)
+    ]
+
+    states, actions, _, alive, behavior_logps = unpack(batch)
+    importance_weights = _importance_weights(
+        states, actions, alive, behavior_logps, policy, per_decision=True
+    )
+
+    assert importance_weights.dtype == np.float64

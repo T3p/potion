@@ -97,6 +97,21 @@ def test_linear_softmax_policy(rng):
                                         + np.exp(0.5) * 0.5 * score_2) / Z)
 
 
+def test_softmax_act_and_log_prob_matches_separate_calls():
+    policy = LinearSoftmaxPolicy(
+        2, 3, params_init=np.array([[0., -1.], [2., 1.], [0.5, 0.]])
+    )
+    state = np.array([0.5, 2.])
+
+    action, log_prob = policy.act_and_log_prob(
+        state, np.random.default_rng(1234)
+    )
+    separate_action = policy.act(state, np.random.default_rng(1234))
+
+    assert action == separate_action
+    assert np.allclose(log_prob, policy.log_prob(state, separate_action))
+
+
 def test_linear_softmax_policy_batched_outputs_match_individual_calls(rng):
     pol = LinearSoftmaxPolicy(
         2,
@@ -300,6 +315,53 @@ def test_deep_softmax_policy_batched_gradients(state_d, num_actions, deep_softma
     assert np.allclose(log_probs, expected_log_probs, rtol=1e-5, atol=1e-6)
     assert np.allclose(scores, expected_scores, rtol=1e-5, atol=1e-6)
     assert np.allclose(entropy_grads, expected_entropy_grads, rtol=1e-5, atol=1e-6)
+
+
+def test_deep_softmax_weighted_score_samples(
+        state_d, num_actions, deep_softmax_policy, rng):
+    states = rng.normal(size=(2, 3, state_d))
+    actions = rng.integers(num_actions, size=(2, 3, 1))
+    weights = rng.normal(size=(2, 3)).astype(np.float32)
+
+    expected = np.sum(
+        deep_softmax_policy.score(states, actions) * weights[..., None],
+        axis=1,
+    )
+    actual = deep_softmax_policy.weighted_score_samples(
+        states, actions, weights
+    )
+
+    assert actual.shape == (2, deep_softmax_policy.num_params)
+    assert actual.dtype == np.float32
+    assert np.allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_deep_softmax_weighted_score_sum(
+        state_d, num_actions, deep_softmax_policy, rng):
+    states = rng.normal(size=(2, 3, state_d))
+    actions = rng.integers(num_actions, size=(2, 3, 1))
+    weights = rng.normal(size=(2, 3)).astype(np.float32)
+
+    expected = np.sum(
+        deep_softmax_policy.score(states, actions) * weights[..., None],
+        axis=(0, 1),
+    )
+    actual = deep_softmax_policy.weighted_score_sum(states, actions, weights)
+
+    assert actual.shape == (deep_softmax_policy.num_params,)
+    assert actual.dtype == np.float32
+    assert np.allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_deep_softmax_weighted_score_sum_checks_weight_shape(
+        state_d, num_actions, deep_softmax_policy):
+    states = np.zeros((2, 3, state_d))
+    actions = np.zeros((2, 3, 1), dtype=int)
+
+    with pytest.raises(ValueError, match="weights should match"):
+        deep_softmax_policy.weighted_score_sum(
+            states, actions, np.zeros((2, 2))
+        )
 
 
 def test_deep_softmax_policy_exceptions(state_d, num_actions, deep_softmax_policy):

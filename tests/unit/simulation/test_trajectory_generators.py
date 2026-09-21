@@ -53,6 +53,52 @@ def test_generate_trajectory_preserves_discrete_action_dtype(seed):
     assert np.issubdtype(actions.dtype, np.integer)
 
 
+def test_generate_trajectory_stores_continuous_data_as_float32(
+        env_1d, policy_1d, max_trajectory_len, seed):
+    states, actions, rewards, _, logps = generate_trajectory(
+        env_1d, policy_1d, max_trajectory_len, seed
+    )
+
+    assert states.dtype == np.float32
+    assert actions.dtype == np.float32
+    assert rewards.dtype == np.float32
+    assert logps.dtype == np.float32
+
+
+def test_generate_trajectory_uses_fused_action_and_log_prob(seed):
+    class OneStepEnv(gym.Env):
+        observation_space = gym.spaces.Box(-1., 1., shape=(1,), dtype=float)
+        action_space = gym.spaces.Box(-1., 1., shape=(1,), dtype=float)
+
+        def reset(self, seed=None, options=None):
+            return np.zeros(1), {}
+
+        def step(self, action):
+            return np.zeros(1), 1., True, False, {}
+
+    class FusedPolicy:
+        def __init__(self):
+            self.calls = 0
+
+        def act_and_log_prob(self, state, rng, t=None):
+            self.calls += 1
+            return np.array([0.25]), -0.75
+
+        def act(self, state, rng, t=None):
+            raise AssertionError("the fused method should be used")
+
+        def log_prob(self, state, action, t=None):
+            raise AssertionError("the fused method should be used")
+
+    policy = FusedPolicy()
+    _, actions, _, alive, logps = generate_trajectory(OneStepEnv(), policy, 2, seed)
+
+    assert policy.calls == 1
+    assert np.allclose(actions[0], [0.25])
+    assert alive.tolist() == [True, False]
+    assert np.allclose(logps, [-0.75, 0.])
+
+
 def test_generate_trajectory_1d(env_1d, policy_1d, max_trajectory_len, seed):
     traj = generate_trajectory(env_1d, policy_1d, max_trajectory_len, seed)
 

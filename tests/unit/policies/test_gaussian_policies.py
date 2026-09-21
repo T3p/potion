@@ -166,6 +166,34 @@ def test_squashed_gaussian_policy_uses_environment_bounds(rng):
     assert np.all(action < env.action_space.high)
 
 
+@pytest.mark.parametrize("squash_actions", [False, True])
+def test_gaussian_act_and_log_prob_matches_separate_calls(
+        state_d, action_d, squash_actions):
+    kwargs = {}
+    if squash_actions:
+        kwargs = {
+            "squash_actions": True,
+            "action_low": -np.ones(action_d),
+            "action_high": np.ones(action_d),
+        }
+    policy = LinearGaussianPolicy(
+        state_d,
+        action_d,
+        mean_params_init=np.arange(action_d * state_d) / 10.,
+        std_init=np.linspace(0.3, 0.8, action_d),
+        **kwargs,
+    )
+    state = np.linspace(-0.5, 0.5, state_d)
+
+    action, log_prob = policy.act_and_log_prob(
+        state, np.random.default_rng(1234)
+    )
+    separate_action = policy.act(state, np.random.default_rng(1234))
+
+    assert np.allclose(action, separate_action)
+    assert np.allclose(log_prob, policy.log_prob(state, separate_action))
+
+
 def test_squashed_gaussian_log_prob_score_and_importance_ratio(rng):
     low = np.array([-2., 1.])
     high = np.array([4., 5.])
@@ -577,6 +605,73 @@ def test_deep_gaussian_policy_batched_score(
     ])
     assert scores.shape == (2, 3, deep_gaussian_policy.num_params)
     assert np.allclose(scores, expected)
+
+
+def test_deep_gaussian_weighted_score_sum_with_vector_std(
+        state_d, action_d, rng):
+    network = nn.Sequential(
+        nn.Linear(state_d, 4),
+        nn.Tanh(),
+        nn.Linear(4, action_d),
+    )
+    policy = DeepGaussianPolicy(
+        state_d,
+        action_d,
+        mean_network=network,
+        std_init=np.linspace(0.5, 0.8, action_d),
+        learn_std=True,
+    )
+    states = rng.normal(size=(2, 3, state_d))
+    actions = rng.normal(size=(2, 3, action_d))
+    weights = rng.normal(size=(2, 3)).astype(np.float32)
+
+    expected = np.sum(
+        policy.score(states, actions) * weights[..., None],
+        axis=(0, 1),
+    )
+    actual = policy.weighted_score_sum(states, actions, weights)
+
+    assert actual.dtype == np.float32
+    assert np.allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_deep_gaussian_weighted_score_samples_with_vector_std(
+        state_d, action_d, rng):
+    network = nn.Sequential(
+        nn.Linear(state_d, 4),
+        nn.Tanh(),
+        nn.Linear(4, action_d),
+    )
+    policy = DeepGaussianPolicy(
+        state_d,
+        action_d,
+        mean_network=network,
+        std_init=np.linspace(0.5, 0.8, action_d),
+        learn_std=True,
+    )
+    states = rng.normal(size=(2, 3, state_d))
+    actions = rng.normal(size=(2, 3, action_d))
+    weights = rng.normal(size=(2, 3)).astype(np.float32)
+
+    expected = np.sum(
+        policy.score(states, actions) * weights[..., None], axis=1
+    )
+    actual = policy.weighted_score_samples(states, actions, weights)
+
+    assert actual.shape == (2, policy.num_params)
+    assert actual.dtype == np.float32
+    assert np.allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
+def test_deep_gaussian_weighted_score_sum_checks_weight_shape(
+        deep_gaussian_policy, state_d, action_d):
+    states = np.zeros((2, 3, state_d))
+    actions = np.zeros((2, 3, action_d))
+
+    with pytest.raises(ValueError, match="weights should match"):
+        deep_gaussian_policy.weighted_score_sum(
+            states, actions, np.zeros((2, 2))
+        )
 
 
 def test_deep_gaussian_policy_exceptions(state_d, action_d):

@@ -68,7 +68,7 @@ def test_trajectory_keeps_latent_action_while_env_receives_bounded_control():
 
     _, actions, _, alive, _ = generate_trajectory(env, policy, 1, seed=7)
 
-    assert actions.dtype == np.float64
+    assert actions.dtype == np.float32
     assert np.array_equal(actions[alive][0], latent_action)
     assert np.all(base_env.actions[0] >= base_env.action_space.low)
     assert np.all(base_env.actions[0] <= base_env.action_space.high)

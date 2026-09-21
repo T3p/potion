@@ -1,5 +1,7 @@
 from potion.simulation.trajectory_generators import (apply_discount, apply_mask,
                                                      estimate_average_return)
+from collections.abc import Mapping
+import importlib
 import numpy as np
 import pandas as pd
 import os
@@ -32,12 +34,20 @@ class SilentLogger(Logger):
 
 
 class _EpisodicLogger(Logger):
-    def __init__(self, save_every, path, color):
+    def __init__(self, save_every, path, color, wandb=False,
+                 wandb_kwargs=None):
         if color is not None and color not in _ANSI_COLORS:
             raise ValueError("Unknown logger color: {}".format(color))
+        if not isinstance(wandb, (bool, np.bool_)):
+            raise ValueError("wandb must be a boolean")
+        if wandb_kwargs is not None and not isinstance(wandb_kwargs, Mapping):
+            raise ValueError("wandb_kwargs must be a mapping")
         self.save_every = save_every
         self.path = path
         self.color = color
+        self.wandb = bool(wandb)
+        self.wandb_kwargs = dict(wandb_kwargs or {})
+        self._wandb_run = None
         self._reset_run_state()
 
     def _reset_run_state(self):
@@ -85,6 +95,64 @@ class _EpisodicLogger(Logger):
             "normalized_auc": normalized_auc,
         }
         self.buffer.append(record)
+        self._log_to_wandb(record)
+
+    def _initialize_wandb(self, env, policy, horizon, discount):
+        if not self.wandb:
+            return
+
+        try:
+            wandb_module = importlib.import_module("wandb")
+        except ImportError as exception:
+            raise ImportError(
+                "W&B logging requires the optional dependency; install it "
+                "with `pip install -e '.[wandb]'`"
+            ) from exception
+
+        init_kwargs = self.wandb_kwargs.copy()
+        user_config = init_kwargs.pop("config", {})
+        if user_config is None:
+            user_config = {}
+        if not isinstance(user_config, Mapping):
+            raise ValueError("wandb_kwargs['config'] must be a mapping")
+        config = {
+            "logger": type(self).__name__,
+            "environment": type(getattr(env, "unwrapped", env)).__name__,
+            "policy": type(policy).__name__,
+            "horizon": horizon,
+            "discount": discount,
+            "log_every": self.log_every,
+            "save_every": self.save_every,
+        }
+        if hasattr(self, "n_test"):
+            config["n_test"] = self.n_test
+        config.update(user_config)
+        init_kwargs.setdefault("project", "potion")
+        init_kwargs.setdefault("settings", {"quiet": True})
+        init_kwargs["config"] = config
+        self._wandb_run = wandb_module.init(**init_kwargs)
+
+    def _log_to_wandb(self, record):
+        if self._wandb_run is None:
+            return
+        data = {
+            "tot_trajectories": int(record["tot_trajectories"]),
+            "return": float(record["return"]),
+            "normalized_auc": float(record["normalized_auc"]),
+        }
+        self._wandb_run.log(
+            data,
+            step=data["tot_trajectories"],
+            commit=True,
+        )
+
+    def _finish_wandb(self):
+        if self._wandb_run is None:
+            return
+        try:
+            self._wandb_run.finish()
+        finally:
+            self._wandb_run = None
 
     def _record_return(self, tot_trajectories, ret):
         normalized_auc = self._update_auc(tot_trajectories, ret)
@@ -113,8 +181,22 @@ class _EpisodicLogger(Logger):
         except Exception as e:
             warnings.warn("Could not save log due to the following error: {}".format(repr(e)), UserWarning)
 
-    def close(self):
+    def record_failure(self, failure_return):
+        """Record and immediately save a terminal run failure."""
+        failure_return = float(failure_return)
+        self._normalized_auc = failure_return
+        self._append_return_record(
+            self.tot_traj,
+            failure_return,
+            failure_return,
+        )
         self.save()
+
+    def close(self):
+        try:
+            self.save()
+        finally:
+            self._finish_wandb()
 
 
 class EpisodicOnlineLogger(_EpisodicLogger):
@@ -122,8 +204,13 @@ class EpisodicOnlineLogger(_EpisodicLogger):
                  override_discount=None,
                  log_params=False,
                  path="tmp_log.csv",
-                 color="cyan"):
-        super().__init__(save_every, path, color)
+                 color="cyan",
+                 wandb=False,
+                 wandb_kwargs=None):
+        super().__init__(
+            save_every, path, color, wandb=wandb,
+            wandb_kwargs=wandb_kwargs,
+        )
         self.log_every = log_every
         self.verbose = verbose
         self.log_params = log_params
@@ -132,10 +219,14 @@ class EpisodicOnlineLogger(_EpisodicLogger):
         self.policy = None
 
     def initialize(self, env, policy, horizon, discount, rng):
+        self._finish_wandb()
         self._reset_run_state()
         self.policy = policy
         self.discount = (
             discount if self.override_discount is None else self.override_discount
+        )
+        self._initialize_wandb(
+            env, policy, horizon, self.discount
         )
         if self.verbose:
             self._print(">> Episodic Online Logger ***")
@@ -171,10 +262,15 @@ class EpisodicTestLogger(_EpisodicLogger):
                  path="tmp_log.csv",
                  n_test=100,
                  color="cyan",
-                 keep_records=False):
+                 keep_records=False,
+                 wandb=False,
+                 wandb_kwargs=None):
         if not isinstance(n_test, (int, np.integer)) or n_test < 0:
             raise ValueError("n_test must be a non-negative integer")
-        super().__init__(save_every, path, color)
+        super().__init__(
+            save_every, path, color, wandb=wandb,
+            wandb_kwargs=wandb_kwargs,
+        )
         self.log_every = log_every
         self.verbose = verbose
         self.log_params = log_params
@@ -195,9 +291,12 @@ class EpisodicTestLogger(_EpisodicLogger):
         }
         if self.keep_records:
             self.records.append(record.copy())
-        self.buffer.append(record)
+        super()._append_return_record(
+            tot_trajectories, ret, normalized_auc
+        )
 
     def initialize(self, env, policy, horizon, discount, rng):
+        self._finish_wandb()
         self._reset_run_state()
         self.records = []
         self.env = env
@@ -205,6 +304,9 @@ class EpisodicTestLogger(_EpisodicLogger):
         self.rng = rng
         self.discount = (
             discount if self.override_discount is None else self.override_discount
+        )
+        self._initialize_wandb(
+            env, policy, horizon, self.discount
         )
 
         if self.verbose:

@@ -44,6 +44,15 @@ class SoftmaxPolicy(ParametricStochasticPolicy):
         self.check_state(s)
         return int(rng.choice(a=self._num_actions, p=self._probs(s)))
 
+    def act_and_log_prob(self, s, rng, t=None):
+        """Sample an action and reuse its logits to compute the log probability."""
+        self.check_state(s)
+        scaled_logits = self._logits(s) / self._temp
+        probabilities = softmax(scaled_logits, axis=-1)
+        action = int(rng.choice(a=self._num_actions, p=probabilities))
+        log_prob = scaled_logits[action] - logsumexp(scaled_logits, axis=-1)
+        return action, log_prob
+
     def log_prob(self, s, a, t=None):
         self.check_state(s)
         a = self._check_action(a)
@@ -221,6 +230,81 @@ class DeepSoftmaxPolicy(SoftmaxPolicy):
             dim=-1,
         )
         return flat_grads.reshape(leading_shape + (self.num_params,)).detach().numpy()
+
+    def weighted_score_sum(self, s, a, weights):
+        """Sum scalar-weighted log-policy scores without a score tensor."""
+        self.check_state(s)
+        a = self._check_action(a)
+        self.check_matching(s, a)
+        weights = np.asarray(weights)
+        if weights.shape != s.shape[:-1]:
+            raise ValueError("weights should match state and action leading dimensions")
+
+        parameters = tuple(self._logit_network.parameters())
+        reference = parameters[0]
+        states = torch.as_tensor(
+            s, dtype=reference.dtype, device=reference.device
+        )
+        actions = torch.as_tensor(
+            a, dtype=torch.long, device=reference.device
+        ).reshape(s.shape[:-1])
+        coefficients = torch.as_tensor(
+            weights, dtype=reference.dtype, device=reference.device
+        )
+
+        logits = self._logit_network(states) / self._temp
+        log_probs = torch.log_softmax(logits, dim=-1)
+        selected_log_probs = torch.gather(
+            log_probs, -1, actions.unsqueeze(-1)
+        ).squeeze(-1)
+        objective = torch.sum(coefficients * selected_log_probs)
+        gradients = torch.autograd.grad(objective, parameters)
+        return torch.cat(
+            [parameter_grad.reshape(-1) for parameter_grad in gradients]
+        ).detach().cpu().numpy()
+
+    def weighted_score_samples(self, s, a, weights):
+        """Return one scalar-weighted score sum for each trajectory.
+
+        This uses vectorized reverse-mode differentiation over trajectories and
+        avoids materializing the time-by-parameter score tensor.
+        """
+        self.check_state(s)
+        a = self._check_action(a)
+        self.check_matching(s, a)
+        weights = np.asarray(weights)
+        if weights.shape != s.shape[:-1]:
+            raise ValueError("weights should match state and action leading dimensions")
+
+        reference = next(self._logit_network.parameters())
+        states = torch.as_tensor(
+            s, dtype=reference.dtype, device=reference.device
+        )
+        actions = torch.as_tensor(
+            a, dtype=torch.long, device=reference.device
+        ).reshape(s.shape[:-1])
+        coefficients = torch.as_tensor(
+            weights, dtype=reference.dtype, device=reference.device
+        )
+        parameters = dict(self._logit_network.named_parameters())
+
+        def trajectory_log_prob(parameters, states, actions, coefficients):
+            logits = functional_call(self._logit_network, parameters, (states,))
+            log_probs = torch.log_softmax(logits / self._temp, dim=-1)
+            selected_log_probs = torch.gather(
+                log_probs, -1, actions.unsqueeze(-1)
+            ).squeeze(-1)
+            return torch.sum(coefficients * selected_log_probs)
+
+        grads = vmap(
+            grad(trajectory_log_prob), in_dims=(None, 0, 0, 0)
+        )(parameters, states, actions, coefficients)
+        flat_grads = torch.cat(
+            [parameter_grad.reshape(len(states), -1)
+             for parameter_grad in grads.values()],
+            dim=-1,
+        )
+        return flat_grads.detach().cpu().numpy()
 
     def entropy_grad(self, s, t=None):
         self.check_state(s)

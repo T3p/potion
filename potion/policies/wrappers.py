@@ -3,6 +3,8 @@ import numpy as np
 
 
 class Staged(ParametricStochasticPolicy):
+    is_stationary = False
+
     def __init__(self, base_policy, horizon):
         if not isinstance(base_policy, ParametricStochasticPolicy):
             raise ValueError("Can only wrap a ParametricPolicy")
@@ -36,6 +38,10 @@ class Staged(ParametricStochasticPolicy):
     def act(self, state, rng, t=None):
         self._select(t)
         return self.base_policy.act(state, rng, t)
+
+    def act_and_log_prob(self, state, rng, t=None):
+        self._select(t)
+        return self.base_policy.act_and_log_prob(state, rng, t)
 
     def _check_action(self, a):
         return self.base_policy._check_action(a)

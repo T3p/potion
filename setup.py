@@ -9,6 +9,7 @@ if sys.version_info.major != 3:
 setup(name='potion',
       packages=[package for package in find_packages()
                 if package.startswith('potion')],
+      package_data={'potion.envs': ['assets/*.xml']},
       install_requires=[
               'gym==0.26.2',
               'gymnasium==0.29.1',
@@ -21,6 +22,7 @@ setup(name='potion',
               'torch==2.3.0'],
       extras_require={
               'mujoco': ['gymnasium[mujoco]==0.29.1'],
+              'wandb': ['wandb>=0.18.0,<1.0'],
       },
       description="Policy Optimization Framework and Algorithms",
       author="Matteo Papini",

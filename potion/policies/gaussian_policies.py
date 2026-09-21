@@ -178,6 +178,27 @@ class GaussianPolicy(ParametricStochasticPolicy):
             return latent_action
         return self._squash(latent_action)
 
+    def act_and_log_prob(self, s, rng, t=None):
+        """Sample an action and reuse its mean to compute the log probability."""
+        self.check_state(s)
+        mean = self.mean(s)
+        latent_action = mean + rng.normal(size=self.action_dim) * self.std
+        action = (
+            self._squash(latent_action)
+            if self.squash_actions else latent_action
+        )
+        if self.squash_actions:
+            latent_action, log_abs_det = self._unsquash(action)
+        else:
+            log_abs_det = 0.
+        log_p = (
+            -((latent_action - mean) ** 2) / (2 * self.std ** 2)
+            - self._std_params
+            - 0.5 * np.log(2 * np.pi)
+            - log_abs_det
+        )
+        return action, np.sum(log_p, -1)
+
     def log_prob(self, s, a, t=None):
         self.check_state(s)
         self._check_action(a)
@@ -368,7 +389,7 @@ class DeepGaussianPolicy(GaussianPolicy):
             with torch.no_grad():
                 return self._mean_network(s).numpy()
 
-    def _mean_score(self, s, a):
+    def _mean_scores_and_means(self, s, a):
         leading_shape = s.shape[:-1]
         states = torch.as_tensor(s, dtype=torch.float).reshape(-1, self.state_dim)
         actions = torch.as_tensor(a, dtype=torch.float).reshape(-1, self.action_dim)
@@ -377,15 +398,149 @@ class DeepGaussianPolicy(GaussianPolicy):
 
         def log_prob(parameters, state, action):
             mean = functional_call(self._mean_network, parameters, (state,))
-            return torch.sum(-((action - mean) ** 2) / (2 * std ** 2))
+            value = torch.sum(-((action - mean) ** 2) / (2 * std ** 2))
+            return value, mean
 
-        grads = vmap(grad(log_prob), in_dims=(None, 0, 0))(
+        grads, means = vmap(
+            grad(log_prob, has_aux=True), in_dims=(None, 0, 0)
+        )(
             params, states, actions
         )
         flat_grads = torch.cat(
             [param_grad.reshape(len(states), -1) for param_grad in grads.values()],
             dim=-1,
         )
-        return flat_grads.reshape(
+        mean_scores = flat_grads.reshape(
             leading_shape + (self.num_mean_params,)
         ).detach().numpy()
+        means = means.reshape(
+            leading_shape + (self.action_dim,)
+        ).detach().numpy()
+        return mean_scores, means
+
+    def _mean_score(self, s, a):
+        return self._mean_scores_and_means(s, a)[0]
+
+    def score(self, s, a, t=None):
+        """Return batched scores with a shared forward pass for learned stds."""
+        self.check_state(s)
+        self._check_action(a)
+        self.check_matching(s, a)
+        latent_action = self._unsquash(a)[0] if self.squash_actions else a
+        mean_scores, means = self._mean_scores_and_means(s, latent_action)
+        if not self.learn_std:
+            return mean_scores
+
+        actions = np.asarray(latent_action, dtype=mean_scores.dtype)
+        std = np.asarray(self.std, dtype=mean_scores.dtype)
+        std_scores = ((means - actions) / std) ** 2 - 1.
+        if np.isscalar(self._std_params):
+            std_scores = np.sum(std_scores, axis=-1, keepdims=True)
+        return np.concatenate((mean_scores, std_scores), axis=-1)
+
+    def weighted_score_sum(self, s, a, weights):
+        """Sum scalar-weighted log-policy scores without a score Jacobian."""
+        self.check_state(s)
+        self._check_action(a)
+        self.check_matching(s, a)
+        weights = np.asarray(weights)
+        if weights.shape != s.shape[:-1]:
+            raise ValueError("weights should match state and action leading dimensions")
+
+        latent_action = self._unsquash(a)[0] if self.squash_actions else a
+        parameters = tuple(self._mean_network.parameters())
+        reference = parameters[0]
+        states = torch.as_tensor(
+            s, dtype=reference.dtype, device=reference.device
+        )
+        actions = torch.as_tensor(
+            latent_action, dtype=reference.dtype, device=reference.device
+        )
+        coefficients = torch.as_tensor(
+            weights, dtype=reference.dtype, device=reference.device
+        )
+        std = torch.as_tensor(
+            self.std, dtype=reference.dtype, device=reference.device
+        )
+
+        means = self._mean_network(states)
+        mean_log_prob = torch.sum(
+            -((actions - means) ** 2) / (2. * std ** 2), dim=-1
+        )
+        objective = torch.sum(coefficients * mean_log_prob)
+        mean_grads = torch.autograd.grad(objective, parameters)
+        flat_mean_grad = torch.cat(
+            [parameter_grad.reshape(-1) for parameter_grad in mean_grads]
+        )
+        if not self.learn_std:
+            return flat_mean_grad.detach().cpu().numpy()
+
+        with torch.no_grad():
+            std_scores = ((means - actions) / std) ** 2 - 1.
+            if np.isscalar(self._std_params):
+                std_scores = torch.sum(std_scores, dim=-1, keepdim=True)
+            reduction_dims = tuple(range(std_scores.ndim - 1))
+            std_grad = torch.sum(
+                coefficients[..., None] * std_scores,
+                dim=reduction_dims,
+            )
+            gradient = torch.cat((flat_mean_grad, std_grad))
+        return gradient.detach().cpu().numpy()
+
+    def weighted_score_samples(self, s, a, weights):
+        """Return one scalar-weighted score sum for each trajectory.
+
+        This uses vectorized reverse-mode differentiation over trajectories and
+        avoids materializing the time-by-parameter score tensor.
+        """
+        self.check_state(s)
+        self._check_action(a)
+        self.check_matching(s, a)
+        weights = np.asarray(weights)
+        if weights.shape != s.shape[:-1]:
+            raise ValueError("weights should match state and action leading dimensions")
+
+        latent_action = self._unsquash(a)[0] if self.squash_actions else a
+        parameters = dict(self._mean_network.named_parameters())
+        reference = next(self._mean_network.parameters())
+        states = torch.as_tensor(
+            s, dtype=reference.dtype, device=reference.device
+        )
+        actions = torch.as_tensor(
+            latent_action, dtype=reference.dtype, device=reference.device
+        )
+        coefficients = torch.as_tensor(
+            weights, dtype=reference.dtype, device=reference.device
+        )
+        std = torch.as_tensor(
+            self.std, dtype=reference.dtype, device=reference.device
+        )
+
+        def trajectory_log_prob(parameters, states, actions, coefficients):
+            means = functional_call(self._mean_network, parameters, (states,))
+            log_probs = torch.sum(
+                -((actions - means) ** 2) / (2. * std ** 2), dim=-1
+            )
+            return torch.sum(coefficients * log_probs), means
+
+        grads, means = vmap(
+            grad(trajectory_log_prob, has_aux=True),
+            in_dims=(None, 0, 0, 0),
+        )(parameters, states, actions, coefficients)
+        flat_mean_grads = torch.cat(
+            [parameter_grad.reshape(len(states), -1)
+             for parameter_grad in grads.values()],
+            dim=-1,
+        )
+        if not self.learn_std:
+            return flat_mean_grads.detach().cpu().numpy()
+
+        with torch.no_grad():
+            std_scores = ((means - actions) / std) ** 2 - 1.
+            if np.isscalar(self._std_params):
+                std_scores = torch.sum(std_scores, dim=-1, keepdim=True)
+            std_grads = torch.sum(
+                coefficients[..., None] * std_scores, dim=1
+            )
+            gradients = torch.cat((flat_mean_grads, std_grads), dim=-1)
+        return gradients.detach().cpu().numpy()

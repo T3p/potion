@@ -8,6 +8,7 @@ import torch
 
 from potion.algorithms import reinforce
 from potion.evaluation.loggers import EpisodicTestLogger
+from potion.evaluation.wandb_config import make_wandb_kwargs, wandb_enabled
 from potion.policies.softmax_policies import DeepSoftmaxPolicy
 
 
@@ -40,6 +41,7 @@ N_TEST = 100
 LOG_PARAMETERS = False
 ALGORITHM_VERBOSE = True
 LOGGER_VERBOSE = True
+WANDB_ENABLED = wandb_enabled()
 
 
 def build_policy(env):
@@ -85,6 +87,25 @@ def main():
         log_params=LOG_PARAMETERS,
         override_discount=1.0,
         path=LOG_PATH,
+        wandb=WANDB_ENABLED,
+        wandb_kwargs=make_wandb_kwargs(
+            default_project="potion-cartpole",
+            name="reinforce-cartpole-seed-{}".format(SEED),
+            group="single-run",
+            tags=("cartpole", "reinforce"),
+            config={
+                "seed": SEED,
+                "hidden_sizes": HIDDEN_SIZES,
+                "temperature": TEMPERATURE,
+                "estimator": ESTIMATOR,
+                "baseline": BASELINE,
+                "discount": DISCOUNT,
+                "batch_size": BATCH_SIZE,
+                "learning_rate": LEARNING_RATE,
+                "max_trajectories": MAX_TRAJECTORIES,
+                "n_jobs": N_JOBS,
+            },
+        ),
     )
 
     print("Training DeepSoftmaxPolicy on CartPole-v1")

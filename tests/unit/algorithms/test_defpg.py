@@ -12,7 +12,10 @@ from potion.algorithms import (
     stormpg,
     svrpg,
 )
-from potion.algorithms.defpg import _defensive_importance_weights
+from potion.algorithms.defpg import (
+    _defensive_importance_weights,
+    _trajectory_log_probabilities,
+)
 from potion.estimators.gradients import gpomdp_estimator
 from potion.evaluation.loggers import SilentLogger
 from potion.policies.gaussian_policies import LinearGaussianPolicy
@@ -32,6 +35,32 @@ def test_defensive_importance_weights():
     assert np.allclose(snapshot_weights, np.exp(snapshot_logps) / mixture)
     assert np.all(current_weights <= 2.)
     assert np.all(snapshot_weights <= 2.)
+
+
+def test_stationary_trajectory_log_probs_are_evaluated_in_one_batch():
+    class CountingStationaryPolicy:
+        is_stationary = True
+
+        def __init__(self):
+            self.log_prob_calls = []
+
+        def log_prob(self, states, actions, t=None):
+            self.log_prob_calls.append((states.shape, actions.shape, t))
+            return states[..., 0] - actions[..., 0]
+
+    policy = CountingStationaryPolicy()
+    states = np.array([[[1.], [2.], [3.]], [[4.], [5.], [6.]]])
+    actions = np.array([[[0.5], [1.5], [2.5]], [[3.5], [4.5], [5.5]]])
+    alive = np.array([[True, True, False], [True, False, False]])
+    batch = [
+        (states[i], actions[i], np.zeros(3), alive[i], np.zeros(3))
+        for i in range(len(states))
+    ]
+
+    logps = _trajectory_log_probabilities(batch, policy, per_decision=True)
+
+    assert policy.log_prob_calls == [((2, 3, 1), (2, 3, 1), None)]
+    assert np.allclose(logps, [[0.5, 1., 1.], [0.5, 0.5, 0.5]])
 
 
 def test_defensive_importance_weighted_monte_carlo_identities():
@@ -91,7 +120,8 @@ def test_recursive_correction_is_zero_when_policy_parameters_coincide(env):
         off_policy=True,
     )
 
-    assert np.allclose(current_samples - previous_samples, 0., atol=1e-14)
+    # Rollouts store actions and behavior log probabilities as float32.
+    assert np.allclose(current_samples - previous_samples, 0., atol=1e-5)
 
 
 @pytest.mark.parametrize("defensive_parameter", [1., -0.1, 1.1])
@@ -186,7 +216,7 @@ def test_def_svrpg_gradient_correction(env, policy, n_params, mocker):
         "potion.algorithms.defpg._generate_defensive_batch",
         return_value=[None] * 2,
     )
-    mocker.patch(
+    trajectory_log_probabilities = mocker.patch(
         "potion.algorithms.defpg._trajectory_log_probabilities",
         side_effect=[np.zeros(2), np.zeros(2)],
     )
@@ -222,6 +252,8 @@ def test_def_svrpg_gradient_correction(env, policy, n_params, mocker):
     np.testing.assert_array_equal(
         estimator.call_args_list[2].kwargs["importance_weights"], snapshot_weights
     )
+    assert [call.kwargs["per_decision"] for call in
+            trajectory_log_probabilities.call_args_list] == [True, True]
     assert adaptive_step.call_args.kwargs["reset"] is True
     assert np.allclose(adaptive_step.call_args.args[0], 2. * np.ones(n_params))
 
@@ -238,7 +270,9 @@ def test_def_svrpg_trajectory_budget_counts_all_training_batches(env, policy, n_
     )
     mocker.patch(
         "potion.algorithms.defpg._trajectory_log_probabilities",
-        side_effect=lambda batch, policy: np.zeros(len(batch)),
+        side_effect=lambda batch, policy, per_decision=False: np.zeros(
+            (len(batch), 1) if per_decision else len(batch)
+        ),
     )
     estimator = mocker.patch("potion.algorithms.defpg.gpomdp_estimator")
     estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
@@ -332,7 +366,9 @@ def test_def_srvrpg_trajectory_budget_counts_all_training_batches(env, policy, n
     )
     mocker.patch(
         "potion.algorithms.defpg._trajectory_log_probabilities",
-        side_effect=lambda batch, policy: np.zeros(len(batch)),
+        side_effect=lambda batch, policy, per_decision=False: np.zeros(
+            (len(batch), 1) if per_decision else len(batch)
+        ),
     )
     estimator = mocker.patch("potion.algorithms.defpg.gpomdp_estimator")
     estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (
@@ -435,7 +471,9 @@ def test_def_stormpg_trajectory_budget_counts_all_training_batches(env, policy, 
     )
     mocker.patch(
         "potion.algorithms.defpg._trajectory_log_probabilities",
-        side_effect=lambda batch, policy: np.zeros(len(batch)),
+        side_effect=lambda batch, policy, per_decision=False: np.zeros(
+            (len(batch), 1) if per_decision else len(batch)
+        ),
     )
     estimator = mocker.patch("potion.algorithms.defpg.gpomdp_estimator")
     estimator.side_effect = lambda batch, discount, policy, baseline, **kwargs: (

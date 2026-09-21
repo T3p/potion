@@ -20,11 +20,16 @@ def generate_trajectory(env, policy, max_trajectory_len, seed):
     da = max(1, sum(env.action_space.shape))
 
     # Prepare storage
-    states = np.zeros((max_trajectory_len, ds), dtype=float)
-    actions = np.zeros((max_trajectory_len, da), dtype=env.action_space.dtype)
-    rewards = np.zeros(max_trajectory_len, dtype=float)
+    states = np.zeros((max_trajectory_len, ds), dtype=np.float32)
+    action_dtype = (
+        np.float32
+        if np.issubdtype(env.action_space.dtype, np.floating)
+        else env.action_space.dtype
+    )
+    actions = np.zeros((max_trajectory_len, da), dtype=action_dtype)
+    rewards = np.zeros(max_trajectory_len, dtype=np.float32)
     alive = np.full(max_trajectory_len, False)
-    logps = np.zeros(max_trajectory_len, dtype=float)
+    logps = np.zeros(max_trajectory_len, dtype=np.float32)
 
     # Generate independent seeds for environment and agent (low collision probability)
     seed_seq = np.random.SeedSequence(seed)
@@ -39,7 +44,12 @@ def generate_trajectory(env, policy, max_trajectory_len, seed):
     while not done and t < max_trajectory_len:
         # Act
         #print(s)
-        a = policy.act(s, agent_rng, t)
+        act_and_log_prob = getattr(policy, "act_and_log_prob", None)
+        if callable(act_and_log_prob):
+            a, logp = act_and_log_prob(s, agent_rng, t)
+        else:
+            a = policy.act(s, agent_rng, t)
+            logp = policy.log_prob(s, a, t)
 
         # Step
         next_s, r, terminated, truncated, info = env.step(a)
@@ -51,7 +61,7 @@ def generate_trajectory(env, policy, max_trajectory_len, seed):
         actions[t] = a
         rewards[t] = r
         alive[t] = True  # Mark episode as not yet finished
-        logps[t] = np.asarray(policy.log_prob(s, a, t)).item()
+        logps[t] = np.asarray(logp).item()
 
         s = next_s
         t += 1
@@ -164,11 +174,16 @@ def simulate_infinite_trajectory(env, policy, discount, seed, max_trajectory_len
     da = max(1, sum(env.action_space.shape))
 
     # Prepare storage
-    states = np.zeros((max_trajectory_len, ds), dtype=float)
-    actions = np.zeros((max_trajectory_len, da), dtype=env.action_space.dtype)
-    rewards = np.zeros(max_trajectory_len, dtype=float)
+    states = np.zeros((max_trajectory_len, ds), dtype=np.float32)
+    action_dtype = (
+        np.float32
+        if np.issubdtype(env.action_space.dtype, np.floating)
+        else env.action_space.dtype
+    )
+    actions = np.zeros((max_trajectory_len, da), dtype=action_dtype)
+    rewards = np.zeros(max_trajectory_len, dtype=np.float32)
     alive = np.full(max_trajectory_len, False)
-    logps = np.zeros(max_trajectory_len, dtype=float)
+    logps = np.zeros(max_trajectory_len, dtype=np.float32)
 
     # Generate independent seeds for environment and agent (low collision probability)
     seed_seq = np.random.SeedSequence(seed)
