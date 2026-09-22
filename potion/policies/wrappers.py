@@ -43,6 +43,10 @@ class Staged(ParametricStochasticPolicy):
         self._select(t)
         return self.base_policy.act_and_log_prob(state, rng, t)
 
+    def act_batch_and_log_prob(self, states, rngs, t=None):
+        self._select(t)
+        return self.base_policy.act_batch_and_log_prob(states, rngs, t)
+
     def _check_action(self, a):
         return self.base_policy._check_action(a)
 

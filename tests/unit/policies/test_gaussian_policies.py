@@ -194,6 +194,39 @@ def test_gaussian_act_and_log_prob_matches_separate_calls(
     assert np.allclose(log_prob, policy.log_prob(state, separate_action))
 
 
+@pytest.mark.parametrize("squash_actions", [False, True])
+def test_gaussian_batched_actions_match_independent_calls(
+        state_d, action_d, squash_actions):
+    kwargs = {}
+    if squash_actions:
+        kwargs = {
+            "squash_actions": True,
+            "action_low": -np.ones(action_d),
+            "action_high": np.ones(action_d),
+        }
+    policy = LinearGaussianPolicy(
+        state_d,
+        action_d,
+        mean_params_init=np.arange(action_d * state_d) / 10.,
+        std_init=np.linspace(0.3, 0.8, action_d),
+        **kwargs,
+    )
+    states = np.arange(4 * state_d, dtype=float).reshape(4, state_d) / 10.
+    seeds = [11, 22, 33, 44]
+
+    actions, log_probs = policy.act_batch_and_log_prob(
+        states, [np.random.default_rng(seed) for seed in seeds]
+    )
+    expected = [
+        policy.act_and_log_prob(state, np.random.default_rng(seed))
+        for state, seed in zip(states, seeds)
+    ]
+    expected_actions, expected_log_probs = map(np.asarray, zip(*expected))
+
+    assert np.allclose(actions, expected_actions)
+    assert np.allclose(log_probs, expected_log_probs)
+
+
 def test_squashed_gaussian_log_prob_score_and_importance_ratio(rng):
     low = np.array([-2., 1.])
     high = np.array([4., 5.])

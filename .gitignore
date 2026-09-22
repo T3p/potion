@@ -3,6 +3,15 @@ logs/
 temp/
 results/
 old/
+MUJOCO_LOG.TXT
+/tmp_log.csv
+
+# Experiment tracking and generated script outputs
+wandb/
+/scripts/*_results/
+
+# IDE project state
+.idea/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -53,6 +53,26 @@ class SoftmaxPolicy(ParametricStochasticPolicy):
         log_prob = scaled_logits[action] - logsumexp(scaled_logits, axis=-1)
         return action, log_prob
 
+    def act_batch_and_log_prob(self, states, rngs, t=None):
+        """Sample independent actions using one batched logits evaluation."""
+        states = np.asarray(states)
+        rngs = tuple(rngs)
+        self.check_state(states)
+        if states.ndim != 2 or len(states) != len(rngs):
+            raise ValueError("states and rngs should contain equally many episodes")
+
+        scaled_logits = self._logits(states) / self._temp
+        probabilities = softmax(scaled_logits, axis=-1)
+        actions = np.asarray([
+            rng.choice(a=self._num_actions, p=probability)
+            for rng, probability in zip(rngs, probabilities)
+        ], dtype=int)
+        selected_logits = np.take_along_axis(
+            scaled_logits, actions[:, None], axis=-1
+        )[:, 0]
+        log_probs = selected_logits - logsumexp(scaled_logits, axis=-1)
+        return actions, log_probs
+
     def log_prob(self, s, a, t=None):
         self.check_state(s)
         a = self._check_action(a)

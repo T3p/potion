@@ -5,7 +5,8 @@ notation, alpha is the current-policy mass, so alpha equals
 ``1 - defensive_parameter`` (and both are one half in the reproduction).
 """
 
-from potion.simulation.trajectory_generators import generate_batch, unpack, apply_mask
+from potion.simulation.trajectory_generators import (TrajectoryBatch, generate_batch,
+                                                     unpack, apply_mask)
 from potion.estimators.gradients import (gpomdp_estimator, reinforce_estimator,
                                          nonstationary_pg_estimator,
                                          prepare_gradient_batch)
@@ -156,7 +157,7 @@ def _generate_defensive_batch(env, policy, snapshot_params, defensive_parameter,
             policy.set_params(current_params)
 
     permutation = rng.permutation(n_episodes)
-    return [batch[i] for i in permutation]
+    return TrajectoryBatch.from_trajectories([batch[i] for i in permutation])
 
 
 def def_svrpg(env, policy, *,

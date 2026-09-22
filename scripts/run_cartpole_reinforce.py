@@ -10,6 +10,7 @@ from potion.algorithms import reinforce
 from potion.evaluation.loggers import EpisodicTestLogger
 from potion.evaluation.wandb_config import make_wandb_kwargs, wandb_enabled
 from potion.policies.softmax_policies import DeepSoftmaxPolicy
+from potion.simulation.vectorized_env import VectorizedBatchEnv
 
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
@@ -35,6 +36,7 @@ MAX_TRAJECTORIES = 10000
 
 HORIZON = 200
 N_JOBS = 1
+N_ENVS = 8
 
 LOG_EVERY = 1000
 N_TEST = 100
@@ -42,6 +44,10 @@ LOG_PARAMETERS = False
 ALGORITHM_VERBOSE = True
 LOGGER_VERBOSE = True
 WANDB_ENABLED = wandb_enabled()
+
+
+def build_env():
+    return gym.make("CartPole-v1")
 
 
 def build_policy(env):
@@ -76,7 +82,7 @@ def build_policy(env):
 
 def main():
     torch.manual_seed(SEED)
-    env = gym.make("CartPole-v1")
+    env = VectorizedBatchEnv(build_env, num_envs=N_ENVS)
     policy = build_policy(env)
     RESULTS_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
@@ -104,6 +110,7 @@ def main():
                 "learning_rate": LEARNING_RATE,
                 "max_trajectories": MAX_TRAJECTORIES,
                 "n_jobs": N_JOBS,
+                "num_envs": N_ENVS,
             },
         ),
     )

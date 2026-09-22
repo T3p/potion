@@ -112,6 +112,26 @@ def test_softmax_act_and_log_prob_matches_separate_calls():
     assert np.allclose(log_prob, policy.log_prob(state, separate_action))
 
 
+def test_softmax_batched_actions_match_independent_calls():
+    policy = LinearSoftmaxPolicy(
+        2, 3, params_init=np.array([[0., -1.], [2., 1.], [0.5, 0.]])
+    )
+    states = np.array([[0.5, 2.], [-1., 0.25], [0.1, -0.3]])
+    seeds = [11, 22, 33]
+
+    actions, log_probs = policy.act_batch_and_log_prob(
+        states, [np.random.default_rng(seed) for seed in seeds]
+    )
+    expected = [
+        policy.act_and_log_prob(state, np.random.default_rng(seed))
+        for state, seed in zip(states, seeds)
+    ]
+    expected_actions, expected_log_probs = map(np.asarray, zip(*expected))
+
+    assert np.array_equal(actions, expected_actions)
+    assert np.allclose(log_probs, expected_log_probs)
+
+
 def test_linear_softmax_policy_batched_outputs_match_individual_calls(rng):
     pol = LinearSoftmaxPolicy(
         2,

@@ -199,6 +199,35 @@ class GaussianPolicy(ParametricStochasticPolicy):
         )
         return action, np.sum(log_p, -1)
 
+    def act_batch_and_log_prob(self, states, rngs, t=None):
+        """Sample independent actions using one batched mean evaluation."""
+        states = np.asarray(states)
+        rngs = tuple(rngs)
+        self.check_state(states)
+        if states.ndim != 2 or len(states) != len(rngs):
+            raise ValueError("states and rngs should contain equally many episodes")
+
+        mean = self.mean(states)
+        noise = np.stack([
+            rng.normal(size=self.action_dim) for rng in rngs
+        ])
+        latent_action = mean + noise * self.std
+        action = (
+            self._squash(latent_action)
+            if self.squash_actions else latent_action
+        )
+        if self.squash_actions:
+            latent_action, log_abs_det = self._unsquash(action)
+        else:
+            log_abs_det = 0.
+        log_p = (
+            -((latent_action - mean) ** 2) / (2 * self.std ** 2)
+            - self._std_params
+            - 0.5 * np.log(2 * np.pi)
+            - log_abs_det
+        )
+        return action, np.sum(log_p, axis=-1)
+
     def log_prob(self, s, a, t=None):
         self.check_state(s)
         self._check_action(a)

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from gymnasium.spaces import Box, Discrete
+import numpy as np
 
 
 class Policy(ABC):
@@ -60,6 +61,23 @@ class StochasticPolicy(Policy):
         """
         action = self.act(s, rng, t)
         return action, self.log_prob(s, action, t)
+
+    def act_batch_and_log_prob(self, states, rngs, t=None):
+        """Sample a batch while retaining one random stream per episode.
+
+        This compatibility implementation loops over states. Policies with an
+        expensive shared forward pass can override it with batched inference.
+        """
+        states = np.asarray(states)
+        rngs = tuple(rngs)
+        if states.ndim != 2 or len(states) != len(rngs):
+            raise ValueError("states and rngs should contain equally many episodes")
+        samples = [
+            self.act_and_log_prob(state, rng, t)
+            for state, rng in zip(states, rngs)
+        ]
+        actions, log_probs = zip(*samples)
+        return np.asarray(actions), np.asarray(log_probs)
 
     @abstractmethod
     def entropy(self, s, t=None):  # pragma: no cover

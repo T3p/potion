@@ -7,7 +7,9 @@ from potion.simulation.trajectory_generators import (generate_trajectory,
                                                      unpack,
                                                      apply_mask,
                                                      apply_discount,
-                                                     estimate_average_return)
+                                                     estimate_average_return,
+                                                     TrajectoryBatch,
+                                                     _generate_episode_seeds)
 import numpy as np
 import pytest
 import gymnasium as gym
@@ -153,6 +155,7 @@ def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len
     par_states_2, _, _, _, _ = par_batch[1]
 
     assert len(seq_batch) == n_episodes
+    assert isinstance(seq_batch, TrajectoryBatch)
     assert tuple(x.shape for x in seq_batch[0]) == (
         (max_trajectory_len, state_d),
         (max_trajectory_len, action_d),
@@ -163,6 +166,7 @@ def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len
     assert not np.allclose(seq_states_1, seq_states_2)
 
     assert len(par_batch) == n_episodes
+    assert isinstance(par_batch, TrajectoryBatch)
     assert tuple(x.shape for x in par_batch[0]) == (
         (max_trajectory_len, state_d),
         (max_trajectory_len, action_d),
@@ -177,25 +181,19 @@ def test_generate_batch_independence(env, policy, n_episodes, max_trajectory_len
     assert np.allclose(seq_states_2, par_states_2)
 
 
-def test_consecutive_batch_calls_draw_new_reproducible_episode_seeds(mocker):
-    generate = mocker.patch(
-        "potion.simulation.trajectory_generators.generate_trajectory",
-        side_effect=lambda env, policy, horizon, seed: int(seed),
-    )
-
+def test_consecutive_batch_calls_draw_new_reproducible_episode_seeds():
     rng = np.random.default_rng(314159)
-    first_hundred = generate_batch(None, None, 100, 1, rng)
-    following_five = generate_batch(None, None, 5, 1, rng)
+    first_hundred = _generate_episode_seeds(rng, 100)
+    following_five = _generate_episode_seeds(rng, 5)
 
     replay_rng = np.random.default_rng(314159)
-    replay_hundred = generate_batch(None, None, 100, 1, replay_rng)
-    replay_five = generate_batch(None, None, 5, 1, replay_rng)
+    replay_hundred = _generate_episode_seeds(replay_rng, 100)
+    replay_five = _generate_episode_seeds(replay_rng, 5)
 
-    assert first_hundred != replay_five
-    assert following_five != first_hundred[:5]
-    assert replay_hundred == first_hundred
-    assert replay_five == following_five
-    assert generate.call_count == 210
+    assert not np.array_equal(first_hundred[:5], replay_five)
+    assert not np.array_equal(following_five, first_hundred[:5])
+    assert np.array_equal(replay_hundred, first_hundred)
+    assert np.array_equal(replay_five, following_five)
 
 
 def test_blackbox_batch_variants_advance_their_rng(mocker):
@@ -291,6 +289,12 @@ def test_unpack(env, policy, max_trajectory_len, rng, state_d, action_d):
     assert rewards.shape == (7, max_trajectory_len)
     assert alive.shape == (7, max_trajectory_len)
     assert logps.shape == (7, max_trajectory_len)
+    assert states is b.states
+    assert actions is b.actions
+    assert rewards is b.rewards
+    assert alive is b.alive
+    assert logps is b.logps
+    assert all(array.flags.c_contiguous for array in b.arrays)
 
 
 def test_generate_continual_batch_logps(env, policy, rng, discount):
