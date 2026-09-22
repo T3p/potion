@@ -139,6 +139,16 @@ def _importance_weights(states, actions, alive, behavior_logps, policy,
                     states[active, t], actions[active, t], t
                 )
 
+    return _importance_weights_from_logps(
+        target_logps, behavior_logps, alive, per_decision
+    )
+
+
+def _importance_weights_from_logps(target_logps, behavior_logps, alive,
+                                   per_decision=False):
+    """Form stable importance weights from already evaluated log probabilities."""
+    if target_logps.shape != alive.shape:
+        raise ValueError("Bad shape: target log probabilities should match alive flags")
     # Rollouts keep ordinary log probabilities in float32, but their sums can
     # span long horizons. Promote before subtracting and accumulating them.
     log_ratios = apply_mask(
@@ -156,6 +166,39 @@ def _importance_weights(states, actions, alive, behavior_logps, policy,
     if not np.all(np.isfinite(importance_weights)):
         raise FloatingPointError("Importance weights are not finite")
     return importance_weights
+
+
+def _gpomdp_scalar_baseline(baseline, context, returns_to_go, alive,
+                            importance_weights):
+    if baseline == 'average':
+        value = context.average_returns_to_go_baseline
+        if value is None:
+            value = _leave_one_out_average(returns_to_go, alive)[..., None]
+        return value
+    if baseline == 'weighted-average':
+        if importance_weights is not None:
+            return _leave_one_out_importance_average(
+                returns_to_go, importance_weights, alive
+            )[..., None]
+        return _leave_one_out_average(returns_to_go, alive)[..., None]
+    return np.zeros((1, 1, 1))
+
+
+def _gpomdp_vjp_coefficients(returns_to_go, discounted_rewards, baseline,
+                              importance_weights, alive):
+    scalar_baseline = baseline[..., 0]
+    if importance_weights is None:
+        coefficients = returns_to_go - scalar_baseline
+    else:
+        weighted_returns_to_go = np.cumsum(
+            (importance_weights * discounted_rewards)[:, ::-1],
+            axis=1,
+        )[:, ::-1]
+        coefficients = (
+            weighted_returns_to_go
+            - importance_weights * scalar_baseline
+        )
+    return apply_mask(coefficients, alive).astype(np.float32, copy=False)
 
 
 def _resolve_importance_weights(states, actions, alive, behavior_logps, policy,
@@ -289,26 +332,45 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
     if not actions.shape[-1] == policy.action_dim:
         raise ValueError("Bad shape: action dimension does not match that of given policy")
 
+    disc_rewards = context.discounted_rewards
+    returns_to_go = context.returns_to_go
+
+    fused_weighted_score_sum = getattr(
+        policy, "fused_weighted_score_sum", None
+    )
+    if (
+        average
+        and off_policy
+        and importance_weights is None
+        and baseline_type not in ['peters', 'mastrangelo']
+        and callable(fused_weighted_score_sum)
+    ):
+        def coefficient_builder(target_logps):
+            fused_importance_weights = _importance_weights_from_logps(
+                target_logps, logps, alive, per_decision=True
+            )
+            fused_baseline = _gpomdp_scalar_baseline(
+                baseline, context, returns_to_go, alive,
+                fused_importance_weights,
+            )
+            return _gpomdp_vjp_coefficients(
+                returns_to_go,
+                disc_rewards,
+                fused_baseline,
+                fused_importance_weights,
+                alive,
+            )
+
+        return fused_weighted_score_sum(
+            states, actions, coefficient_builder
+        ) / len(states)
+
     importance_weights = _resolve_importance_weights(
         states, actions, alive, logps, policy, off_policy, importance_weights,
         per_decision=True,
     )
 
-    disc_rewards = context.discounted_rewards
-    returns_to_go = context.returns_to_go
-
-    if baseline == 'average':
-        baseline = context.average_returns_to_go_baseline
-        if baseline is None:
-            baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
-    elif baseline == 'weighted-average':
-        if importance_weights is not None:
-            baseline = _leave_one_out_importance_average(
-                returns_to_go, importance_weights, alive
-            )[..., None]
-        else:
-            baseline = _leave_one_out_average(returns_to_go, alive)[..., None]
-    elif baseline in ['peters', 'mastrangelo']:
+    if baseline in ['peters', 'mastrangelo']:
         scores = apply_mask(policy.score(states, actions), alive)  # NxHxd
         baseline_weights = scores ** 2
         if baseline == 'mastrangelo':
@@ -319,7 +381,9 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
             returns_to_go, baseline_weights, alive
         )
     else:
-        baseline = np.zeros((1, 1, 1))  # 1x1x1
+        baseline = _gpomdp_scalar_baseline(
+            baseline, context, returns_to_go, alive, importance_weights
+        )
 
     weighted_score_samples = getattr(policy, "weighted_score_samples", None)
     if (
@@ -328,20 +392,8 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
         and baseline.shape[-1] == 1
         and callable(weighted_score_samples)
     ):
-        scalar_baseline = baseline[..., 0]
-        if importance_weights is None:
-            coefficients = returns_to_go - scalar_baseline
-        else:
-            weighted_returns_to_go = np.cumsum(
-                (importance_weights * disc_rewards)[:, ::-1],
-                axis=1,
-            )[:, ::-1]
-            coefficients = (
-                weighted_returns_to_go
-                - importance_weights * scalar_baseline
-            )
-        coefficients = apply_mask(coefficients, alive).astype(
-            np.float32, copy=False
+        coefficients = _gpomdp_vjp_coefficients(
+            returns_to_go, disc_rewards, baseline, importance_weights, alive
         )
         return weighted_score_samples(states, actions, coefficients)
 
@@ -352,20 +404,8 @@ def gpomdp_estimator(batch, discount, policy, baseline='average', average=True,
         and baseline.shape[-1] == 1
         and callable(weighted_score_sum)
     ):
-        scalar_baseline = baseline[..., 0]
-        if importance_weights is None:
-            coefficients = returns_to_go - scalar_baseline
-        else:
-            weighted_returns_to_go = np.cumsum(
-                (importance_weights * disc_rewards)[:, ::-1],
-                axis=1,
-            )[:, ::-1]
-            coefficients = (
-                weighted_returns_to_go
-                - importance_weights * scalar_baseline
-            )
-        coefficients = apply_mask(coefficients, alive).astype(
-            np.float32, copy=False
+        coefficients = _gpomdp_vjp_coefficients(
+            returns_to_go, disc_rewards, baseline, importance_weights, alive
         )
         return weighted_score_sum(states, actions, coefficients) / len(states)
 

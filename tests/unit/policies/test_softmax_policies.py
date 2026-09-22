@@ -373,6 +373,28 @@ def test_deep_softmax_weighted_score_sum(
     assert np.allclose(actual, expected, rtol=1e-5, atol=1e-5)
 
 
+def test_deep_softmax_fused_weighted_score_sum(
+        state_d, num_actions, deep_softmax_policy, rng):
+    states = rng.normal(size=(2, 3, state_d))
+    actions = rng.integers(num_actions, size=(2, 3, 1))
+
+    def build_coefficients(log_probs):
+        return np.tanh(log_probs).astype(np.float32)
+
+    expected_weights = build_coefficients(
+        deep_softmax_policy.log_prob(states, actions).astype(np.float32)
+    )
+    expected = deep_softmax_policy.weighted_score_sum(
+        states, actions, expected_weights
+    )
+    actual = deep_softmax_policy.fused_weighted_score_sum(
+        states, actions, build_coefficients
+    )
+
+    assert actual.dtype == np.float32
+    assert np.allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
 def test_deep_softmax_weighted_score_sum_checks_weight_shape(
         state_d, num_actions, deep_softmax_policy):
     states = np.zeros((2, 3, state_d))

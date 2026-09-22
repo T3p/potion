@@ -194,6 +194,37 @@ def test_gpomdp_uses_weighted_score_sum_when_available(small_batch):
     assert np.array_equal(gradient, np.full(2, 3., dtype=np.float32))
 
 
+def test_off_policy_gpomdp_fuses_log_probs_and_weighted_score_sum(small_batch):
+    class FusedPolicy:
+        state_dim = 1
+        action_dim = 1
+
+        def log_prob(self, states, actions):
+            raise AssertionError("A separate log-probability pass should not run")
+
+        def score(self, states, actions):
+            raise AssertionError("The score tensor should not be materialized")
+
+        def fused_weighted_score_sum(
+                self, states, actions, coefficient_builder):
+            coefficients = coefficient_builder(
+                np.zeros(states.shape[:-1], dtype=np.float32)
+            )
+            assert coefficients.shape == states.shape[:-1]
+            return np.full(2, 6., dtype=np.float32)
+
+    gradient = gpomdp_estimator(
+        small_batch,
+        0.9,
+        FusedPolicy(),
+        baseline="average",
+        average=True,
+        off_policy=True,
+    )
+
+    assert np.array_equal(gradient, np.full(2, 3., dtype=np.float32))
+
+
 @pytest.mark.parametrize("estimator", (reinforce_estimator, gpomdp_estimator, nonstationary_pg_estimator))
 def test_gradient_estimators_exceptions(batch, discount, policy, estimator):
     batch_1 = [(np.ones((2, policy.state_dim + 1)),

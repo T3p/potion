@@ -516,6 +516,88 @@ class DeepGaussianPolicy(GaussianPolicy):
             gradient = torch.cat((flat_mean_grad, std_grad))
         return gradient.detach().cpu().numpy()
 
+    def fused_weighted_score_sum(self, s, a, coefficient_builder):
+        """Build detached weights from log probabilities and reuse the forward.
+
+        ``coefficient_builder`` receives float32 log probabilities and returns
+        one scalar coefficient per state-action pair. Its result is treated as
+        constant by autograd, as required for an importance-weighted policy
+        gradient estimator.
+        """
+        self.check_state(s)
+        self._check_action(a)
+        self.check_matching(s, a)
+        if not callable(coefficient_builder):
+            raise TypeError("coefficient_builder should be callable")
+
+        if self.squash_actions:
+            latent_action, log_abs_det_numpy = self._unsquash(a)
+        else:
+            latent_action = a
+            log_abs_det_numpy = 0.
+        parameters = tuple(self._mean_network.parameters())
+        reference = parameters[0]
+        states = torch.as_tensor(
+            s, dtype=reference.dtype, device=reference.device
+        )
+        actions = torch.as_tensor(
+            latent_action, dtype=reference.dtype, device=reference.device
+        )
+        std = torch.as_tensor(
+            self.std, dtype=reference.dtype, device=reference.device
+        )
+        log_std = torch.as_tensor(
+            self._std_params, dtype=reference.dtype, device=reference.device
+        )
+        log_abs_det = torch.as_tensor(
+            log_abs_det_numpy, dtype=reference.dtype, device=reference.device
+        )
+
+        means = self._mean_network(states)
+        log_probs = torch.sum(
+            -((actions - means) ** 2) / (2. * std ** 2)
+            - log_std
+            - 0.5 * np.log(2 * np.pi)
+            - log_abs_det,
+            dim=-1,
+        )
+        detached_means = means.detach().cpu().numpy()
+        detached_log_probs = np.sum(
+            -((latent_action - detached_means) ** 2) / (2 * self.std ** 2)
+            - self._std_params
+            - 0.5 * np.log(2 * np.pi)
+            - log_abs_det_numpy,
+            axis=-1,
+        ).astype(np.float32, copy=False)
+        weights = np.asarray(coefficient_builder(detached_log_probs))
+        if weights.shape != s.shape[:-1]:
+            raise ValueError(
+                "coefficient_builder should return one weight per state-action pair"
+            )
+        coefficients = torch.as_tensor(
+            weights, dtype=reference.dtype, device=reference.device
+        )
+
+        objective = torch.sum(coefficients * log_probs)
+        mean_grads = torch.autograd.grad(objective, parameters)
+        flat_mean_grad = torch.cat(
+            [parameter_grad.reshape(-1) for parameter_grad in mean_grads]
+        )
+        if not self.learn_std:
+            return flat_mean_grad.detach().cpu().numpy()
+
+        with torch.no_grad():
+            std_scores = ((means - actions) / std) ** 2 - 1.
+            if np.isscalar(self._std_params):
+                std_scores = torch.sum(std_scores, dim=-1, keepdim=True)
+            reduction_dims = tuple(range(std_scores.ndim - 1))
+            std_grad = torch.sum(
+                coefficients[..., None] * std_scores,
+                dim=reduction_dims,
+            )
+            gradient = torch.cat((flat_mean_grad, std_grad))
+        return gradient.detach().cpu().numpy()
+
     def weighted_score_samples(self, s, a, weights):
         """Return one scalar-weighted score sum for each trajectory.
 

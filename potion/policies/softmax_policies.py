@@ -283,6 +283,52 @@ class DeepSoftmaxPolicy(SoftmaxPolicy):
             [parameter_grad.reshape(-1) for parameter_grad in gradients]
         ).detach().cpu().numpy()
 
+    def fused_weighted_score_sum(self, s, a, coefficient_builder):
+        """Build detached weights from log probabilities and reuse the forward."""
+        self.check_state(s)
+        a = self._check_action(a)
+        self.check_matching(s, a)
+        if not callable(coefficient_builder):
+            raise TypeError("coefficient_builder should be callable")
+
+        parameters = tuple(self._logit_network.parameters())
+        reference = parameters[0]
+        states = torch.as_tensor(
+            s, dtype=reference.dtype, device=reference.device
+        )
+        actions = torch.as_tensor(
+            a, dtype=torch.long, device=reference.device
+        ).reshape(s.shape[:-1])
+
+        raw_logits = self._logit_network(states)
+        logits = raw_logits / self._temp
+        log_probs = torch.log_softmax(logits, dim=-1)
+        selected_log_probs = torch.gather(
+            log_probs, -1, actions.unsqueeze(-1)
+        ).squeeze(-1)
+        detached_logits = raw_logits.detach().cpu().numpy() / self._temp
+        detached_actions = np.asarray(a).reshape(s.shape[:-1])
+        detached_log_probs = (
+            np.take_along_axis(
+                detached_logits, detached_actions[..., None], axis=-1
+            )[..., 0]
+            - logsumexp(detached_logits, axis=-1)
+        ).astype(np.float32, copy=False)
+        weights = np.asarray(coefficient_builder(detached_log_probs))
+        if weights.shape != s.shape[:-1]:
+            raise ValueError(
+                "coefficient_builder should return one weight per state-action pair"
+            )
+        coefficients = torch.as_tensor(
+            weights, dtype=reference.dtype, device=reference.device
+        )
+
+        objective = torch.sum(coefficients * selected_log_probs)
+        gradients = torch.autograd.grad(objective, parameters)
+        return torch.cat(
+            [parameter_grad.reshape(-1) for parameter_grad in gradients]
+        ).detach().cpu().numpy()
+
     def weighted_score_samples(self, s, a, weights):
         """Return one scalar-weighted score sum for each trajectory.
 

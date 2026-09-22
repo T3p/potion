@@ -668,6 +668,45 @@ def test_deep_gaussian_weighted_score_sum_with_vector_std(
     assert np.allclose(actual, expected, rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.parametrize("squash_actions", [False, True])
+def test_deep_gaussian_fused_weighted_score_sum(
+        state_d, action_d, rng, squash_actions):
+    kwargs = {}
+    if squash_actions:
+        kwargs = {
+            "squash_actions": True,
+            "action_low": -np.ones(action_d),
+            "action_high": np.ones(action_d),
+        }
+    policy = DeepGaussianPolicy(
+        state_d,
+        action_d,
+        mean_network=nn.Sequential(
+            nn.Linear(state_d, 4), nn.Tanh(), nn.Linear(4, action_d)
+        ),
+        std_init=np.linspace(0.5, 0.8, action_d),
+        learn_std=True,
+        **kwargs,
+    )
+    states = rng.normal(size=(2, 3, state_d))
+    latent_actions = rng.normal(size=(2, 3, action_d))
+    actions = policy._squash(latent_actions) if squash_actions else latent_actions
+
+    def build_coefficients(log_probs):
+        return np.tanh(log_probs).astype(np.float32)
+
+    expected_weights = build_coefficients(
+        policy.log_prob(states, actions).astype(np.float32)
+    )
+    expected = policy.weighted_score_sum(states, actions, expected_weights)
+    actual = policy.fused_weighted_score_sum(
+        states, actions, build_coefficients
+    )
+
+    assert actual.dtype == np.float32
+    assert np.allclose(actual, expected, rtol=1e-5, atol=1e-5)
+
+
 def test_deep_gaussian_weighted_score_samples_with_vector_std(
         state_d, action_d, rng):
     network = nn.Sequential(
